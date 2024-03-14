@@ -43,6 +43,7 @@ def process_geth(output):
 
 
 def process_nethermind(output):
+    print(output)
     parsed_output = json.loads(output)
 
     # Get the last element from the list
@@ -187,12 +188,15 @@ def main():
             for file_name in os.listdir(tests_paths):
                 if file_name.endswith('.json'):
                     file_path = os.path.join(tests_paths, file_name)
-                    run = run_command(client_name, file_path, repo_path)
-                    output = process_output(client_name, run)
-                    if output['name'] not in results:
-                        results[output['name']] = [output['timeInMs']]
-                    else:
-                        results[output['name']].append(output['timeInMs'])
+                    try:
+                        run = run_command(client_name, file_path, repo_path)
+                        output = process_output(client_name, run)
+                        if output['name'] not in results:
+                            results[output['name']] = [output['timeInMs']]
+                        else:
+                            results[output['name']].append(output['timeInMs'])
+                    except:
+                        print(f"Error processing tests case {file_name}")
 
     # Create the output folder if it doesn't exist
     if not os.path.exists(output_folder):
