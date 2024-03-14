@@ -1,5 +1,6 @@
 # Create argument parser
 import argparse
+import datetime
 import json
 import os
 import statistics
@@ -99,17 +100,17 @@ def print_results(client, results, output_folder, gen_charts):
 
         if gen_charts:
             # Plot a histogram
-            plt.hist(float_values, bins=10)
-            plt.title(f"Histogram of {test_name}")
+            x = range(1, len(values) + 1)
+            plt.plot(x, float_values)
+            # plt.hist(float_values, bins=10)
+            plt.title(f"Plot of {test_name}")
             plt.xlabel("Values")
             plt.ylabel("Frequency")
 
-            # Create the output folder if it doesn't exist
-            if not os.path.exists(output_folder):
-                os.makedirs(output_folder)
+            plt.xticks(list(x)[::1])
 
             # Save the plot to the output folder
-            output_path = os.path.join(output_folder, f"{test_name}_histogram.png")
+            output_path = os.path.join(output_folder, f"{test_name}_plot.png")
             plt.savefig(output_path)
             plt.close()
 
@@ -121,6 +122,12 @@ def print_results(client, results, output_folder, gen_charts):
         print(f"Standard Deviation: {std_deviation:.2f} ms")
         print(f"Value Range: {value_range} ms")
         print()
+
+    # Save the results to a JSON file
+    current_timestamp = datetime.datetime.now().timestamp()
+    output_path = os.path.join(output_folder, f"{client}_results_{int(current_timestamp)}.json")
+    with open(output_path, "w") as file:
+        json.dump(results, file, indent=4)
 
 
 def main():
@@ -136,8 +143,8 @@ def main():
     parser.add_argument('--charts', type=bool, help='If set to true will generate under a folder the graphs generated '
                                                     'for each test', default=True)
     parser.add_argument('--output', type=str, help='Output folder for metrics charts generation. If the folder does '
-                                                   'not exist will be created. --charts flag needs to be set to true.',
-                        default='charts')
+                                                   'not exist will be created.',
+                        default='results')
     parser.add_argument('--numberOfRuns', type=int, help='Number of Runs of the benchmark', default=1)
 
     # Executables path
@@ -187,8 +194,13 @@ def main():
                     else:
                         results[output['name']].append(output['timeInMs'])
 
+    # Create the output folder if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
     # Print results after getting them.
     print_results(client_name, results, output_folder, gen_charts)
+
 
 
 if __name__ == '__main__':
