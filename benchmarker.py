@@ -5,8 +5,11 @@ import json
 import os
 import statistics
 import matplotlib.pyplot as plt
-
+import platform
+import cpuinfo
 import subprocess
+
+import psutil
 
 executables = {
     'dotnet': 'dotnet',
@@ -131,6 +134,26 @@ def print_results(client, results, output_folder, gen_charts):
         json.dump(results, file, indent=4)
 
 
+def print_computer_specs():
+    cpu = cpuinfo.get_cpu_info()
+    system_info = {
+        'Processor': platform.processor(),
+        'System': platform.system(),
+        'Release': platform.release(),
+        'Version': platform.version(),
+        'Machine': platform.machine(),
+        'Processor Architecture': platform.architecture()[0],
+        'RAM': f'{psutil.virtual_memory().total / (1024 ** 3):.2f} GB',
+        'CPU': cpu['brand_raw'],
+        'Numbers of CPU': cpu['count'],
+        'CPU GHz': cpu['hz_actual_friendly']
+    }
+
+    # Print the specifications
+    for key, value in system_info.items():
+        print(f'{key}: {value}')
+
+
 def main():
     # get the current working directory
     current_working_directory = os.getcwd()
@@ -173,6 +196,9 @@ def main():
 
     results = {}
 
+    # Print Computer specs
+    print_computer_specs()
+
     # Iterate over the runs
     for i in range(0, number_of_runs):
         # Check if the provided input is a file ending in .json
@@ -204,7 +230,6 @@ def main():
 
     # Print results after getting them.
     print_results(client_name, results, output_folder, gen_charts)
-
 
 
 if __name__ == '__main__':
