@@ -38,8 +38,6 @@ def run_command(client, test_case_file, override_repo_path):
 
     print(f"Running for {client} client with test '{test_case_file}'")
     results = subprocess.run(command, shell=True, capture_output=True, text=True)
-    if len(results.stderr) > 0:
-        print(results.stderr)
     return results.stdout
 
 
