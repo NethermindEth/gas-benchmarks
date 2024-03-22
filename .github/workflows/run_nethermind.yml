@@ -1,0 +1,46 @@
+name: Run Nethermind Benchamarks
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      how_many_runs:
+        description: 'Number of times to run the tests'
+        default: '4'
+      folder:
+        description: 'Folder in which the tests are stored'
+        default: 'tests'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: "8.0.x"
+
+    - name: Install python dependencies
+      run: pip install -r requirements.txt
+
+    - name: Prepare dependencies
+      run: make prepare
+
+    - name: Run Python Script
+      run: python benchmarker.py --client nethermind --numberOfRuns ${{ github.event.inputs.how_many_runs }} --testsPath ${{ github.event.inputs.folder }}
+
+    - name: Zip the results folder
+      run: zip -r results.zip results
+
+    - name: Upload results as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: results-archive
+        path: results.zip
