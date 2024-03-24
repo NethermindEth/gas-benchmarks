@@ -92,6 +92,8 @@ def process_output(client, output):
 
 def print_results(client, results, output_folder, gen_charts):
     for test_name, values in results.items():
+        if len(values) < 2:
+            continue
         # Convert the list of string values to a list of floats
         float_values = [float(value) for value in values]
 
