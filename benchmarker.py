@@ -166,17 +166,11 @@ def print_computer_specs():
 
 
 def main():
-    # get the current working directory
-    current_working_directory = os.getcwd()
-
-    # print output to the console
-    print(current_working_directory)
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--client', type=str, help='Client name')
     parser.add_argument('--testsPath', type=str, help='Path to test case folder')
     parser.add_argument('--repoPath', type=str, help='Path to the repo of the client you want to test')
-    parser.add_argument('--charts', type=bool, help='If set to true will generate under a folder the graphs generated '
-                                                    'for each test', default=True)
+    parser.add_argument('--noCharts', type=bool, help='If set charts will not be generated', default=False)
     parser.add_argument('--output', type=str, help='Output folder for metrics charts generation. If the folder does '
                                                    'not exist will be created.',
                         default='results')
@@ -199,7 +193,7 @@ def main():
     tests_paths = args.testsPath
     number_of_runs = args.numberOfRuns
     output_folder = args.output
-    gen_charts = args.charts
+    gen_charts = not args.noCharts
     repo_path = args.repoPath
     executables['dotnet'] = args.dotnetPath
     executables['go'] = args.goPath
@@ -207,6 +201,7 @@ def main():
 
     results = {}
     partial_results = ""
+    errors = ""
     # Print Computer specs
     print_computer_specs()
 
@@ -223,6 +218,8 @@ def main():
         if tests_paths in results:
             partial_results += print_partial_results(client_name, tests_paths, results[tests_paths], output_folder,
                                                      gen_charts)
+        else:
+            errors += f"Error processing test case {tests_paths}\n"
     else:
         # Iterate over files in the specified folder
         for file_name in os.listdir(tests_paths):
@@ -243,13 +240,15 @@ def main():
             if file_name in results:
                 partial_results += print_partial_results(client_name, file_name, results[file_name], output_folder,
                                                          gen_charts)
+            else:
+                errors += f"Error processing test case {file_name}\n"
 
     # Create the output folder if it doesn't exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     # Print results after getting them.
-    print_final_results(client_name, results, output_folder, partial_results)
+    print_final_results(client_name, results, output_folder, partial_results + '\n' + 'Tests with errors:' + errors)
 
 
 if __name__ == '__main__':
