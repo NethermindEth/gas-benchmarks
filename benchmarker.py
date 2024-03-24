@@ -46,7 +46,6 @@ def process_geth(output):
 
 
 def process_nethermind(output):
-    print(output)
     parsed_output = json.loads(output)
 
     # Get the last element from the list
@@ -90,45 +89,48 @@ def process_output(client, output):
     return output
 
 
-def print_results(client, results, output_folder, gen_charts):
-    for test_name, values in results.items():
-        if len(values) < 2:
-            continue
-        # Convert the list of string values to a list of floats
-        float_values = [float(value) for value in values]
+def print_partial_results(client, test_name, values, output_folder, gen_charts):
+    # Doesn't makes sense to run the metrics for only one result
+    if len(values) < 2:
+        pass
 
-        # Calculate the mean, median, mode, standard deviation, and range
-        mean_value = statistics.mean(float_values)
-        median_value = statistics.median(float_values)
-        mode_value = statistics.mode(float_values)
-        std_deviation = statistics.stdev(float_values)
-        value_range = max(float_values) - min(float_values)
+    # Convert the list of string values to a list of floats
+    float_values = [float(value) for value in values]
 
-        if gen_charts:
-            # Plot a histogram
-            x = range(1, len(values) + 1)
-            plt.plot(x, float_values)
-            # plt.hist(float_values, bins=10)
-            plt.title(f"Plot of {test_name}")
-            plt.xlabel("Values")
-            plt.ylabel("Frequency")
+    # Calculate the mean, median, mode, standard deviation, and range
+    mean_value = statistics.mean(float_values)
+    median_value = statistics.median(float_values)
+    mode_value = statistics.mode(float_values)
+    std_deviation = statistics.stdev(float_values)
+    value_range = max(float_values) - min(float_values)
 
-            plt.xticks(list(x)[::1])
+    if gen_charts:
+        # Plot a histogram
+        x = range(1, len(values) + 1)
+        plt.plot(x, float_values)
+        # plt.hist(float_values, bins=10)
+        plt.title(f"Plot of {test_name}")
+        plt.xlabel("Values")
+        plt.ylabel("Frequency")
 
-            # Save the plot to the output folder
-            output_path = os.path.join(output_folder, f"{test_name}_plot.png")
-            plt.savefig(output_path)
-            plt.close()
+        plt.xticks(list(x)[::1])
 
-        # Print the metrics
-        print(f"Client {client}, Test Name: {test_name}, Ran {len(values)} times")
-        print(f"Mean Value: {mean_value:.2f} ms")
-        print(f"Median Value: {median_value} ms")
-        print(f"Mode Value: {mode_value} ms")
-        print(f"Standard Deviation: {std_deviation:.2f} ms")
-        print(f"Value Range: {value_range} ms")
-        print()
+        # Save the plot to the output folder
+        output_path = os.path.join(output_folder, f"{test_name}_plot.png")
+        plt.savefig(output_path)
+        plt.close()
 
+    # Print the metrics
+    print(f"Client {client}, Test Name: {test_name}, Ran {len(values)} times")
+    print(f"Mean Value: {mean_value:.2f} ms")
+    print(f"Median Value: {median_value} ms")
+    print(f"Mode Value: {mode_value} ms")
+    print(f"Standard Deviation: {std_deviation:.2f} ms")
+    print(f"Value Range: {value_range} ms")
+    print()
+
+
+def print_final_results(client, results, output_folder):
     # Save the results to a JSON file
     current_timestamp = datetime.datetime.now().timestamp()
     output_path = os.path.join(output_folder, f"{client}_results_{int(current_timestamp)}.json")
@@ -201,37 +203,41 @@ def main():
     # Print Computer specs
     print_computer_specs()
 
-    # Iterate over the runs
-    for i in range(0, number_of_runs):
-        # Check if the provided input is a file ending in .json
-        if os.path.isfile(tests_paths) and tests_paths.endswith('.json'):
+    # Check if the provided input is a file ending in .json
+    if os.path.isfile(tests_paths) and tests_paths.endswith('.json'):
+        # Iterate over the runs
+        for i in range(0, number_of_runs):
             run = run_command(client_name, tests_paths, repo_path)
             output = process_output(client_name, run)
-            if output['name'] not in results:
-                results[output['name']] = [output['timeInMs']]
+            if tests_paths not in results:
+                results[tests_paths] = [output['timeInMs']]
             else:
-                results[output['name']].append(output['timeInMs'])
-        else:
-            # Iterate over files in the specified folder
-            for file_name in os.listdir(tests_paths):
+                results[tests_paths].append(output['timeInMs'])
+        print_partial_results(client_name, tests_paths, results[tests_paths], output_folder, gen_charts)
+    else:
+        # Iterate over files in the specified folder
+        for file_name in os.listdir(tests_paths):
+            # Iterate over the runs
+            for i in range(0, number_of_runs):
                 if file_name.endswith('.json'):
                     file_path = os.path.join(tests_paths, file_name)
                     try:
                         run = run_command(client_name, file_path, repo_path)
                         output = process_output(client_name, run)
-                        if output['name'] not in results:
-                            results[output['name']] = [output['timeInMs']]
+                        if file_name not in results:
+                            results[file_name] = [output['timeInMs']]
                         else:
-                            results[output['name']].append(output['timeInMs'])
+                            results[file_name].append(output['timeInMs'])
                     except:
                         print(f"Error processing tests case {file_name}")
+            print_partial_results(client_name, file_name, results[file_name], output_folder, gen_charts)
 
     # Create the output folder if it doesn't exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     # Print results after getting them.
-    print_results(client_name, results, output_folder, gen_charts)
+    print_final_results(client_name, results, output_folder)
 
 
 if __name__ == '__main__':
