@@ -92,7 +92,7 @@ def process_output(client, output):
 def print_partial_results(client, test_name, values, output_folder, gen_charts):
     # Doesn't makes sense to run the metrics for only one result
     if len(values) < 2:
-        pass
+        return ""
 
     # Convert the list of string values to a list of floats
     float_values = [float(value) for value in values]
@@ -121,21 +121,28 @@ def print_partial_results(client, test_name, values, output_folder, gen_charts):
         plt.close()
 
     # Print the metrics
-    print(f"Client {client}, Test Name: {test_name}, Ran {len(values)} times")
-    print(f"Mean Value: {mean_value:.2f} ms")
-    print(f"Median Value: {median_value} ms")
-    print(f"Mode Value: {mode_value} ms")
-    print(f"Standard Deviation: {std_deviation:.2f} ms")
-    print(f"Value Range: {value_range} ms")
-    print()
+    result_string = ""
+
+    result_string += f"Client {client}, Test Name: {test_name}, Ran {len(values)} times\n"
+    result_string += f"Mean Value: {mean_value:.2f} ms\n"
+    result_string += f"Median Value: {median_value} ms\n"
+    result_string += f"Mode Value: {mode_value} ms\n"
+    result_string += f"Standard Deviation: {std_deviation:.2f} ms\n"
+    result_string += f"Value Range: {value_range} ms\n\n"
+
+    print(result_string)
+    return result_string
 
 
-def print_final_results(client, results, output_folder):
+def print_final_results(client, results, output_folder, partials_results):
     # Save the results to a JSON file
     current_timestamp = datetime.datetime.now().timestamp()
     output_path = os.path.join(output_folder, f"{client}_results_{int(current_timestamp)}.json")
     with open(output_path, "w") as file:
         json.dump(results, file, indent=4)
+    output_path_partials = os.path.join(output_folder, f"{client}_partials_results_{int(current_timestamp)}.txt")
+    with open(output_path_partials, "w") as file:
+        file.write(partials_results)
 
 
 def print_computer_specs():
@@ -199,7 +206,7 @@ def main():
     executables['cargo'] = args.cargoPath
 
     results = {}
-
+    partial_results = ""
     # Print Computer specs
     print_computer_specs()
 
@@ -213,31 +220,34 @@ def main():
                 results[tests_paths] = [output['timeInMs']]
             else:
                 results[tests_paths].append(output['timeInMs'])
-        print_partial_results(client_name, tests_paths, results[tests_paths], output_folder, gen_charts)
+        partial_results += print_partial_results(client_name, tests_paths, results[tests_paths], output_folder,
+                                                 gen_charts)
     else:
         # Iterate over files in the specified folder
         for file_name in os.listdir(tests_paths):
+            if not file_name.endswith('.json'):
+                continue
             # Iterate over the runs
             for i in range(0, number_of_runs):
-                if file_name.endswith('.json'):
-                    file_path = os.path.join(tests_paths, file_name)
-                    try:
-                        run = run_command(client_name, file_path, repo_path)
-                        output = process_output(client_name, run)
-                        if file_name not in results:
-                            results[file_name] = [output['timeInMs']]
-                        else:
-                            results[file_name].append(output['timeInMs'])
-                    except:
-                        print(f"Error processing tests case {file_name}")
-            print_partial_results(client_name, file_name, results[file_name], output_folder, gen_charts)
+                file_path = os.path.join(tests_paths, file_name)
+                try:
+                    run = run_command(client_name, file_path, repo_path)
+                    output = process_output(client_name, run)
+                    if file_name not in results:
+                        results[file_name] = [output['timeInMs']]
+                    else:
+                        results[file_name].append(output['timeInMs'])
+                except:
+                    print(f"Error processing tests case {file_name}")
+            partial_results += print_partial_results(client_name, file_name, results[file_name], output_folder,
+                                                     gen_charts)
 
     # Create the output folder if it doesn't exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     # Print results after getting them.
-    print_final_results(client_name, results, output_folder)
+    print_final_results(client_name, results, output_folder, partial_results)
 
 
 if __name__ == '__main__':
