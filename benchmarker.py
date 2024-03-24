@@ -220,7 +220,8 @@ def main():
                 results[tests_paths] = [output['timeInMs']]
             else:
                 results[tests_paths].append(output['timeInMs'])
-        partial_results += print_partial_results(client_name, tests_paths, results[tests_paths], output_folder,
+        if tests_paths in results:
+            partial_results += print_partial_results(client_name, tests_paths, results[tests_paths], output_folder,
                                                  gen_charts)
     else:
         # Iterate over files in the specified folder
@@ -239,7 +240,8 @@ def main():
                         results[file_name].append(output['timeInMs'])
                 except:
                     print(f"Error processing tests case {file_name}")
-            partial_results += print_partial_results(client_name, file_name, results[file_name], output_folder,
+            if tests_paths in results:
+                partial_results += print_partial_results(client_name, file_name, results[file_name], output_folder,
                                                      gen_charts)
 
     # Create the output folder if it doesn't exist
