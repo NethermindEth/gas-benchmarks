@@ -32,6 +32,9 @@ jobs:
     - name: Prepare nethermind dependencies
       run: make prepare_nethermind
 
+    - name: Create results directory
+      run: mkdir results
+
     - name: Run Python Script
       run: python benchmarker.py --client nethermind --numberOfRuns ${{ github.event.inputs.how_many_runs }} --testsPath /home/runner/work/gas-benchmarks/gas-benchmarks/${{ github.event.inputs.folder }} --dotnetPath ~/.dotnet/dotnet
 
