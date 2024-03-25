@@ -28,7 +28,7 @@ def run_command(client, test_case_file, override_repo_path):
         # Run command for nethermind client
         command = f'cd {client if override_repo_path is None else override_repo_path}/src/Nethermind/Nethermind.Test' \
                   f'.Runner && {dotnet} run --project Nethermind.Test.Runner.csproj ' \
-                  f'--configuration Release -- -i {test_case_file} '
+                  f'--configuration Release -- -n -i {test_case_file} '
     elif client == 'reth':
         # Run command for reth client
         command = f'reth_command --test-dir {test_case_file}'
