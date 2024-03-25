@@ -115,8 +115,10 @@ def print_partial_results(client, test_name, values, output_folder, gen_charts):
 
         plt.xticks(list(x)[::1])
 
+        cwd = os.getcwd()
         # Save the plot to the output folder
-        output_path = os.path.join(output_folder, f"{test_name}_plot.png")
+        folder_relative = os.path.join(cwd, output_folder)
+        output_path = os.path.join(folder_relative, f"{test_name}_plot.png")
         plt.savefig(output_path)
         plt.close()
 
