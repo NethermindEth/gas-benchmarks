@@ -146,6 +146,7 @@ def print_final_results(client, results, output_folder, partials_results):
 
 
 def print_computer_specs():
+    info = "Computer Specs:\n"
     cpu = cpuinfo.get_cpu_info()
     system_info = {
         'Processor': platform.processor(),
@@ -162,7 +163,10 @@ def print_computer_specs():
 
     # Print the specifications
     for key, value in system_info.items():
-        print(f'{key}: {value}')
+        line = f'{key}: {value}'
+        print(line)
+        info += line + "\n"
+    return info + "\n"
 
 
 def main():
@@ -200,10 +204,9 @@ def main():
     executables['cargo'] = args.cargoPath
 
     results = {}
-    partial_results = ""
     errors = ""
     # Print Computer specs
-    print_computer_specs()
+    partial_results = print_computer_specs()
 
     # Check if the provided input is a file ending in .json
     if os.path.isfile(tests_paths) and tests_paths.endswith('.json'):
