@@ -13,6 +13,7 @@ prepare: prepare_nethermind prepare_geth prepare_reth
 
 prepare_nethermind:
 	git clone $(REPO_URL_NETHERMIND) $(CLONE_DIR_NETHERMIND)
+	dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release
 
 prepare_geth:
 	git clone $(REPO_URL_GETH) $(CLONE_DIR_GETH)
@@ -21,4 +22,4 @@ prepare_reth:
 	git clone $(REPO_URL_RETH) $(CLONE_DIR_RETH)
 
 clean:
-	rm -rf $(CLONE_DIR_1) $(CLONE_DIR_2) $(CLONE_DIR_3) $(CLONE_DIR_4)
+	rm -rf $(CLONE_DIR_NETHERMIND) $(CLONE_DIR_GETH) $(CLONE_DIR_RETH)
