@@ -39,7 +39,7 @@ jobs:
       run: python setup_node.py --client nethermind --image ${{ github.event.inputs.image }}
 
     - name: Run Python Script
-      run:  python3 run_kute.py --testsPath ${{ github.event.inputs.test }} --jwtpath /tmp/jwtsecret
+      run:  python3 run_kute.py --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret
 
     - name: Zip the results folder
       run: zip -r results.zip results
