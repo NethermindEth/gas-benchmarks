@@ -34,10 +34,13 @@ services:
     - --JsonRpc.JwtSecretFile=/tmp/jwt/jwtsecret
     - --JsonRpc.EngineHost=0.0.0.0
     - --JsonRpc.EnginePort=8551
+    - --JsonRpc.RpcRecorderState=all
     - --Network.DiscoveryPort=30304
     - --HealthChecks.Enabled=true
     - --Metrics.Enabled=true
     - --Metrics.ExposePort=8009
+    - --Init.GenesisHash="0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc"
+    - --Sync.MaxAttemptsToUpdatePivot=0
     logging:
       driver: json-file
       options:
