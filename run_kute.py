@@ -17,26 +17,17 @@ def run_command(test_case_file, jwt_secret, response, ec_url, kute_extra_argumen
     command = f'{executables["kute"]} -i {test_case_file} -s {jwt_secret} -r {response} -a {ec_url} ' \
               f'{kute_extra_arguments} '
     print(f"Running Kute on client running at url '{ec_url}', with command: '{command}'")
-    subprocess.run(command, shell=True, text=True)
+    results = subprocess.run(command, shell=True, capture_output=True, text=True)
+    return results.stdout
 
 
-def print_final_results(response_path, partial_results, processed_output):
-    print(f"Printing results from {response_path}: \n")
-    print(partial_results)
-    print("Processed Output")
-    print(processed_output)
-    # Save the results to a JSON file
-    # current_timestamp = datetime.datetime.now().timestamp()
-    # output_path = os.path.join(output_folder, f"{client}_results_{int(current_timestamp)}.json")
-    # with open(output_path, "w") as file:
-    #     json.dump(results, file, indent=4)
-    # output_path_partials = os.path.join(output_folder, f"{client}_partials_results_{int(current_timestamp)}.txt")
-    # with open(output_path_partials, "w") as file:
-    #     file.write(partials_results)
-
-
-def process_output(response_path):
-    return ''
+def save_to_file(output_folder, response, partial_results):
+    current_timestamp = datetime.datetime.now().timestamp()
+    output_path = os.path.join(output_folder, f"results_{int(current_timestamp)}.txt")
+    with open(output_path, "w") as file:
+        file.write(partial_results)
+        file.write('\n')
+        file.write(response)
 
 
 def main():
@@ -79,15 +70,12 @@ def main():
         os.makedirs(output_folder)
 
     # It will run Kute, might take some time
-    run_command(tests_paths, jwt_path, response_path, execution_url, kute_arguments)
+    response = run_command(tests_paths, jwt_path, response_path, execution_url, kute_arguments)
 
     # Print Computer specs
     partial_results = print_computer_specs()
 
-    processed_output = process_output(response_path)
-
-    # Print results after getting them.
-    print_final_results(response_path, partial_results, processed_output)
+    save_to_file(output_folder, response, partial_results)
 
 
 if __name__ == '__main__':
