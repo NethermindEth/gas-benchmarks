@@ -44,9 +44,9 @@ def main():
                                                        'you need to use something different to dotnet.',
                         default='dotnet')
     parser.add_argument('--kutePath', type=str, help='Path to kute executable.',
-                        default='./tools/Nethermind.Tools.Kute/bin/Release/net8.0/Nethermind.Tools.Kute')
-    parser.add_argument('--kuteArguments', type=str, help='Path to kute executable.',
-                        default='./tools/Nethermind.Tools.Kute/bin/Release/net8.0/Nethermind.Tools.Kute')
+                        default=executables["kute"])
+    parser.add_argument('--kuteArguments', type=str, help='Extra arguments for Kute.',
+                        default='')
     parser.add_argument('--ecURL', type=str, help='Execution client where we will be running kute url.',
                         default='http://localhost:8551')
 
