@@ -1,0 +1,68 @@
+version: "3.9"
+services:
+  execution-sync:
+    container_name: sedge-execution-client-sync
+    image: ${EC_IMAGE_VERSION}
+    networks:
+    - kute
+    volumes:
+    - ${EC_DATA_DIR}:/var/lib/goethereum
+    - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+    - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+    entrypoint: geth init --datadir=/var/lib/goethereum /tmp/genesis/genesis.json
+  execution:
+    stop_grace_period: 30m
+    container_name: sedge-execution-client
+    depends_on:
+      execution-sync:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    image: ${EC_IMAGE_VERSION}
+    networks:
+    - kute
+    volumes:
+    - ${EC_DATA_DIR}:/var/lib/goethereum
+    - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+    ports:
+    - "30303:30303/tcp"
+    - "30303:30303/udp"
+    - "8008:8008/tcp"
+    - "8551:8551"
+    expose:
+    - 8545
+    - 8546
+    - 8551
+    command:
+    - --state.scheme=path
+    - --syncmode=full
+    - --nat=none
+    - --http
+    - --http.addr=0.0.0.0
+    - --http.vhosts=*
+    - --http.corsdomain=*
+    - --http.api
+    - web3,eth,net
+    - --datadir=/var/lib/goethereum
+    - --port=30303
+    - --http.port=8545
+    - --networkid=1337
+    - --verbosity
+    - ${GETH_LOG_LEVEL}
+    - --ws
+    - --ws.addr=0.0.0.0
+    - --ws.port=8546
+    - --ws.api=engine,eth,web3,net,debug
+    - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
+    - --authrpc.addr=0.0.0.0
+    - --authrpc.port=8551
+    - --authrpc.vhosts=*
+    - --metrics
+    - --metrics.port=8008
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "10"
+networks:
+  kute:
+    name: kute-network
