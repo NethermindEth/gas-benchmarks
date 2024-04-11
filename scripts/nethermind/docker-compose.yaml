@@ -33,9 +33,6 @@ services:
     - --JsonRpc.Port=8545
     - --JsonRpc.JwtSecretFile=/tmp/jwt/jwtsecret
     - --JsonRpc.EngineHost=0.0.0.0
-    - --JsonRpc.Port=8545
-    - --JsonRpc.JwtSecretFile=/tmp/jwt/jwtsecret
-    - --JsonRpc.EngineHost=0.0.0.0
     - --JsonRpc.EnginePort=8551
     - --Network.DiscoveryPort=30304
     - --HealthChecks.Enabled=true
