@@ -66,7 +66,7 @@ def main():
     tests_paths = args.testsPath
     jwt_path = args.jwtPath
     execution_url = args.ecURL
-    output_folder = args.responseFile
+    output_folder = args.output
     executables['dotnet'] = args.dotnetPath
     executables['kute'] = args.kutePath
     kute_arguments = args.kuteArguments
