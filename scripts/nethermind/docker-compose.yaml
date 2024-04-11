@@ -25,9 +25,10 @@ services:
     - 8545
     - 8551
     command:
+    - --config=holesky
     - --Init.ChainSpecPath=/tmp/chainspec/chainspec.json
     - --datadir=/nethermind/data
-    - --log=DEBUG
+    - --log=INFO
     - --JsonRpc.Enabled=true
     - --JsonRpc.Host=0.0.0.0
     - --JsonRpc.Port=8545
@@ -39,7 +40,7 @@ services:
     - --HealthChecks.Enabled=true
     - --Metrics.Enabled=true
     - --Metrics.ExposePort=8009
-    - --Init.GenesisHash="0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc"
+    - --Init.GenesisHash=0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc
     - --Sync.MaxAttemptsToUpdatePivot=0
     logging:
       driver: json-file
