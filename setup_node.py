@@ -26,7 +26,8 @@ def set_image(client, el_images, run_path):
           f"{specifics}"
 
     env_file_path = os.path.join(run_path, ".env")
-    os.remove(env_file_path)
+    if os.path.exists(env_file_path):
+        os.remove(env_file_path)
     with open(env_file_path, "w") as file:
         file.write(env)
 
