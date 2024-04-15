@@ -13,7 +13,7 @@ prepare: prepare_nethermind prepare_geth prepare_reth
 
 prepare_nethermind:
 	git clone $(REPO_URL_NETHERMIND) $(CLONE_DIR_NETHERMIND)
-	dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release
+	dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release --no-warn CS0168,CS0219
 
 prepare_geth:
 	git clone $(REPO_URL_GETH) $(CLONE_DIR_GETH)
