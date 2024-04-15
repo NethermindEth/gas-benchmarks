@@ -10,8 +10,8 @@ from utils import print_computer_specs
 
 def run_command(client, run_path):
     # Add logic here to run the appropriate command for each client
-    command = f'./{run_path}/run.sh'
-    print(f"Running client running at url 'http://localhost:8551'(auth), with command: '{command}'")
+    command = f'{run_path}/run.sh'
+    print(f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'")
     subprocess.run(command, shell=True, text=True)
 
 
