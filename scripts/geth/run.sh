@@ -7,3 +7,5 @@ cp jwtsecret /tmp/jwtsecret
 docker compose up -d
 
 sleep 30
+
+docker compose logs
