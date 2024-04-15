@@ -57,7 +57,9 @@ def main():
     if image is not None:
         el_images[client] = image
 
-    run_path = os.path.join("scripts", client)
+    run_path = os.path.join(os.getcwd(), "scripts")
+    run_path = os.path.join(run_path, client)
+    print(run_path)
 
     set_image(client, el_images, run_path)
 
