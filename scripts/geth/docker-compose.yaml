@@ -33,7 +33,6 @@ services:
     - 8546
     - 8551
     command:
-    - --state.scheme=path
     - --syncmode=full
     - --nat=none
     - --http
