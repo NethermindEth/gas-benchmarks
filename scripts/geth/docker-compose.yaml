@@ -46,8 +46,6 @@ services:
     - --port=30303
     - --http.port=8545
     - --networkid=1337
-    - --verbosity
-    - ${GETH_LOG_LEVEL}
     - --ws
     - --ws.addr=0.0.0.0
     - --ws.port=8546

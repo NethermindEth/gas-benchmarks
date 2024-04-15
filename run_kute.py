@@ -52,8 +52,6 @@ def main():
     parser.add_argument('--ecURL', type=str, help='Execution client where we will be running kute url.',
                         default='http://localhost:8551')
 
-    print(os.getcwd())
-
     # Parse command-line arguments
     args = parser.parse_args()
 

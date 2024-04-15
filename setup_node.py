@@ -59,7 +59,6 @@ def main():
 
     run_path = os.path.join(os.getcwd(), "scripts")
     run_path = os.path.join(run_path, client)
-    print(run_path)
 
     set_image(client, el_images, run_path)
 
