@@ -5,3 +5,5 @@ cp genesis.json /tmp/genesis.json
 cp jwtsecret /tmp/jwtsecret
 
 docker compose up -d
+
+sleep 30
