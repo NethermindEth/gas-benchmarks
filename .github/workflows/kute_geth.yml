@@ -1,4 +1,4 @@
-name: Run Kute Nethermind Benchamarks
+name: Run Kute Geth Benchamarks
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
         default: 'tests/req8.txt'
       image:
         description: 'Image we are going to use against to run tests'
-        default: 'nethermind/nethermind:1.26.0-exp.4'
+        default: 'ethereum/client-go:v1.13.14'
 
 jobs:
   build:
@@ -29,14 +29,14 @@ jobs:
     - name: Install python dependencies
       run: pip install -r requirements.txt
 
-    - name: Prepare nethermind dependencies
+    - name: Prepare kute dependencies
       run: make prepare_nethermind
 
     - name: Create results directory
       run: mkdir results
 
     - name: Setup Node
-      run: python setup_node.py --client nethermind --image ${{ github.event.inputs.image }}
+      run: python setup_node.py --client geth --image ${{ github.event.inputs.image }}
 
     - name: Run Python Script
       run:  python3 run_kute.py --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret
