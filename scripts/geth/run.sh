@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Prepare geth image that we will use on the script
 cd scripts/geth
 pwd
