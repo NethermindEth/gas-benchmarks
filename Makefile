@@ -12,7 +12,7 @@ prepare: prepare_nethermind prepare_geth prepare_reth
    	@echo "Please execute next commands:"
 
 prepare_nethermind:
-	git clone $(REPO_URL_NETHERMIND) $(CLONE_DIR_NETHERMIND)
+	git clone $(REPO_URL_NETHERMIND) $(CLONE_DIR_NETHERMIND) --branch fix/jwt-claim-iat-type
 	dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release --property WarningLevel=0
 
 prepare_geth:
