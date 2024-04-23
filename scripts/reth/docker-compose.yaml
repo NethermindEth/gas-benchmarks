@@ -21,6 +21,7 @@ services:
     - kute
     volumes:
     - ${EC_DATA_DIR}:/var/lib/reth
+    - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
     - "30303:30303/tcp"
