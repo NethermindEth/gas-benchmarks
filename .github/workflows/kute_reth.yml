@@ -1,0 +1,51 @@
+name: Run Kute Reth Benchamarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Request folders'
+        default: 'tests/req8.txt'
+      image:
+        description: 'Image we are going to use against to run tests'
+        default: 'ghcr.io/paradigmxyz/reth:v0.2.0-beta.6'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_INSTALL_DIR: "~/.dotnet"
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: "8.0.x"
+
+    - name: Install python dependencies
+      run: pip install -r requirements.txt
+
+    - name: Prepare kute dependencies
+      run: make prepare_nethermind
+
+    - name: Create results directory
+      run: mkdir results
+
+    - name: Setup Node
+      run: python setup_node.py --client reth --image ${{ github.event.inputs.image }}
+
+    - name: Run Python Script
+      run:  python3 run_kute.py --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret
+
+    - name: Zip the results folder
+      run: zip -r results.zip results
+
+    - name: Upload results as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: results-archive
+        path: results.zip

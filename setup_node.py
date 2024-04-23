@@ -47,7 +47,7 @@ def main():
     el_images = {
         "nethermind": "nethermind/nethermind:1.25.4",
         "geth": "ethereum/client-go:v1.13.14",
-        "reth": ""
+        "reth": " ghcr.io/paradigmxyz/reth:v0.2.0-beta.6"
     }
 
     if client not in el_images:
