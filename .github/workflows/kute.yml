@@ -67,14 +67,14 @@ jobs:
         run: |
           if [ -z "${{ github.event.inputs.image }}" ]; then
             echo "Running script without warm up."
-            python3 run_kute.py --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret
+            python3 run_kute.py --output results_${{ github.event.inputs.client}} --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret
           else
             echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
-            python3 run_kute.py --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }}
+            python3 run_kute.py --output results_${{ github.event.inputs.client}} --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }}
           fi
 
       - name: Zip the results folder
-        run: zip -r results.zip results
+        run: zip -r results_${{ github.event.inputs.client}}.zip results_${{ github.event.inputs.client}}
 
       - name: Upload results as artifact
         uses: actions/upload-artifact@v4
