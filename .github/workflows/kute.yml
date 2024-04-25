@@ -51,7 +51,7 @@ jobs:
         run: make prepare_nethermind
 
       - name: Create results directory
-        run: mkdir results
+        run: mkdir results_${{ github.event.inputs.client}}
 
       - name: Setup Node
         run: |
@@ -79,5 +79,5 @@ jobs:
       - name: Upload results as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results-archive
-          path: results.zip
+          name: results_${{ github.event.inputs.client}}
+          path: results_${{ github.event.inputs.client}}.zip
