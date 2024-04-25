@@ -55,7 +55,7 @@ def main():
         print("Client not supported")
         return
 
-    if image is not None:
+    if image is not None and image != 'default':
         el_images[client] = image
 
     run_path = os.path.join(os.getcwd(), "scripts")

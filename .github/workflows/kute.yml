@@ -1,0 +1,84 @@
+name: Run Kute Benchamarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Path to'
+        default: 'tests/req8.txt'
+      warmup:
+        description: 'Name of the client'
+        required: true
+        default: 'nethermind'
+        type: choice
+        options:
+          - warmup/warmup-100bl-16wi-32tx.txt
+          - warmup/warmup-1000bl-16wi-24tx.txt
+          - warmup/warmup-1000bl-16wi-1000tx.txt
+      image:
+        description: 'Override default image'
+        default: 'default'
+      client:
+        description: 'Name of the client'
+        required: true
+        default: 'nethermind'
+        type: choice
+        options:
+          - nethermind
+          - geth
+          - reth
+          - erigon
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_INSTALL_DIR: "~/.dotnet"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare kute dependencies
+        run: make prepare_nethermind
+
+      - name: Create results directory
+        run: mkdir results
+
+      - name: Setup Node
+        run: |
+          if [ -z "${{ github.event.inputs.image }}" ]; then
+            echo "Image input is empty, using default image."
+            python setup_node.py --client ${{ github.event.inputs.client }}
+          else
+            echo "Using provided image: ${{ github.event.inputs.image }}"
+            python setup_node.py --client ${{ github.event.inputs.client }} --image "${{ github.event.inputs.image }}"
+          fi
+
+      - name: Run Python Script
+        run: |
+          if [ -z "${{ github.event.inputs.image }}" ]; then
+            echo "Running script without warm up."
+            python3 run_kute.py --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret
+          else
+            echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
+            python3 run_kute.py --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }}
+          fi
+
+      - name: Zip the results folder
+        run: zip -r results.zip results
+
+      - name: Upload results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-archive
+          path: results.zip

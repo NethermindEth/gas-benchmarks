@@ -23,13 +23,17 @@ def run_command(test_case_file, jwt_secret, response, ec_url, kute_extra_argumen
     return results.stdout
 
 
-def save_to_file(output_folder, response, partial_results):
+def save_to_file(output_folder, response, partial_results, warmup_response):
     current_timestamp = datetime.datetime.now().timestamp()
     output_path = os.path.join(output_folder, f"results_{int(current_timestamp)}.txt")
     with open(output_path, "w") as file:
         file.write(partial_results)
         file.write('\n')
         file.write(response)
+    if warmup_response != '':
+        output_path = os.path.join(output_folder, f"warmup_results_{int(current_timestamp)}.txt")
+        with open(output_path, "w") as file:
+            file.write(warmup_response)
 
 
 def main():
@@ -51,6 +55,7 @@ def main():
                         default='')
     parser.add_argument('--ecURL', type=str, help='Execution client where we will be running kute url.',
                         default='http://localhost:8551')
+    parser.add_argument('--warmupPath', type=str, help='Set path to warm up file.', default='')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -64,6 +69,7 @@ def main():
     executables['kute'] = args.kutePath
     kute_arguments = args.kuteArguments
     response_file = args.responseFile
+    warmup_file = args.warmupPath
 
     response_path = os.path.join(output_folder, response_file)
 
@@ -71,13 +77,18 @@ def main():
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
+    warmup_response = ''
+    if warmup_file != '':
+        warmup_response_path = os.path.join(output_folder, 'warmup_' + response_file)
+        warmup_response = run_command(warmup_file, jwt_path, warmup_response_path, execution_url, kute_arguments)
+
     # It will run Kute, might take some time
     response = run_command(tests_paths, jwt_path, response_path, execution_url, kute_arguments)
 
     # Print Computer specs
     partial_results = print_computer_specs()
 
-    save_to_file(output_folder, response, partial_results)
+    save_to_file(output_folder, response, partial_results, warmup_response)
 
 
 if __name__ == '__main__':
