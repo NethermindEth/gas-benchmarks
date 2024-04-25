@@ -11,6 +11,7 @@ on:
         default: ''
         type: choice
         options:
+          - ''
           - warmup/warmup-100bl-16wi-32tx.txt
           - warmup/warmup-1000bl-16wi-24tx.txt
           - warmup/warmup-1000bl-16wi-1000tx.txt
