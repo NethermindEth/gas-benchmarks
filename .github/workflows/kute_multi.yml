@@ -15,9 +15,6 @@ on:
           - warmup/warmup-100bl-16wi-32tx.txt
           - warmup/warmup-1000bl-16wi-24tx.txt
           - warmup/warmup-1000bl-16wi-1000tx.txt
-      images:
-        description: 'Comma-separated list of images for the clients (type default if you don't want to specify), same order than clients'
-        default: 'default'
       client:
         description: 'Comma-separated list of client names (e.g., nethermind,reth,geth,erigon)'
         default: 'nethermind'
