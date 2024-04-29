@@ -16,28 +16,16 @@ def run_command(test_case_file, jwt_secret, response, ec_url, kute_extra_argumen
     # Add logic here to run the appropriate command for each client
     command = f'{executables["kute"]} -i {test_case_file} -s {jwt_secret} -r {response} -a {ec_url} ' \
               f'{kute_extra_arguments} '
-    print(f"Running Kute on client running at url '{ec_url}', with command: '{command}'")
     results = subprocess.run(command, shell=True, capture_output=True, text=True)
     print(results.stdout)
     print(results.stderr)
     return results.stdout
 
 
-def save_to_file(output_folder, response, warmup_response, client, run):
-    current_timestamp = datetime.datetime.now().timestamp()
-    output_path = os.path.join(output_folder, f"{client}_results_{run}_{int(current_timestamp)}.txt")
+def save_to(output_folder, file_name, content):
+    output_path = os.path.join(output_folder, file_name)
     with open(output_path, "w") as file:
-        file.write(response)
-    if warmup_response != '':
-        output_path = os.path.join(output_folder, f"warmup_{client}_{run}_results_{int(current_timestamp)}.txt")
-        with open(output_path, "w") as file:
-            file.write(warmup_response)
-
-
-def save_specs(output_folder, computer_specs):
-    output_path = os.path.join(output_folder, "computer_specs.txt")
-    with open(output_path, "w") as file:
-        file.write(computer_specs)
+        file.write(content)
 
 
 def main():
@@ -92,17 +80,17 @@ def main():
     if warmup_file != '':
         warmup_response_path = os.path.join(output_folder, 'warmup_' + client + '_' + response_file)
         warmup_response = run_command(warmup_file, jwt_path, warmup_response_path, execution_url, kute_arguments)
+        save_to(output_folder, f'warmup_{client}_response.txt', warmup_response)
 
     # Print Computer specs
     computer_specs = print_computer_specs()
-    save_specs(output_folder, computer_specs)
+    save_to(output_folder, 'computer_specs.txt', computer_specs)
 
     for run in range(runs):
         print(f"Running {client} for the {run + 1} time")
-        # Run Kute
         response = run_command(tests_paths, jwt_path, response_path, execution_url, kute_arguments)
-
-        save_to_file(output_folder, response, warmup_response, client, run)
+        timestamp = datetime.datetime.now().timestamp()
+        save_to(output_folder, f'{client}_response_{run}_{int(timestamp)}.txt', response)
 
 
 if __name__ == '__main__':
