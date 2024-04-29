@@ -15,14 +15,13 @@ on:
           - warmup/warmup-100bl-16wi-32tx.txt
           - warmup/warmup-1000bl-16wi-24tx.txt
           - warmup/warmup-1000bl-16wi-1000tx.txt
+      images:
+        description: 'Comma-separated list of images for the clients (type 'default' if you don't want to specify), same order than clients'
+        default: 'default'
       client:
         description: 'Comma-separated list of client names (e.g., nethermind,reth,geth,erigon)'
         default: 'nethermind'
         required: true
-      images:
-        description: 'Comma-separated list of images for the clients (type 'default' if you don't want to specify), same order than clients'
-        default: 'default'
-        required: false
       runs:
         description: 'Number of runs for the application'
         required: false
@@ -63,10 +62,10 @@ jobs:
             image="${images[$i]}"
             if [ -z "$image" ]; then
               echo "Image input is empty, using default image."
-              python setup_node.py --client ${{ github.event.inputs.client }}
+              python setup_node.py --client $client
             else
               echo "Using provided image: $image for $client"
-              python setup_node.py --client ${{ github.event.inputs.client }} --image "${{ github.event.inputs.image }}"
+              python setup_node.py --client $client --image $image
             fi
             if [ -z "${{ github.event.inputs.warmup}}" ]; then
               echo "Running script without warm up."
@@ -86,5 +85,5 @@ jobs:
       - name: Upload results as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results_${{ github.event.inputs.client}}
-          path: results_${{ github.event.inputs.client}}.zip
+          name: results
+          path: results.zip
