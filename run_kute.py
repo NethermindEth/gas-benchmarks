@@ -23,17 +23,21 @@ def run_command(test_case_file, jwt_secret, response, ec_url, kute_extra_argumen
     return results.stdout
 
 
-def save_to_file(output_folder, response, computer_specs, warmup_response, client, run):
+def save_to_file(output_folder, response, warmup_response, client, run):
     current_timestamp = datetime.datetime.now().timestamp()
     output_path = os.path.join(output_folder, f"{client}_results_{run}_{int(current_timestamp)}.txt")
     with open(output_path, "w") as file:
-        file.write(computer_specs)
-        file.write('\n')
         file.write(response)
     if warmup_response != '':
         output_path = os.path.join(output_folder, f"warmup_{client}_{run}_results_{int(current_timestamp)}.txt")
         with open(output_path, "w") as file:
             file.write(warmup_response)
+
+
+def save_specs(output_folder, computer_specs):
+    output_path = os.path.join(output_folder, "computer_specs.txt")
+    with open(output_path, "w") as file:
+        file.write(computer_specs)
 
 
 def main():
@@ -43,7 +47,7 @@ def main():
     parser.add_argument('--runs', type=int, help='Number of times we are going to run the kute against the node')
     parser.add_argument('--jwtPath', type=str,
                         help='Path to the JWT secret used to communicate with the client you want to test')
-    parser.add_argument('--responseFile', type=str, help='If set charts will not be generated', default='response.txt')
+    parser.add_argument('--responseFile', type=str, help='Name for the response file')
     parser.add_argument('--output', type=str, help='Output folder for metrics charts generation. If the folder does '
                                                    'not exist will be created.',
                         default='results')
@@ -81,18 +85,24 @@ def main():
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
+    if response_file is None:
+        response_file = f'{client}_response_{runs}.txt'
+
     warmup_response = ''
     if warmup_file != '':
-        warmup_response_path = os.path.join(output_folder, 'warmup_' + client + response_file)
+        warmup_response_path = os.path.join(output_folder, 'warmup_' + client + '_' + response_file)
         warmup_response = run_command(warmup_file, jwt_path, warmup_response_path, execution_url, kute_arguments)
-
-    # It will run Kute, might take some time
-    response = run_command(tests_paths, jwt_path, response_path, execution_url, kute_arguments)
 
     # Print Computer specs
     computer_specs = print_computer_specs()
+    save_specs(output_folder, computer_specs)
 
-    save_to_file(output_folder, response, computer_specs, warmup_response, client, runs)
+    for run in range(runs):
+        print(f"Running {client} for the {run + 1} time")
+        # Run Kute
+        response = run_command(tests_paths, jwt_path, response_path, execution_url, kute_arguments)
+
+        save_to_file(output_folder, response, warmup_response, client, run)
 
 
 if __name__ == '__main__':
