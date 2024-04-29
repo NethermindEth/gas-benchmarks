@@ -45,8 +45,8 @@ def main():
     image = args.image
 
     el_images = {
-        "nethermind": "nethermind/nethermind:1.25.4",
-        "geth": "ethereum/client-go:v1.13.14",
+        "nethermind": "nethermind/nethermind:1.26.0",
+        "geth": "ethereum/client-go:v1.14.0",
         "reth": "ghcr.io/paradigmxyz/reth:v0.2.0-beta.6",
         "erigon": "thorax/erigon:v2.59.3"
     }

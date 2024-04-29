@@ -1,10 +1,10 @@
 version: "3.9"
 services:
   execution-sync:
-    container_name: sedge-execution-client-sync
+    container_name: gas-execution-client-sync
     image: ${EC_IMAGE_VERSION}
     networks:
-    - kute
+    - gas
     volumes:
     - ${EC_DATA_DIR}:/var/lib/goethereum
     - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
@@ -12,14 +12,14 @@ services:
     entrypoint: geth init --datadir=/var/lib/goethereum /tmp/genesis/genesis.json
   execution:
     stop_grace_period: 30m
-    container_name: sedge-execution-client
+    container_name: gas-execution-client
     depends_on:
       execution-sync:
         condition: service_completed_successfully
     restart: unless-stopped
     image: ${EC_IMAGE_VERSION}
     networks:
-    - kute
+    - gas
     volumes:
     - ${EC_DATA_DIR}:/var/lib/goethereum
     - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
@@ -61,5 +61,5 @@ services:
         max-size: 10m
         max-file: "10"
 networks:
-  kute:
-    name: kute-network
+  gas:
+    name: gas-network
