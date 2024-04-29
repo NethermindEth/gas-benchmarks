@@ -64,7 +64,7 @@ jobs:
               echo "Image input is empty, using default image."
               python setup_node.py --client ${{ github.event.inputs.client }}
             else
-              echo "Using provided image: $image" for $client
+              echo "Using provided image: $image for $client"
               python setup_node.py --client ${{ github.event.inputs.client }} --image "${{ github.event.inputs.image }}"
             fi
             if [ -z "${{ github.event.inputs.warmup}}" ]; then
