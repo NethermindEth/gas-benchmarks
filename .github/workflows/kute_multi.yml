@@ -15,8 +15,8 @@ on:
           - warmup/warmup-100bl-16wi-32tx.txt
           - warmup/warmup-1000bl-16wi-24tx.txt
           - warmup/warmup-1000bl-16wi-1000tx.txt
-      image:
-        description: 'Comma-separated list of images for the clients (type 'default' if you don't want to specify), same order than clients'
+      images:
+        description: 'Comma-separated list of images for the clients (type default if you don't want to specify), same order than clients'
         default: 'default'
       client:
         description: 'Comma-separated list of client names (e.g., nethermind,reth,geth,erigon)'
@@ -55,7 +55,7 @@ jobs:
       - name: Run Node and run benchmarks
         run: |
           IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
-          IFS=',' read -ra images <<< "${{ github.event.inputs.image }}"
+          IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
           runs="${{ github.event.inputs.runs }}"
           for i in "${!clients[@]}"; do
             client="${clients[$i]}"
