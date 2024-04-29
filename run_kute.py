@@ -79,14 +79,14 @@ def main():
     client = args.client
     runs = args.runs
 
-    response_path = os.path.join(output_folder, response_file)
-
     # Create the output folder if it doesn't exist
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     if response_file is None:
         response_file = f'{client}_response_{runs}.txt'
+
+    response_path = os.path.join(output_folder, response_file)
 
     warmup_response = ''
     if warmup_file != '':
