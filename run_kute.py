@@ -16,19 +16,15 @@ def run_command(test_case_file, jwt_secret, response, ec_url, kute_extra_argumen
     # Add logic here to run the appropriate command for each client
     command = f'{executables["kute"]} -i {test_case_file} -s {jwt_secret} -r {response} -a {ec_url} ' \
               f'{kute_extra_arguments} '
-    # print(command)
-    # results = subprocess.run(command, shell=True, capture_output=True, text=True)
-    # print(results.stdout)
-    # print(f'---------------------------------------------------------------------{len(results.stderr)}')
-    # return results.stdout
-    return command
+    print(command)
+    results = subprocess.run(command, shell=True, capture_output=True, text=True)
+    return results.stdout
 
 
 def save_to(output_folder, file_name, content):
-    print(file_name)
-    # output_path = os.path.join(output_folder, file_name)
-    # with open(output_path, "w") as file:
-    #     file.write(content)
+    output_path = os.path.join(output_folder, file_name)
+    with open(output_path, "w") as file:
+        file.write(content)
 
 
 def main():
