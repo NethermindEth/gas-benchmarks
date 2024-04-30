@@ -16,9 +16,10 @@ def run_command(test_case_file, jwt_secret, response, ec_url, kute_extra_argumen
     # Add logic here to run the appropriate command for each client
     command = f'{executables["kute"]} -i {test_case_file} -s {jwt_secret} -r {response} -a {ec_url} ' \
               f'{kute_extra_arguments} '
+    print(command)
     results = subprocess.run(command, shell=True, capture_output=True, text=True)
     print(results.stdout)
-    print(results.stderr)
+    print(f'---------------------------------------------------------------------{len(results.stderr)}')
     return results.stdout
 
 
