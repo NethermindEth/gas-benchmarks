@@ -120,13 +120,13 @@ def extract_data_per_client(client, results_paths, test_case):
 def process_results(client_results, results_paths, method, field, test_case):
     plt.figure(figsize=(10, 5))
     for client, data in client_results.items():
-        processed_responses[client]['test_case'] = test_case
+        # processed_responses[client]['test_case'] = test_case
         results_max = []
         for i in range(1, len(data['results']) + 1):
             results_max.append(float(data['results'][str(i)][method].fields[field]))
 
         x = range(1, len(data['results']) + 1)
-        processed_responses[client][method][field] = results_max
+        processed_responses[client][test_case][method][field] = results_max
         plt.plot(x, results_max, label=client)
         plt.xticks(list(x)[::1])
     plt.legend()
@@ -139,16 +139,15 @@ def process_results(client_results, results_paths, method, field, test_case):
 
 def print_processed_responses(results_paths):
     results = ''
-    for client, data in processed_responses.items():
-        results += f'{client}\n'
-        results += f'Test case: {data["test_case"]}\n'
-        for method, fields in data.items():
-            if method == 'test_case':
-                continue
-            results += f'{method}\n'
-            for field, values in fields.items():
-                results += f'{field}: {values}\n'
-        results += '\n'
+    for client, tests_results in processed_responses.items():
+        results += f'{client}:\n'
+        for test_case, methods in tests_results.items():
+            results += f'\t{test_case}:\n'
+            for method, fields in methods.items():
+                results += f'\t\t{method}:\n'
+                for field, values in fields.items():
+                    results += f'\t\t\t{field}: {values}\n'
+
     with open(f'{results_paths}/processed_responses.txt', 'w') as file:
         file.write(results)
     print(results)
@@ -181,10 +180,19 @@ def main():
     fields = ['max', 'min', 'mean', 'sum']
     for client in clients.split(','):
         processed_responses[client] = {}
-        for method in methods:
-            processed_responses[client][method] = {}
-            for field in fields:
-                processed_responses[client][method][field] = []
+        if os.path.isdir(tests_path):
+            for test_case in os.listdir(tests_path):
+                processed_responses[client][test_case] = {}
+                for method in methods:
+                    processed_responses[client][test_case][method] = {}
+                    for field in fields:
+                        processed_responses[client][test_case][method][field] = []
+        else:
+            processed_responses[client][tests_path] = {}
+            for method in methods:
+                processed_responses[client][tests_path][method] = {}
+                for field in fields:
+                    processed_responses[client][tests_path][method][field] = []
 
     if os.path.isdir(tests_path):
         for test_case in os.listdir(tests_path):
