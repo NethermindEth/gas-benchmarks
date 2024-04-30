@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 # get_files will return the files in the following format:
 # {'warmup_results': 'file.txt', 'warmup_response': 'file.txt', results': ['file.txt'],
 # 'responses': ['file.txt']}
-def get_files(results_paths, client):
+def get_files(results_paths, client, test_case):
+    filter_name = test_case.split('/')[-1].split('.')[0]
     # Get all the files in the results folder that match the client
     directory = os.listdir(results_paths)
     files = {
@@ -19,13 +20,13 @@ def get_files(results_paths, client):
         'responses': [],
     }
     for file in directory:
-        if file.startswith(f'{client}_response'):
+        if file.startswith(f'{client}_response') and filter_name in file:
             files['responses'].append(file)
-        elif file.startswith(f'{client}_results'):
+        elif file.startswith(f'{client}_results') and filter_name in file:
             files['results'].append(file)
-        elif file.startswith(f'warmup_{client}_response'):
+        elif file.startswith(f'warmup_{client}_response') and filter_name in file:
             files['warmup_response'] = file
-        elif file.startswith(f'warmup_{client}_results'):
+        elif file.startswith(f'warmup_{client}_results') and filter_name in file:
             files['warmup_results'] = file
     return files
 
@@ -83,8 +84,8 @@ def read_results(text):
     return sections
 
 
-def extract_data_per_client(client, results_paths):
-    file_names = get_files(results_paths, client)
+def extract_data_per_client(client, results_paths, test_case):
+    file_names = get_files(results_paths, client, test_case)
     # Get the responses from the files
     responses = {}
     for response in file_names['responses']:
@@ -101,15 +102,15 @@ def extract_data_per_client(client, results_paths):
         with open(f'{results_paths}/{result}', 'r') as file:
             text = file.read()
             results[run] = read_results(text)
-    # Get the warmup responses
-    with open(f'{results_paths}/{file_names["warmup_response"]}', 'r') as file:
-        text = file.read()
-        warmup_responses = read_responses(text)
-    # Get the warmup results
-    with open(f'{results_paths}/{file_names["warmup_results"]}', 'r') as file:
-        text = file.read()
-        warmup_results = read_results(text)
-    return responses, results, warmup_responses, warmup_results
+    # # Get the warmup responses
+    # with open(f'{results_paths}/{file_names["warmup_response"]}', 'r') as file:
+    #     text = file.read()
+    #     warmup_responses = read_responses(text)
+    # # Get the warmup results
+    # with open(f'{results_paths}/{file_names["warmup_results"]}', 'r') as file:
+    #     text = file.read()
+    #     warmup_results = read_results(text)
+    return responses, results, None, None #warmup_responses, warmup_results
 
 
 # Print graphs and tables with the results
@@ -117,7 +118,7 @@ def process_results(client_results, results_paths, method, field, test_case):
     plt.figure(figsize=(10, 5))
     for client, data in client_results.items():
         results_max = []
-        for i in range(len(data['results'])):
+        for i in range(1, len(data['results']) + 1):
             results_max.append(float(data['results'][str(i)][method].fields[field]))
 
         x = range(1, len(data['results']) + 1)
@@ -125,7 +126,8 @@ def process_results(client_results, results_paths, method, field, test_case):
         plt.xticks(list(x)[::1])
     plt.legend()
     plt.title(f'{field} results')
-    plt.savefig(f'{results_paths}/{method}_{field}_{test_case}_results.png')
+    test_name = test_case.split('/')[-1].split('.')[0]
+    plt.savefig(f'{results_paths}/{method}_{field}_{test_name}_results.png')
     plt.close()
     pass
 
@@ -133,9 +135,9 @@ def process_results(client_results, results_paths, method, field, test_case):
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
-    parser.add_argument('--testsPath', type=str, help='resultsPath', default='small_tests')
+    parser.add_argument('--testsPath', type=str, help='resultsPath', default='small_tests/1B.txt')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
-                                                    'split them by comma, ex: nethermind,geth', default='nethermind')
+                                                    'split them by comma, ex: nethermind,geth', default='nethermind,erigon,geth,reth')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -157,7 +159,8 @@ def main():
         for test_case in os.listdir(tests_path):
 
             for client in clients.split(','):
-                responses, results, warmup_responses, warmup_results = extract_data_per_client(client, results_paths)
+                responses, results, warmup_responses, warmup_results = extract_data_per_client(client, results_paths,
+                                                                                               test_case)
                 client_results[client] = {
                     'responses': responses,
                     'results': results,
@@ -168,6 +171,20 @@ def main():
             for method in ['engine_forkchoiceUpdatedV3', 'engine_newPayloadV3']:
                 for field in ['max', 'min', 'mean', 'sum']:
                     process_results(client_results, results_paths, method, field, test_case)
+    else:
+        for client in clients.split(','):
+            responses, results, warmup_responses, warmup_results = extract_data_per_client(client, results_paths,
+                                                                                           tests_path)
+            client_results[client] = {
+                'responses': responses,
+                'results': results,
+                'warmup_responses': warmup_responses,
+                'warmup_results': warmup_results
+            }
+
+        for method in ['engine_forkchoiceUpdatedV3', 'engine_newPayloadV3']:
+            for field in ['max', 'min', 'mean', 'sum']:
+                process_results(client_results, results_paths, method, field, tests_path)
 
 
 if __name__ == '__main__':
