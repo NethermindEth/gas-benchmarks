@@ -5,7 +5,7 @@ on:
     inputs:
       test:
         description: 'Path to test file'
-        default: 'tests/req8.txt'
+        default: 'small_tests/1B.txt'
       warmup:
         description: 'Name of the warm up file'
         default: ''
@@ -78,6 +78,9 @@ jobs:
             docker-compose down
             cd ../..
           done
+
+      - name: Get metrics from results
+        run: python results.py --resultsPath results --clients "${{ github.event.inputs.client }}"
 
       - name: Zip the results folder
         run: zip -r results.zip results
