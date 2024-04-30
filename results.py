@@ -113,7 +113,7 @@ def extract_data_per_client(client, results_paths):
 
 
 # Print graphs and tables with the results
-def process_results(client_results, results_paths, method, field):
+def process_results(client_results, results_paths, method, field, test_case):
     plt.figure(figsize=(10, 5))
     for client, data in client_results.items():
         results_max = []
@@ -125,7 +125,7 @@ def process_results(client_results, results_paths, method, field):
         plt.xticks(list(x)[::1])
     plt.legend()
     plt.title(f'{field} results')
-    plt.savefig(f'{results_paths}/{method}_{field}_results.png')
+    plt.savefig(f'{results_paths}/{method}_{field}_{test_case}_results.png')
     plt.close()
     pass
 
@@ -133,6 +133,7 @@ def process_results(client_results, results_paths, method, field):
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
+    parser.add_argument('--testsPath', type=str, help='resultsPath', default='small_tests')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth', default='nethermind')
 
@@ -142,27 +143,31 @@ def main():
     # Get client name and test case folder from command-line arguments
     results_paths = args.resultsPath
     clients = args.clients
+    tests_path = args.testsPath
 
     # Get the computer spec
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
         computer_spec = text
-
-    client_results = {}
-    for client in clients.split(','):
-        responses, results, warmup_responses, warmup_results = extract_data_per_client(client, results_paths)
-        client_results[client] = {
-            'responses': responses,
-            'results': results,
-            'warmup_responses': warmup_responses,
-            'warmup_results': warmup_results
-        }
-
     print(computer_spec)
 
-    for method in ['engine_forkchoiceUpdatedV3', 'engine_newPayloadV3']:
-        for field in ['max', 'min', 'mean', 'sum']:
-            process_results(client_results, results_paths, method, field)
+    client_results = {}
+
+    if os.path.isdir(tests_path):
+        for test_case in os.listdir(tests_path):
+
+            for client in clients.split(','):
+                responses, results, warmup_responses, warmup_results = extract_data_per_client(client, results_paths)
+                client_results[client] = {
+                    'responses': responses,
+                    'results': results,
+                    'warmup_responses': warmup_responses,
+                    'warmup_results': warmup_results
+                }
+
+            for method in ['engine_forkchoiceUpdatedV3', 'engine_newPayloadV3']:
+                for field in ['max', 'min', 'mean', 'sum']:
+                    process_results(client_results, results_paths, method, field, test_case)
 
 
 if __name__ == '__main__':

@@ -79,8 +79,8 @@ jobs:
             cd ../..
           done
 
-      - name: Get metrics from results
-        run: python results.py --resultsPath results --clients "${{ github.event.inputs.client }}"
+#      - name: Get metrics from results
+#        run: python results.py --resultsPath results --clients "${{ github.event.inputs.client }}"
 
       - name: Zip the results folder
         run: zip -r results.zip results
