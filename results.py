@@ -5,6 +5,9 @@ import os
 import utils
 import matplotlib.pyplot as plt
 
+# Processed responses will be accessed globally
+processed_responses = {}
+
 
 # get_files will return the files in the following format:
 # {'warmup_results': 'file.txt', 'warmup_response': 'file.txt', results': ['file.txt'],
@@ -110,18 +113,20 @@ def extract_data_per_client(client, results_paths, test_case):
     # with open(f'{results_paths}/{file_names["warmup_results"]}', 'r') as file:
     #     text = file.read()
     #     warmup_results = read_results(text)
-    return responses, results, None, None #warmup_responses, warmup_results
+    return responses, results, None, None  # warmup_responses, warmup_results
 
 
 # Print graphs and tables with the results
 def process_results(client_results, results_paths, method, field, test_case):
     plt.figure(figsize=(10, 5))
     for client, data in client_results.items():
+        processed_responses[client]['test_case'] = test_case
         results_max = []
         for i in range(1, len(data['results']) + 1):
             results_max.append(float(data['results'][str(i)][method].fields[field]))
 
         x = range(1, len(data['results']) + 1)
+        processed_responses[client][method][field] = results_max
         plt.plot(x, results_max, label=client)
         plt.xticks(list(x)[::1])
     plt.legend()
@@ -132,12 +137,30 @@ def process_results(client_results, results_paths, method, field, test_case):
     pass
 
 
+def print_processed_responses(results_paths):
+    results = ''
+    for client, data in processed_responses.items():
+        results += f'{client}\n'
+        results += f'Test case: {data["test_case"]}\n'
+        for method, fields in data.items():
+            if method == 'test_case':
+                continue
+            results += f'{method}\n'
+            for field, values in fields.items():
+                results += f'{field}: {values}\n'
+        results += '\n'
+    with open(f'{results_paths}/processed_responses.txt', 'w') as file:
+        file.write(results)
+    print(results)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
     parser.add_argument('--testsPath', type=str, help='resultsPath', default='small_tests/1B.txt')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
-                                                    'split them by comma, ex: nethermind,geth', default='nethermind,erigon,geth,reth')
+                                                    'split them by comma, ex: nethermind,geth',
+                        default='nethermind,erigon,geth,reth')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -154,6 +177,14 @@ def main():
     print(computer_spec)
 
     client_results = {}
+    methods = ['engine_forkchoiceUpdatedV3', 'engine_newPayloadV3']
+    fields = ['max', 'min', 'mean', 'sum']
+    for client in clients.split(','):
+        processed_responses[client] = {}
+        for method in methods:
+            processed_responses[client][method] = {}
+            for field in fields:
+                processed_responses[client][method][field] = []
 
     if os.path.isdir(tests_path):
         for test_case in os.listdir(tests_path):
@@ -182,9 +213,13 @@ def main():
                 'warmup_results': warmup_results
             }
 
-        for method in ['engine_forkchoiceUpdatedV3', 'engine_newPayloadV3']:
-            for field in ['max', 'min', 'mean', 'sum']:
+        for method in methods:
+            for field in fields:
                 process_results(client_results, results_paths, method, field, tests_path)
+
+    print_processed_responses(results_paths)
+
+    print('Done!')
 
 
 if __name__ == '__main__':
