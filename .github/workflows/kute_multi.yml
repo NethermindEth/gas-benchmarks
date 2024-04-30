@@ -57,26 +57,28 @@ jobs:
           IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
           IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
           runs="${{ github.event.inputs.runs }}"
-          for i in "${!clients[@]}"; do
-            client="${clients[$i]}"
-            image="${images[$i]}"
-            if [ -z "$image" ]; then
-              echo "Image input is empty, using default image."
-              python setup_node.py --client $client
-            else
-              echo "Using provided image: $image for $client"
-              python setup_node.py --client $client --image $image
-            fi
-            if [ -z "${{ github.event.inputs.warmup}}" ]; then
-              echo "Running script without warm up."
-              python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --client $client --runs $runs
-            else
-              echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
-              python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --runs $runs
-            fi
-            cd "scripts/$client"
-            docker-compose down
-            cd ../..
+          for r in $(seq 1 $runs); do
+            for i in "${!clients[@]}"; do
+              client="${clients[$i]}"
+              image="${images[$i]}"
+              if [ -z "$image" ]; then
+                echo "Image input is empty, using default image."
+                python setup_node.py --client $client
+              else
+                echo "Using provided image: $image for $client"
+                python setup_node.py --client $client --image $image
+              fi
+              if [ -z "${{ github.event.inputs.warmup}}" ]; then
+                echo "Running script without warm up."
+                python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --client $client --run $r
+              else
+                echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
+                python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --runs $r
+              fi
+              cd "scripts/$client"
+              docker-compose down
+              cd ../..
+            done
           done
 
 #      - name: Get metrics from results
