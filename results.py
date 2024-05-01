@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 # Processed responses will be accessed globally
 processed_responses = {}
 
+failed_tests = {}
+
 
 # get_files will return the files in the following format:
 # {'warmup_results': 'file.txt', 'warmup_response': 'file.txt', results': ['file.txt'],
@@ -104,6 +106,9 @@ def extract_data_per_client(client, results_paths, test_case):
         run = result.split('.')[0].split('_')[2]
         with open(f'{results_paths}/{result}', 'r') as file:
             text = file.read()
+            if len(text) == 0:
+                failed_tests[client][test_case][run] = True
+                continue
             results[run] = read_results(text)
     # # Get the warmup responses
     # with open(f'{results_paths}/{file_names["warmup_response"]}', 'r') as file:
@@ -123,7 +128,11 @@ def process_results(client_results, results_paths, method, field, test_case):
         # processed_responses[client]['test_case'] = test_case
         results_max = []
         for i in range(1, len(data['results']) + 1):
-            results_max.append(float(data['results'][str(i)][method].fields[field]))
+            try:
+                results_max.append(float(data['results'][str(i)][method].fields[field]))
+            except KeyError as e:
+                results_max.append(0)
+                print(f"Error: {e} in {client} {test_case} {method} {field} {i}")
 
         x = range(1, len(data['results']) + 1)
         processed_responses[client][test_case][method][field] = results_max
@@ -148,6 +157,13 @@ def print_processed_responses(results_paths):
                 for field, values in fields.items():
                     results += f'\t\t\t{field}: {values}\n'
 
+    for client, test_case in failed_tests.items():
+        for test, runs in test_case.items():
+            runs = [run for run, failed in runs.items() if failed]
+            if len(runs) > 0:
+                runs_failed = ', '.join(runs)
+                results += f'Couldn\'t process {client}, with test: {test}, on the runs: {runs_failed}\n'
+
     with open(f'{results_paths}/processed_responses.txt', 'w') as file:
         file.write(results)
     print(results)
@@ -156,7 +172,7 @@ def print_processed_responses(results_paths):
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
-    parser.add_argument('--testsPath', type=str, help='resultsPath', default='small_tests/1B.txt')
+    parser.add_argument('--testsPath', type=str, help='resultsPath', default='small_tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth',
                         default='nethermind,erigon,geth,reth')
@@ -180,9 +196,11 @@ def main():
     fields = ['max', 'min', 'mean', 'sum']
     for client in clients.split(','):
         processed_responses[client] = {}
+        failed_tests[client] = {}
         if os.path.isdir(tests_path):
             for test_case in os.listdir(tests_path):
                 processed_responses[client][test_case] = {}
+                failed_tests[client][test_case] = {}
                 for method in methods:
                     processed_responses[client][test_case][method] = {}
                     for field in fields:

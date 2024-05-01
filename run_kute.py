@@ -81,7 +81,8 @@ def main():
     if os.path.isdir(tests_paths):
         for test_case in os.listdir(tests_paths):
             test_case_path = os.path.join(tests_paths, test_case)
-            response_file = os.path.join(output_folder, f'{client}_response_{run}_{test_case}.txt')
+            name = test_case.split('.')[0]
+            response_file = os.path.join(output_folder, f'{client}_response_{run}_{name}.txt')
             print(f"Running {client} for the {run + 1} time with test case {test_case}")
             response = run_command(test_case_path, jwt_path, response_file, execution_url, kute_arguments)
             timestamp = datetime.datetime.now().timestamp()
