@@ -152,7 +152,7 @@ def process_results(client_results, results_paths, method, field, test_case):
 
 
 def standard_deviation(numbers):
-    if len(numbers) == 0:
+    if len(numbers) < 2:
         return None
     return statistics.stdev(numbers)
 
@@ -194,6 +194,7 @@ def print_processed_responses(results_paths, tests_path, method):
     #
     results = ''
     only_results = ''
+    na = 'N/A'
     if os.path.isdir(tests_path):
         for test_case in os.listdir(tests_path):
             results += f'Test case: {test_case}, request: {method}:\n\n'
@@ -227,7 +228,7 @@ def print_processed_responses(results_paths, tests_path, method):
                     # Calculate max
                     if len(fields) == 0:
                         max_value = 0
-                        only_results += f'  N/A  |'
+                        only_results += f'{center_string(na, 11)}|'
                     else:
                         max_value = max(fields)
                         value_str = f'{max_value/100:.2f} ms'
@@ -236,7 +237,7 @@ def print_processed_responses(results_paths, tests_path, method):
                     # Calculate Average
                     if len(fields) == 0:
                         average = 0
-                        only_results += f'  N/A  |'
+                        only_results += f'{center_string(na, 11)}|'
                     else:
                         average = sum(fields) / len(fields)
                         value_str = f'{average/100:.2f} ms'
@@ -246,7 +247,7 @@ def print_processed_responses(results_paths, tests_path, method):
                     st_dev = standard_deviation(fields)
                     if st_dev is None:
                         results += '   N/A\n'
-                        only_results += '   N/A |'
+                        only_results += f'{center_string(na, 11)}|'
                     else:
                         st_dev_str = f'{st_dev/100:.2f} ms'
                         results += f' {center_string(st_dev_str, 11)}\n'
@@ -255,7 +256,7 @@ def print_processed_responses(results_paths, tests_path, method):
                     # Calculate min
                     if len(fields) == 0:
                         min_value = 0
-                        only_results += f'  N/A  \n'
+                        only_results += f'{center_string(na, 11)}\n'
                     else:
                         min_value = min(fields)
                         value_str = f'{min_value/100:.2f} ms'
@@ -289,7 +290,7 @@ def main():
     parser.add_argument('--testsPath', type=str, help='resultsPath', default='small_tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth',
-                        default='nethermind,erigon,reth')
+                        default='nethermind,geth,reth,erigon')
 
     # Parse command-line arguments
     args = parser.parse_args()
