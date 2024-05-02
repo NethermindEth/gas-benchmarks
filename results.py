@@ -165,7 +165,7 @@ def center_string(string, size):
     return centered_string
 
 
-def print_processed_responses(results_paths, tests_path):
+def print_processed_responses(results_paths, tests_path, method):
     # Table with results per test case, comparing the clients
     #
     # Test Case 1
@@ -195,20 +195,20 @@ def print_processed_responses(results_paths, tests_path):
     results = ''
     if os.path.isdir(tests_path):
         for test_case in os.listdir(tests_path):
-            results += f'{test_case}:\n\n'
+            results += f'Test case: {test_case}, request: {method}:\n\n'
             for client in processed_responses.keys():
                 size = 21
                 string_centered = center_string('client/iteration', 20)
                 results += f'{string_centered}|'
-                for i in range(1, len(processed_responses[client][test_case]['engine_newPayloadV3']['max']) + 1):
+                for i in range(1, len(processed_responses[client][test_case][method]['max']) + 1):
                     size += 11
                     results += f'{center_string(str(i), 10)}|'
                 size += 10
                 results += '   stdev\n'
                 i = 0
-                for fields_key in processed_responses[client][test_case]['engine_newPayloadV3']:
-                    fields = processed_responses[client][test_case]['engine_newPayloadV3'][fields_key]
-                    middle_field = len(processed_responses[client][test_case]['engine_newPayloadV3']) // 2
+                for fields_key in processed_responses[client][test_case][method]:
+                    fields = processed_responses[client][test_case][method][fields_key]
+                    middle_field = len(processed_responses[client][test_case][method]) // 2
                     if i == middle_field:
                         results += f'{center_string(client, 14)}{center_string(fields_key, 6)}|'
                     else:
@@ -226,7 +226,7 @@ def print_processed_responses(results_paths, tests_path):
                 results += ('-' * size) + '\n'
             results += '\n'
 
-    with open(f'{results_paths}/processed_responses.txt', 'w') as file:
+    with open(f'{results_paths}/processed_responses_{method}.txt', 'w') as file:
         file.write(results)
     print(results)
 
@@ -287,8 +287,8 @@ def main():
                     'warmup_results': warmup_results
                 }
 
-            for method in ['engine_forkchoiceUpdatedV3', 'engine_newPayloadV3']:
-                for field in ['max', 'min', 'mean', 'sum']:
+            for method in methods:
+                for field in fields:
                     process_results(client_results, results_paths, method, field, test_case)
     else:
         for client in clients.split(','):
@@ -305,7 +305,8 @@ def main():
             for field in fields:
                 process_results(client_results, results_paths, method, field, tests_path)
 
-    print_processed_responses(results_paths, tests_path)
+    for method in methods:
+        print_processed_responses(results_paths, tests_path, method)
 
     print('Done!')
 
