@@ -193,42 +193,94 @@ def print_processed_responses(results_paths, tests_path, method):
     # -------------------------------------------------------------------
     #
     results = ''
+    only_results = ''
     if os.path.isdir(tests_path):
         for test_case in os.listdir(tests_path):
             results += f'Test case: {test_case}, request: {method}:\n\n'
+            only_results += f'Test case: {test_case}, request: {method}, results:\n\n'
             for client in processed_responses.keys():
                 size = 21
-                string_centered = center_string('client/iteration', 20)
+                string_centered = center_string('client/metrics', 20)
                 results += f'{string_centered}|'
+                only_results += f'{string_centered}|'
                 for i in range(1, len(processed_responses[client][test_case][method]['max']) + 1):
                     size += 11
                     results += f'{center_string(str(i), 10)}|'
                 size += 10
                 results += '   stdev\n'
+                only_results += '    max    |    avg    |   stdev   |   min   \n'
                 i = 0
                 for fields_key in processed_responses[client][test_case][method]:
                     fields = processed_responses[client][test_case][method][fields_key]
                     middle_field = len(processed_responses[client][test_case][method]) // 2
                     if i == middle_field:
                         results += f'{center_string(client, 14)}{center_string(fields_key, 6)}|'
+                        only_results += f'{center_string(client, 14)}{center_string(fields_key, 6)}|'
                     else:
                         empty_string = ' ' * 14
                         results += f'{empty_string}{center_string(fields_key, 6)}|'
+                        only_results += f'{empty_string}{center_string(fields_key, 6)}|'
                     for value in fields:
-                        results += f' {value / 1000:.2f} mls |'
+                        value_str = f'{value/100:.2f} ms'
+                        results += f'{center_string(value_str, 11)}|'
+
+                    # Calculate max
+                    if len(fields) == 0:
+                        max_value = 0
+                        only_results += f'  N/A  |'
+                    else:
+                        max_value = max(fields)
+                        value_str = f'{max_value/100:.2f} ms'
+                        only_results += f'{center_string(value_str, 11)}|'
+
+                    # Calculate Average
+                    if len(fields) == 0:
+                        average = 0
+                        only_results += f'  N/A  |'
+                    else:
+                        average = sum(fields) / len(fields)
+                        value_str = f'{average/100:.2f} ms'
+                        only_results += f'{center_string(value_str, 11)}|'
+
+                    # Calculate standard deviation
                     st_dev = standard_deviation(fields)
                     if st_dev is None:
                         results += '   N/A\n'
+                        only_results += '   N/A |'
                     else:
-                        st_dev_str = f'{st_dev/1000:.2f}'
-                        results += f' {center_string(st_dev_str, 10)}\n'
+                        st_dev_str = f'{st_dev/100:.2f} ms'
+                        results += f' {center_string(st_dev_str, 11)}\n'
+                        only_results += f'{center_string(st_dev_str, 11)}|'
+
+                    # Calculate min
+                    if len(fields) == 0:
+                        min_value = 0
+                        only_results += f'  N/A  \n'
+                    else:
+                        min_value = min(fields)
+                        value_str = f'{min_value/100:.2f} ms'
+                        only_results += f'{center_string(value_str, 11)} \n'
+
                     i += 1
                 results += ('-' * size) + '\n'
+                only_results += ('-' * 68) + '\n'
+            only_results += '\n'
+            only_results += '*' * 70
+            only_results += '\n\n'
             results += '\n'
+
+    with open(f'{results_paths}/processed_responses_final_{method}.txt', 'w') as file:
+        file.write(only_results)
 
     with open(f'{results_paths}/processed_responses_{method}.txt', 'w') as file:
         file.write(results)
-    print(results)
+    # print(results)
+
+    print('*' * 100)
+
+    print(only_results)
+
+    print('Results saved in processed_responses_final.txt and processed_responses.txt')
 
 
 def main():
@@ -237,7 +289,7 @@ def main():
     parser.add_argument('--testsPath', type=str, help='resultsPath', default='small_tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth',
-                        default='nethermind,erigon,geth,reth')
+                        default='nethermind,erigon,reth')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -255,7 +307,7 @@ def main():
 
     client_results = {}
     methods = ['engine_forkchoiceUpdatedV3', 'engine_newPayloadV3']
-    fields = ['max', 'min', 'mean', 'sum']
+    fields = ['max']
     for client in clients.split(','):
         processed_responses[client] = {}
         failed_tests[client] = {}
