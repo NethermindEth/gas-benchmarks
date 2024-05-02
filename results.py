@@ -1,6 +1,9 @@
 import argparse
 import json
 import os
+import statistics
+
+import numpy as np
 
 import utils
 import matplotlib.pyplot as plt
@@ -141,28 +144,87 @@ def process_results(client_results, results_paths, method, field, test_case):
     plt.legend()
     plt.title(f'{field} results')
     test_name = test_case.split('/')[-1].split('.')[0]
-    plt.savefig(f'{results_paths}/{method}_{field}_{test_name}_results.png')
+    if not os.path.exists(f'{results_paths}/charts'):
+        os.makedirs(f'{results_paths}/charts')
+    plt.savefig(f'{results_paths}/charts/{method}_{field}_{test_name}_results.png')
     plt.close()
     pass
 
 
-def print_processed_responses(results_paths):
-    results = ''
-    for client, tests_results in processed_responses.items():
-        results += f'{client}:\n'
-        for test_case, methods in tests_results.items():
-            results += f'\t{test_case}:\n'
-            for method, fields in methods.items():
-                results += f'\t\t{method}:\n'
-                for field, values in fields.items():
-                    results += f'\t\t\t{field}: {values}\n'
+def standard_deviation(numbers):
+    if len(numbers) == 0:
+        return None
+    return statistics.stdev(numbers)
 
-    for client, test_case in failed_tests.items():
-        for test, runs in test_case.items():
-            runs = [run for run, failed in runs.items() if failed]
-            if len(runs) > 0:
-                runs_failed = ', '.join(runs)
-                results += f'Couldn\'t process {client}, with test: {test}, on the runs: {runs_failed}\n'
+
+def center_string(string, size):
+    padding_length = max(0, size - len(string))
+    padding_left = padding_length // 2
+    padding_right = padding_length - padding_left
+    centered_string = " " * padding_left + string + " " * padding_right
+    return centered_string
+
+
+def print_processed_responses(results_paths, tests_path):
+    # Table with results per test case, comparing the clients
+    #
+    # Test Case 1
+    #
+    # client/iteration | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | mean
+    #           max    | x | x | x | x | x | x | x | x | x |  x |  x
+    # client1   min    | x | x | x | x | x | x | x | x | x |  x |  x
+    #           mean   | x | x | x | x | x | x | x | x | x |  x |  x
+    # -------------------------------------------------------------------
+    #           max    | x | x | x | x | x | x | x | x | x |  x |  x
+    # client 2  min    | x | x | x | x | x | x | x | x | x |  x |  x
+    #           mean   | x | x | x | x | x | x | x | x | x |  x |  x
+    # -------------------------------------------------------------------
+    #
+    # Test Case 2
+    #
+    # client/iteration | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | mean
+    #           max    | x | x | x | x | x | x | x | x | x |  x |  x
+    # client1   min    | x | x | x | x | x | x | x | x | x |  x |  x
+    #           mean   | x | x | x | x | x | x | x | x | x |  x |  x
+    # -------------------------------------------------------------------
+    #           max    | x | x | x | x | x | x | x | x | x |  x |  x
+    # client 2  min    | x | x | x | x | x | x | x | x | x |  x |  x
+    #           mean   | x | x | x | x | x | x | x | x | x |  x |  x
+    # -------------------------------------------------------------------
+    #
+    results = ''
+    if os.path.isdir(tests_path):
+        for test_case in os.listdir(tests_path):
+            results += f'{test_case}:\n\n'
+            for client in processed_responses.keys():
+                size = 21
+                string_centered = center_string('client/iteration', 20)
+                results += f'{string_centered}|'
+                for i in range(1, len(processed_responses[client][test_case]['engine_newPayloadV3']['max']) + 1):
+                    size += 11
+                    results += f'{center_string(str(i), 10)}|'
+                size += 10
+                results += '   stdev\n'
+                i = 0
+                for fields_key in processed_responses[client][test_case]['engine_newPayloadV3']:
+                    fields = processed_responses[client][test_case]['engine_newPayloadV3'][fields_key]
+                    middle_field = len(processed_responses[client][test_case]['engine_newPayloadV3']) // 2
+                    if i == middle_field:
+                        results += f'{center_string(client, 14)}{center_string(fields_key, 6)}|'
+                    else:
+                        empty_string = ' ' * 14
+                        results += f'{empty_string}{center_string(fields_key, 6)}|'
+                    for value in fields:
+                        results += f' {value / 1000:.2f} mls |'
+                    st_dev = standard_deviation(fields)
+                    if st_dev is None:
+                        results += '   N/A\n'
+                    else:
+                        st_dev_str = f'{st_dev/1000:.2f}'
+                        results += f' {center_string(st_dev_str, 10)}\n'
+                    i += 1
+                results += ('-' * size) + '\n'
+            results += '\n'
 
     with open(f'{results_paths}/processed_responses.txt', 'w') as file:
         file.write(results)
@@ -243,7 +305,7 @@ def main():
             for field in fields:
                 process_results(client_results, results_paths, method, field, tests_path)
 
-    print_processed_responses(results_paths)
+    print_processed_responses(results_paths, tests_path)
 
     print('Done!')
 
