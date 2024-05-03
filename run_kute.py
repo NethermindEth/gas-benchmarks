@@ -18,6 +18,7 @@ def run_command(test_case_file, jwt_secret, response, ec_url, kute_extra_argumen
               f'{kute_extra_arguments} '
     print(command)
     results = subprocess.run(command, shell=True, capture_output=True, text=True)
+    print(results.stderr)
     return results.stdout
 
 
