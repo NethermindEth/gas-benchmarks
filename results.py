@@ -165,6 +165,34 @@ def center_string(string, size):
     return centered_string
 
 
+def check_sync_status(json_data):
+    data = json.loads(json_data)
+    if 'status' in data['result']:
+        return data['result']['status'] == 'VALID'
+    elif 'payloadStatus' in data['result']:
+        return data['result']['payloadStatus']['status'] == 'VALID'
+    else:
+        return False
+
+
+def check_client_response_is_valid(results_paths, client, test_case, length):
+    for i in range(1, length + 1):
+        response_file = f'{results_paths}/{client}_response_{i}_{test_case}'
+        if not os.path.exists(response_file):
+            return False
+        with open(response_file, 'r') as file:
+            text = file.read()
+            if len(text) == 0:
+                return False
+            # Get latest line
+            for line in text.split('\n'):
+                if len(line) < 1:
+                    continue
+                if not check_sync_status(line):
+                    return False
+    return True
+
+
 def print_processed_responses(results_paths, tests_path, method):
     # Table with results per test case, comparing the clients
     #
@@ -199,17 +227,19 @@ def print_processed_responses(results_paths, tests_path, method):
         for test_case in os.listdir(tests_path):
             results += f'Test case: {test_case}, request: {method}:\n\n'
             only_results += f'Test case: {test_case}, request: {method}, results:\n\n'
+            string_centered = center_string('client/metrics', 20)
+            only_results += f'{string_centered}|'
+            only_results += '    max    |    avg    |   stdev   |   min   \n'
+            only_results += ('-' * 68) + '\n'
+
             for client in processed_responses.keys():
                 size = 21
-                string_centered = center_string('client/metrics', 20)
                 results += f'{string_centered}|'
-                only_results += f'{string_centered}|'
                 for i in range(1, len(processed_responses[client][test_case][method]['max']) + 1):
                     size += 11
                     results += f'{center_string(str(i), 10)}|'
                 size += 10
                 results += '   stdev\n'
-                only_results += '    max    |    avg    |   stdev   |   min   \n'
                 i = 0
                 for fields_key in processed_responses[client][test_case][method]:
                     fields = processed_responses[client][test_case][method][fields_key]
@@ -222,8 +252,14 @@ def print_processed_responses(results_paths, tests_path, method):
                         results += f'{empty_string}{center_string(fields_key, 6)}|'
                         only_results += f'{empty_string}{center_string(fields_key, 6)}|'
                     for value in fields:
-                        value_str = f'{value/100:.2f} ms'
+                        value_str = f'{value / 100:.2f} ms'
                         results += f'{center_string(value_str, 11)}|'
+
+                    valid = check_client_response_is_valid(results_paths, client, test_case, len(fields))
+                    if not valid:
+                        fields = []
+                        only_results += '    N/A    |    N/A    |    N/A    |    N/A    \n'
+                        continue
 
                     # Calculate max
                     if len(fields) == 0:
@@ -231,7 +267,7 @@ def print_processed_responses(results_paths, tests_path, method):
                         only_results += f'{center_string(na, 11)}|'
                     else:
                         max_value = max(fields)
-                        value_str = f'{max_value/100:.2f} ms'
+                        value_str = f'{max_value / 100:.2f} ms'
                         only_results += f'{center_string(value_str, 11)}|'
 
                     # Calculate Average
@@ -240,7 +276,7 @@ def print_processed_responses(results_paths, tests_path, method):
                         only_results += f'{center_string(na, 11)}|'
                     else:
                         average = sum(fields) / len(fields)
-                        value_str = f'{average/100:.2f} ms'
+                        value_str = f'{average / 100:.2f} ms'
                         only_results += f'{center_string(value_str, 11)}|'
 
                     # Calculate standard deviation
@@ -249,7 +285,7 @@ def print_processed_responses(results_paths, tests_path, method):
                         results += '   N/A\n'
                         only_results += f'{center_string(na, 11)}|'
                     else:
-                        st_dev_str = f'{st_dev/100:.2f} ms'
+                        st_dev_str = f'{st_dev / 100:.2f} ms'
                         results += f' {center_string(st_dev_str, 11)}\n'
                         only_results += f'{center_string(st_dev_str, 11)}|'
 
@@ -259,7 +295,7 @@ def print_processed_responses(results_paths, tests_path, method):
                         only_results += f'{center_string(na, 11)}\n'
                     else:
                         min_value = min(fields)
-                        value_str = f'{min_value/100:.2f} ms'
+                        value_str = f'{min_value / 100:.2f} ms'
                         only_results += f'{center_string(value_str, 11)} \n'
 
                     i += 1
