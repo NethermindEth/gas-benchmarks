@@ -84,7 +84,7 @@ def main():
             test_case_path = os.path.join(tests_paths, test_case)
             name = test_case.split('.')[0]
             response_file = os.path.join(output_folder, f'{client}_response_{run}_{name}.txt')
-            print(f"Running {client} for the {run + 1} time with test case {test_case}")
+            print(f"Running {client} for the {run} time with test case {test_case}")
             response = run_command(test_case_path, jwt_path, response_file, execution_url, kute_arguments)
             test_case_without_extension = os.path.splitext(test_case)[0]
             save_to(output_folder, f'{client}_results_{run}_{test_case_without_extension}.txt',
@@ -92,7 +92,7 @@ def main():
         return
     else:
         response_file = os.path.join(output_folder, f'{client}_response_{run}.txt')
-        print(f"Running {client} for the {run + 1} time with test case {tests_paths}")
+        print(f"Running {client} for the {run} time with test case {tests_paths}")
         response = run_command(tests_paths, jwt_path, response_file, execution_url, kute_arguments)
         test_case_without_extension = os.path.splitext(tests_paths.split('/')[-1])[0]
         save_to(output_folder, f'{client}_results_{run}_{test_case_without_extension}.txt',

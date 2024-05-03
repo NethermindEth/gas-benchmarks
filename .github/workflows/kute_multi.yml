@@ -77,7 +77,7 @@ jobs:
               fi
               cd "scripts/$client"
               docker-compose down
-              rm -rf execution-data
+              sudo rm -rf execution-data
               cd ../..
             done
           done
