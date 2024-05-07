@@ -97,20 +97,21 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
 
 
 # Print graphs and tables with the results
-def process_results(client_results, clients, results_paths, test_cases, failed_tests, methods, field):
+def process_results(client_results, clients, results_paths, test_cases, failed_tests, methods, percentiles=False):
     results_to_print = ''
     for test_case, gas_used in test_cases.items():
         for method in methods:
-            results_to_print += f'\n\n{test_case}:\n'
+            add_header = ' (Percentiles)' if percentiles else ''
+            results_to_print += f'\n\n{test_case}{add_header}:\n'
             gas_bar = [int(gas) for gas in gas_used]
             gas_bar.sort()
             main_headers = [center_string('client/gas', 20)]
             for gas in gas_bar:
-                centered_string = center_string(str(gas) + 'M', 12)
+                centered_string = center_string(str(gas) + 'M', 14)
                 main_headers.append(centered_string)
             header = '|'.join(main_headers)
             results_to_print += f'{header}\n'
-            results_to_print += '-' * (30 + (12 * len(gas_bar))) + '\n'
+            results_to_print += '-' * (30 + (14 * len(gas_bar))) + '\n'
             # Create a table with the results
             # Table will have the following format:
             # | client/gas  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
@@ -118,42 +119,69 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
             # |         min | x | x | x | x | x | x | x | x | x | x  |
             # |         avg | x | x | x | x | x | x | x | x | x | x  |
             # |         std | x | x | x | x | x | x | x | x | x | x  |
+            plt.figure(figsize=(10, 5))
+
             for client in clients:
-                table = [
-                    ['' for _ in range(len(gas_bar))],
-                    ['' for _ in range(len(gas_bar))],
-                    ['' for _ in range(len(gas_bar))],
-                    ['' for _ in range(len(gas_bar))]
-                ]
+                table = [['' for _ in range(len(gas_bar))] for _ in range(7)]
                 for i in range(0, len(gas_bar)):
                     gas = str(gas_bar[i])
                     if True in failed_tests[client][test_case][gas][method]:
-                        na = center_string('N/A', 12)
-                        table[0][i] = na
-                        table[1][i] = na
-                        table[2][i] = na
-                        table[3][i] = na
-                    max_val = f'{max(client_results[client][test_case][gas][method]):.2f}'
-                    min_val = f'{min(client_results[client][test_case][gas][method]):.2f}'
-                    avg_val = f'{sum(client_results[client][test_case][gas][method]) / len(client_results[client][test_case][gas][method]):.2f}'
+                        na = center_string('N/A', 14)
+                        for ti in range(len(table)):
+                            table[ti][i] = na
+                    max_val = max(client_results[client][test_case][gas][method])
+                    min_val = f'{min(client_results[client][test_case][gas][method]):.2f} ms'
+                    avg_val = f'{sum(client_results[client][test_case][gas][method]) / len(client_results[client][test_case][gas][method]):.2f} ms'
                     std_val = f'{standard_deviation(client_results[client][test_case][gas][method]):.2f}'
-                    table[0][i] = f'{center_string(max_val, 12)}'
-                    table[1][i] = f'{center_string(min_val, 12)}'
-                    table[2][i] = f'{center_string(avg_val, 12)}'
-                    table[3][i] = f'{center_string(std_val, 12)}'
+                    p50_val = f'{np.percentile(client_results[client][test_case][gas][method], 50):.2f}'
+                    p95_val = f'{np.percentile(client_results[client][test_case][gas][method], 95):.2f}'
+                    p99_val = f'{np.percentile(client_results[client][test_case][gas][method], 99):.2f}'
+                    table[0][i] = max_val
+                    table[1][i] = f'{center_string(min_val, 14)}'
+                    table[2][i] = f'{center_string(avg_val, 14)}'
+                    table[3][i] = f'{center_string(std_val, 14)}'
+                    table[4][i] = f'{center_string(p50_val, 14)}'
+                    table[5][i] = f'{center_string(p95_val, 14)}'
+                    table[6][i] = f'{center_string(p99_val, 14)}'
 
-                max_row = center_string(f'{client} max', 20)
-                results_to_print += f'{max_row}|{"|".join(table[0])}\n'
-                min_row = center_string('min', 20)
-                results_to_print += f'{min_row}|{"|".join(table[1])}\n'
-                avg_row = center_string('avg', 20)
-                results_to_print += f'{avg_row}|{"|".join(table[2])}\n'
-                std_row = center_string('std', 20)
-                results_to_print += f'{std_row}|{"|".join(table[3])}\n'
-                results_to_print += '-' * (30 + (12 * len(gas_bar))) + '\n'
+                if percentiles:
+                    p50_row = center_string(f'{client} p50', 20)
+                    results_to_print += f'{p50_row}|{"|".join(table[4])}\n'
+                    p90_row = center_string('p90', 20)
+                    results_to_print += f'{p90_row}|{"|".join(table[5])}\n'
+                    p99_row = center_string('p99', 20)
+                    results_to_print += f'{p99_row}|{"|".join(table[6])}\n'
+                    results_to_print += '-' * (30 + (14 * len(gas_bar))) + '\n'
+                else:
+                    max_row = center_string(f'{client} max', 20)
+                    row = []
+                    for item in table[0]:
+                        str_item = f'{item:.2f} ms'
+                        row.append(f'{center_string(str_item, 14)}')
+                    results_to_print += f'{max_row}|{"|".join(row)}\n'
+
+                    min_row = center_string('min', 20)
+                    results_to_print += f'{min_row}|{"|".join(table[1])}\n'
+                    avg_row = center_string('avg', 20)
+                    results_to_print += f'{avg_row}|{"|".join(table[2])}\n'
+                    std_row = center_string('std', 20)
+                    results_to_print += f'{std_row}|{"|".join(table[3])}\n'
+                # x = range(1, len(gas_bar) + 1)
+                plt.plot(gas_bar, [float(x) for x in table[0]], label=client)
+                # plt.xticks(lis)
+
+            plt.legend()
+            plt.title(f'Max results')
+            if not os.path.exists(f'{results_paths}/charts'):
+                os.makedirs(f'{results_paths}/charts')
+            plt.savefig(f'{results_paths}/charts/{test_case}_{method}_results.png')
+            plt.close()
+
             results_to_print += '\n\n'
 
     print(results_to_print)
+    with open(f'{results_paths}/tables.txt', 'w') as file:
+        file.write(results_to_print)
 
 
 def standard_deviation(numbers):
@@ -191,11 +219,11 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
-    parser.add_argument('--testsPath', type=str, help='resultsPath', default='tests/txdatazero')
+    parser.add_argument('--testsPath', type=str, help='resultsPath', default='tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
-                                                    'split them by comma, ex: nethermind,geth',
+                                                    'split them by comma, ex: nethermind,geth,erigon,reth',
                         default='nethermind,geth,reth,erigon')
-    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='5')
+    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='10')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -236,7 +264,7 @@ def main():
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
 
-    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, fields)
+    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
 
     print('Done!')
 
