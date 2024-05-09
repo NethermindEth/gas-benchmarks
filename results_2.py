@@ -193,7 +193,7 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
 # Print graphs and tables with the results
 def get_gas_table(client_results, client, test_cases, gas, method):
     gas_table = {}
-    for test_case, gas_used in test_cases.items():
+    for test_case, _ in test_cases.items():
         results = client_results[client][test_case][gas][method]
         gas_table[test_case] = ['' for _ in range(11)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
@@ -217,16 +217,6 @@ def process_results_2(client_results, clients, results_paths, test_cases, failed
     results_to_print = ''
     for client in clients:
         gas_table = get_gas_table(client_results, client, test_cases, 30, methods[0])
-        for test_case, gas_used in test_cases.items():
-            for method in methods:
-                # Create a table with the results
-                # Table will have the following format:
-                # Client Performance for gas {gas_used}M:
-                # | Test Case | Description   | N | MGgas/s | Mean |  Max |  Min |  Std |  P50 |  P95 | P99
-                # | test 1    | description 1 | x |   x ms  | x ms | x ms | x ms | x ms | x ms | x ms | x ms
-                # | test 2    | description 2 | x |   x ms  | x ms | x ms | x ms | x ms | x ms | x ms | x ms
-
-                pass
 
     print(results_to_print)
     with open(f'{results_paths}/tables.txt', 'w') as file:
@@ -313,7 +303,7 @@ def main():
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
 
-    process_results_2(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
+    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
 
     print('Done!')
 
