@@ -80,14 +80,19 @@ def main():
 
     # if test case path is a folder, run all the test cases in the folder
     if os.path.isdir(tests_paths):
-        for test_case in os.listdir(tests_paths):
-            test_case_path = os.path.join(tests_paths, test_case)
-            name = test_case.split('.')[0]
+        tests_cases = []
+        for root, _, files in os.walk(tests_paths):
+            if len(files) == 0:
+                continue
+            for file in files:
+                tests_cases.append(os.path.join(root, file))
+        for test_case_path in tests_cases:
+            name = test_case_path.split('/')[-1].split('.')[0]
             response_file = os.path.join(output_folder, f'{client}_response_{run}_{name}.txt')
-            print(f"Running {client} for the {run} time with test case {test_case}")
+            print(f"Running {client} for the {run} time with test case {test_case_path}")
             response = run_command(test_case_path, jwt_path, response_file, execution_url, kute_arguments)
-            test_case_without_extension = os.path.splitext(test_case)[0]
-            save_to(output_folder, f'{client}_results_{run}_{test_case_without_extension}.txt',
+            # test_case_without_extension = os.path.splitext(test_case)[0]
+            save_to(output_folder, f'{client}_results_{run}_{name}.txt',
                     response)
         return
     else:

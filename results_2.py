@@ -14,9 +14,15 @@ def get_test_cases(tests_path):
         # 'test_case_name': ['gas_used']
     }
 
-    for test_case in os.listdir(tests_path):
+    tests_cases_list = []
+    for root, _, files in os.walk(tests_path):
+        if len(files) == 0:
+            continue
+        for file in files:
+            tests_cases_list.append(os.path.join(root, file))
+    for test_case in tests_cases_list:
         if test_case.endswith('.txt'):
-            test_case_parsed = test_case.split('_')
+            test_case_parsed = test_case.split('/')[-1].split('_')
             test_case_name = test_case_parsed[0]
             test_case_gas = test_case_parsed[1].split('M')[0]
             if test_case_name not in test_cases:
@@ -184,6 +190,49 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
         file.write(results_to_print)
 
 
+# Print graphs and tables with the results
+def get_gas_table(client_results, client, test_cases, gas, method):
+    gas_table = {}
+    for test_case, gas_used in test_cases.items():
+        results = client_results[client][test_case][gas][method]
+        gas_table[test_case] = ['' for _ in range(11)]
+        # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
+        max_val = max(results)
+        gas_table[test_case][0] = test_case
+        gas_table[test_case][1] = 'Description, for now empty'
+        gas_table[test_case][2] = len(results)
+        gas_table[test_case][3] = gas / max_val
+        gas_table[test_case][4] = sum(results) / len(results)
+        gas_table[test_case][5] = max_val
+        gas_table[test_case][6] = min(results)
+        gas_table[test_case][7] = standard_deviation(results)
+        gas_table[test_case][8] = f'{np.percentile(results, 50):.2f}'
+        gas_table[test_case][9] = f'{np.percentile(results, 95):.2f}'
+        gas_table[test_case][10] = f'{np.percentile(results, 99):.2f}'
+
+    return gas_table
+
+
+def process_results_2(client_results, clients, results_paths, test_cases, failed_tests, methods, percentiles=False):
+    results_to_print = ''
+    for client in clients:
+        gas_table = get_gas_table(client_results, client, test_cases, 30, methods[0])
+        for test_case, gas_used in test_cases.items():
+            for method in methods:
+                # Create a table with the results
+                # Table will have the following format:
+                # Client Performance for gas {gas_used}M:
+                # | Test Case | Description   | N | MGgas/s | Mean |  Max |  Min |  Std |  P50 |  P95 | P99
+                # | test 1    | description 1 | x |   x ms  | x ms | x ms | x ms | x ms | x ms | x ms | x ms
+                # | test 2    | description 2 | x |   x ms  | x ms | x ms | x ms | x ms | x ms | x ms | x ms
+
+                pass
+
+    print(results_to_print)
+    with open(f'{results_paths}/tables.txt', 'w') as file:
+        file.write(results_to_print)
+
+
 def standard_deviation(numbers):
     if len(numbers) < 2:
         return None
@@ -221,8 +270,8 @@ def main():
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
     parser.add_argument('--testsPath', type=str, help='resultsPath', default='tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
-                                                    'split them by comma, ex: nethermind,geth,erigon,reth',
-                        default='nethermind,geth,reth,erigon')
+                                                    'split them by comma, ex: nethermind,geth,reth',
+                        default='nethermind,geth,reth')
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='10')
 
     # Parse command-line arguments
@@ -264,7 +313,7 @@ def main():
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
 
-    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
+    process_results_2(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
 
     print('Done!')
 
