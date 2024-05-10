@@ -186,7 +186,8 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
             results_to_print += '\n\n'
 
     print(results_to_print)
-    with open(f'{results_paths}/tables.txt', 'w') as file:
+    percentiles_file_name = '_percentiles' if percentiles else ''
+    with open(f'{results_paths}/tables{percentiles_file_name}.txt', 'w') as file:
         file.write(results_to_print)
 
 
@@ -213,10 +214,30 @@ def get_gas_table(client_results, client, test_cases, gas, method):
     return gas_table
 
 
-def process_results_2(client_results, clients, results_paths, test_cases, failed_tests, methods, percentiles=False):
+def process_results_2(client_results, clients, results_paths, test_cases, failed_tests, methods, gas_set,
+                      percentiles=False):
     results_to_print = ''
-    for client in clients:
-        gas_table = get_gas_table(client_results, client, test_cases, 30, methods[0])
+
+    for gas in gas_set:
+
+        for client in clients:
+            results_to_print += center_string(f'{client} Performance Report with {gas}M gas', 60) + '\n'
+            results_to_print += ('Test Case Name        |      Description      |  N  |   MGgas/s  |   mean  |  max  | '
+                                 '  min  |  std  |   p50  |  p95  |  p99\n')
+            gas_table = get_gas_table(client_results, client, test_cases, gas, methods[0])
+            for test_case, data in gas_table.items():
+                results_to_print += (f'{center_string(test_case, 20)}|'
+                                     f'{center_string(data[1], 30)}|'
+                                     f'{center_string(data[2], 10)}|'
+                                     f'{center_string(data[3], 10)}|'
+                                     f'{center_string(data[4], 10)}|'
+                                     f'{center_string(data[5], 10)}|'
+                                     f'{center_string(data[6], 10)}|'
+                                     f'{center_string(data[7], 10)}|'
+                                     f'{center_string(data[8], 10)}|'
+                                     f'{center_string(data[9], 10)}|'
+                                     f'{center_string(data[10], 10)}\n')
+            results_to_print += '\n\n'
 
     print(results_to_print)
     with open(f'{results_paths}/tables.txt', 'w') as file:
@@ -302,8 +323,19 @@ def main():
                                                                          run, method, fields)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
+    #
+    # gas_set = set()
+    # for test_case_name, test_case_gas in test_cases.items():
+    #     for gas in test_case_gas:
+    #         if gas not in gas_set:
+    #             gas_set.add(gas)
+    #
+    # process_results_2(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
 
+    # Print results without percentiles
     process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
+    # Print results with percentiles
+    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, True)
 
     print('Done!')
 
