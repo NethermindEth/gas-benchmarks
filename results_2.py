@@ -117,7 +117,7 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
                 main_headers.append(centered_string)
             header = '|'.join(main_headers)
             results_to_print += f'{header}\n'
-            results_to_print += '-' * (30 + (14 * len(gas_bar))) + '\n'
+            results_to_print += '-' * (40 + (14 * len(gas_bar))) + '\n'
             # Create a table with the results
             # Table will have the following format:
             # | client/gas  | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
@@ -157,7 +157,7 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
                     results_to_print += f'{p90_row}|{"|".join(table[5])}\n'
                     p99_row = center_string('p99', 20)
                     results_to_print += f'{p99_row}|{"|".join(table[6])}\n'
-                    results_to_print += '-' * (30 + (14 * len(gas_bar))) + '\n'
+                    results_to_print += '-' * (40 + (14 * len(gas_bar))) + '\n'
                 else:
                     max_row = center_string(f'{client} max', 20)
                     row = []
@@ -172,6 +172,7 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
                     results_to_print += f'{avg_row}|{"|".join(table[2])}\n'
                     std_row = center_string('std', 20)
                     results_to_print += f'{std_row}|{"|".join(table[3])}\n'
+                    results_to_print += '-' * (40 + (14 * len(gas_bar))) + '\n'
                 # x = range(1, len(gas_bar) + 1)
                 plt.plot(gas_bar, [float(x) for x in table[0]], label=client)
                 # plt.xticks(lis)
@@ -187,7 +188,7 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
 
     print(results_to_print)
     percentiles_file_name = '_percentiles' if percentiles else ''
-    with open(f'{results_paths}/tables{percentiles_file_name}.txt', 'w') as file:
+    with open(f'{results_paths}/reports/tables{percentiles_file_name}.txt', 'w') as file:
         file.write(results_to_print)
 
 
@@ -195,23 +196,80 @@ def process_results(client_results, clients, results_paths, test_cases, failed_t
 def get_gas_table(client_results, client, test_cases, gas, method):
     gas_table = {}
     for test_case, _ in test_cases.items():
+        if gas not in client_results[client][test_case]:
+            continue
         results = client_results[client][test_case][gas][method]
         gas_table[test_case] = ['' for _ in range(11)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
         max_val = max(results)
         gas_table[test_case][0] = test_case
         gas_table[test_case][1] = 'Description, for now empty'
-        gas_table[test_case][2] = len(results)
-        gas_table[test_case][3] = gas / max_val
-        gas_table[test_case][4] = sum(results) / len(results)
-        gas_table[test_case][5] = max_val
-        gas_table[test_case][6] = min(results)
-        gas_table[test_case][7] = standard_deviation(results)
+        gas_table[test_case][2] = f'{len(results)}'
+        gas_table[test_case][3] = f'{int(gas) / max_val:.2f} g/s'
+        gas_table[test_case][4] = f'{sum(results) / len(results):.2f} ms'
+        gas_table[test_case][5] = f'{max_val:.2f} ms'
+        gas_table[test_case][6] = f'{min(results):.2f} ms'
+        gas_table[test_case][7] = f'{standard_deviation(results):.2f}'
         gas_table[test_case][8] = f'{np.percentile(results, 50):.2f}'
         gas_table[test_case][9] = f'{np.percentile(results, 95):.2f}'
         gas_table[test_case][10] = f'{np.percentile(results, 99):.2f}'
 
     return gas_table
+
+
+def get_gas_table_2(client_results, client, test_cases, gas_set, method):
+    gas_table_norm = {}
+    results_per_test_case = {}
+    for test_case, _ in test_cases.items():
+        for gas in gas_set:
+            if gas not in client_results[client][test_case]:
+                continue
+            if test_case not in results_per_test_case:
+                results_per_test_case[test_case] = []
+            results = client_results[client][test_case][gas][method]
+            for x in results:
+                results_per_test_case[test_case].append(int(gas) / x)
+
+    for test_case, _ in test_cases.items():
+        results_norm = results_per_test_case[test_case]
+        gas_table_norm[test_case] = ['' for _ in range(8)]
+        # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
+        # (norm) title, description, N , max, min, p50, p95, p99
+        gas_table_norm[test_case][0] = test_case
+        gas_table_norm[test_case][1] = 'Description, for now empty'
+        gas_table_norm[test_case][2] = f'{len(results_norm)}'
+        gas_table_norm[test_case][3] = f'{max(results_norm):.2f} mg/s'
+        gas_table_norm[test_case][4] = f'{min(results_norm):.2f} mg/s'
+        gas_table_norm[test_case][5] = f'{np.percentile(results_norm, 50):.2f}'
+        gas_table_norm[test_case][6] = f'{np.percentile(results_norm, 95):.2f}'
+        gas_table_norm[test_case][7] = f'{np.percentile(results_norm, 99):.2f}'
+
+    return gas_table_norm
+
+
+def get_gas_resume(client_results, client, test_cases, gas_set, method):
+    gas_table_norm = {}
+    result_table = {}
+    for gas in gas_set:
+        gas_table_norm[gas] = {}
+        result_table[gas] = {}
+    for test_case, _ in test_cases.items():
+        for gas in gas_set:
+            if gas not in client_results[client][test_case]:
+                continue
+            results = [int(gas) / x for x in client_results[client][test_case][gas][method]]
+            gas_table_norm[gas][test_case] = max(results)
+
+    for gas in gas_set:
+        test_case_max_title = ''
+        test_case_max_val = 0.0
+        for test_case, val in gas_table_norm[gas].items():
+            if val > test_case_max_val:
+                test_case_max_title = test_case
+                test_case_max_val = val
+        result_table[gas] = [test_case_max_title, test_case_max_val]
+
+    return result_table
 
 
 def process_results_2(client_results, clients, results_paths, test_cases, failed_tests, methods, gas_set,
@@ -221,18 +279,24 @@ def process_results_2(client_results, clients, results_paths, test_cases, failed
     for gas in gas_set:
 
         for client in clients:
-            results_to_print += center_string(f'{client} Performance Report with {gas}M gas', 60) + '\n'
-            results_to_print += ('Test Case Name        |      Description      |  N  |   MGgas/s  |   mean  |  max  | '
-                                 '  min  |  std  |   p50  |  p95  |  p99\n')
+            results_to_print += f'{client.capitalize()} Performance Report with {gas}M gas' + '\n'
+            results_to_print += (center_string('Title', 45) + '|' + center_string('Description', 30) + '|  N   |   '
+                                                                                                       'MGgas/s  |    '
+                                                                                                       'mean    |     '
+                                                                                                       'max    |     '
+                                                                                                       'min    |    std '
+                                                                                                       '  |    p50   |  '
+                                                                                                       '  p95   |    '
+                                                                                                       'p99\n')
             gas_table = get_gas_table(client_results, client, test_cases, gas, methods[0])
             for test_case, data in gas_table.items():
-                results_to_print += (f'{center_string(test_case, 20)}|'
+                results_to_print += (f'{align_left_string(test_case, 45)}|'
                                      f'{center_string(data[1], 30)}|'
-                                     f'{center_string(data[2], 10)}|'
-                                     f'{center_string(data[3], 10)}|'
-                                     f'{center_string(data[4], 10)}|'
-                                     f'{center_string(data[5], 10)}|'
-                                     f'{center_string(data[6], 10)}|'
+                                     f'{center_string(data[2], 6)}|'
+                                     f'{center_string(data[3], 12)}|'
+                                     f'{center_string(data[4], 12)}|'
+                                     f'{center_string(data[5], 12)}|'
+                                     f'{center_string(data[6], 12)}|'
                                      f'{center_string(data[7], 10)}|'
                                      f'{center_string(data[8], 10)}|'
                                      f'{center_string(data[9], 10)}|'
@@ -240,7 +304,40 @@ def process_results_2(client_results, clients, results_paths, test_cases, failed
             results_to_print += '\n\n'
 
     print(results_to_print)
-    with open(f'{results_paths}/tables.txt', 'w') as file:
+    with open(f'{results_paths}/reports/tables_report.txt', 'w') as file:
+        file.write(results_to_print)
+
+
+def process_results_3(client_results, clients, results_paths, test_cases, methods, gas_set):
+    results_to_print = ''
+
+    for client in clients:
+        results_to_print += f'{client.capitalize()} Performance Report' + '\n'
+        results_to_print += (center_string('Title', 45) + '|' + center_string('Description',
+                                                                              30) + '|  N   | Max (MGas/s) | Min (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s)\n')
+        gas_table_norm = get_gas_table_2(client_results, client, test_cases, gas_set, methods[0])
+        for test_case, data in gas_table_norm.items():
+            results_to_print += (f'{align_left_string(test_case, 45)}|'
+                                 f'{center_string(data[1], 30)}|'
+                                 f'{center_string(data[2], 6)}|'
+                                 f'{center_string(data[3], 14)}|'
+                                 f'{center_string(data[4], 14)}|'
+                                 f'{center_string(data[5], 14)}|'
+                                 f'{center_string(data[6], 14)}|'
+                                 f'{center_string(data[7], 14)}\n')
+        results_to_print += '\n'
+
+        resume = get_gas_resume(client_results, client, test_cases, gas_set, methods[0])
+        results_to_print += 'Worst Test Cases\n'
+
+        gas_to_int = [int(x) for x in gas_set]
+        for gas in sorted(gas_to_int):
+            gas_name = f'{gas}M'
+            results_to_print += f'{center_string(gas_name, 6)}: {center_string(resume[str(gas)][0], 45)}, {resume[str(gas)][1]:.2f} MGas/s\n'
+        results_to_print += '\n\n'
+
+    print(results_to_print)
+    with open(f'{results_paths}/reports/tables_norm.txt', 'w') as file:
         file.write(results_to_print)
 
 
@@ -255,6 +352,12 @@ def center_string(string, size):
     padding_left = padding_length // 2
     padding_right = padding_length - padding_left
     centered_string = " " * padding_left + string + " " * padding_right
+    return centered_string
+
+
+def align_left_string(string, size):
+    padding_right = max(0, size - len(string))
+    centered_string = string + " " * padding_right
     return centered_string
 
 
@@ -279,11 +382,11 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
-    parser.add_argument('--testsPath', type=str, help='resultsPath', default='tests/')
+    parser.add_argument('--testsPath', type=str, help='resultsPath', default='tests/SStore')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth,reth',
                         default='nethermind,geth,reth')
-    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='10')
+    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='6')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -324,13 +427,17 @@ def main():
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
     #
-    # gas_set = set()
-    # for test_case_name, test_case_gas in test_cases.items():
-    #     for gas in test_case_gas:
-    #         if gas not in gas_set:
-    #             gas_set.add(gas)
-    #
-    # process_results_2(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
+    gas_set = set()
+    for test_case_name, test_case_gas in test_cases.items():
+        for gas in test_case_gas:
+            if gas not in gas_set:
+                gas_set.add(gas)
+
+    if not os.path.exists(f'{results_paths}/reports'):
+        os.makedirs(f'{results_paths}/reports')
+
+    process_results_2(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, gas_set)
+    process_results_3(client_results, clients.split(','), results_paths, test_cases, methods, gas_set)
 
     # Print results without percentiles
     process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, False)
