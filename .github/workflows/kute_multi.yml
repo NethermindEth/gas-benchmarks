@@ -5,10 +5,10 @@ on:
     inputs:
       test:
         description: 'Path to test file'
-        default: 'small_tests/1B.txt'
+        default: 'tests/'
       warmup:
         description: 'Name of the warm up file'
-        default: ''
+        default: 'warmup/warmup-1000bl-16wi-24tx.txt'
         type: choice
         options:
           - ''
@@ -17,19 +17,19 @@ on:
           - warmup/warmup-1000bl-16wi-1000tx.txt
       client:
         description: 'Comma-separated list of client names (e.g., nethermind,reth,geth,erigon)'
-        default: 'nethermind'
+        default: 'nethermind,geth,reth'
         required: true
       runs:
         description: 'Number of runs for the application'
         required: false
-        default: 1
+        default: 8
       images:
         description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
         default: 'default'
 
 jobs:
   build:
-    runs-on: [self-hosted, linux, ARM64]
+    runs-on: [self-hosted, gas]
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
     steps:
