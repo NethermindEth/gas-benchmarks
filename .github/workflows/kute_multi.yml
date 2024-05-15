@@ -29,7 +29,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ARM64]
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
     steps:
