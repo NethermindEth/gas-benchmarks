@@ -29,11 +29,11 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, gas]
+    runs-on: ubuntu-latest
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
