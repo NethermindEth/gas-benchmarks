@@ -77,7 +77,7 @@ jobs:
                 python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $r
               fi
               cd "scripts/$client"
-              docker-compose down
+              docker compose down
               sudo rm -rf execution-data
               cd ../..
             done
