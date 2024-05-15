@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import statistics
 
@@ -103,7 +104,8 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
 
 
 # Print graphs and tables with the results
-def process_results(client_results, clients, results_paths, test_cases, failed_tests, methods, metadata, percentiles=False):
+def process_results(client_results, clients, results_paths, test_cases, failed_tests, methods, metadata,
+                    percentiles=False):
     results_to_print = ''
     for test_case, gas_used in test_cases.items():
         for method in methods:
@@ -226,6 +228,39 @@ def get_gas_table(client_results, client, test_cases, gas, method, metadata):
     return gas_table
 
 
+def calculate_percentiles(values, percentiles):
+    """
+    Calculate the specified percentiles for a list of values where smaller values are better.
+
+    Args:
+        values (list): A list of numeric values.
+        percentiles (list): A list of percentiles to calculate (e.g., [50, 95, 99]).
+
+    Returns:
+        dict: A dictionary containing the calculated percentiles.
+    """
+    sorted_values = sorted(values)
+    n = len(sorted_values)
+
+    result = {}
+    for p in percentiles:
+        index = (p / 100) * (n + 1) - 1
+
+        if index.is_integer():
+            result[p] = sorted_values[int(index)]
+        else:
+            lower_index = math.floor(index)
+            upper_index = math.ceil(index)
+
+            lower_value = sorted_values[int(lower_index)]
+            upper_value = sorted_values[int(upper_index)]
+
+            fraction = index - lower_index
+            result[p] = lower_value + fraction * (upper_value - lower_value)
+
+    return result
+
+
 def get_gas_table_2(client_results, client, test_cases, gas_set, method, metadata):
     gas_table_norm = {}
     results_per_test_case = {}
@@ -250,11 +285,12 @@ def get_gas_table_2(client_results, client, test_cases, gas_set, method, metadat
         else:
             gas_table_norm[test_case][0] = test_case
             gas_table_norm[test_case][7] = 'Description not found on metadata file'
-        gas_table_norm[test_case][1] = f'{max(results_norm):.2f}'
-        gas_table_norm[test_case][2] = f'{min(results_norm):.2f}'
-        gas_table_norm[test_case][3] = f'{np.percentile(results_norm, 50):.2f}'
-        gas_table_norm[test_case][4] = f'{np.percentile(results_norm, 95):.2f}'
-        gas_table_norm[test_case][5] = f'{np.percentile(results_norm, 99):.2f}'
+        gas_table_norm[test_case][1] = f'{min(results_norm):.2f}'
+        gas_table_norm[test_case][2] = f'{max(results_norm):.2f}'
+        percentiles = calculate_percentiles(results_norm, [50, 95, 99])
+        gas_table_norm[test_case][3] = f'{np.percentile(percentiles[50], 50):.2f}'
+        gas_table_norm[test_case][4] = f'{np.percentile(percentiles[95], 95):.2f}'
+        gas_table_norm[test_case][5] = f'{np.percentile(percentiles[99], 99):.2f}'
         gas_table_norm[test_case][6] = f'{len(results_norm)}'
 
     return gas_table_norm
@@ -274,17 +310,16 @@ def get_gas_resume(client_results, client, test_cases, gas_set, method, metadata
             gas_table_norm[gas][test_case] = max(results)
 
     for gas in gas_set:
-        test_case_max_title = ''
-        test_case_max_val = 0.0
+        test_case_min_title = ''
+        test_case_min_val = 1000000000000000000
         for test_case, val in gas_table_norm[gas].items():
-            if val > test_case_max_val:
+            if val < test_case_min_val:
                 if test_case in metadata:
-                    test_case_max_title = metadata[test_case]['Title']
-                    test_case_max_val = val
+                    test_case_min_title = metadata[test_case]['Title']
                 else:
-                    test_case_max_title = test_case
-                    test_case_max_val = val
-        result_table[gas] = [test_case_max_title, test_case_max_val]
+                    test_case_min_title = test_case
+                test_case_min_val = val
+        result_table[gas] = [test_case_min_title, test_case_min_val]
 
     return result_table
 
@@ -305,7 +340,7 @@ def process_results_2(client_results, clients, results_paths, test_cases, failed
                                                               '  |    p50   |  '
                                                               '  p95   |    '
                                                               'p99   |  N   | ' + center_string('Description',
-                                                                                                  50) + '\n')
+                                                                                                50) + '\n')
             gas_table = get_gas_table(client_results, client, test_cases, gas, methods[0], metadata)
             for test_case, data in gas_table.items():
                 results_to_print += (f'{align_left_string(data[0], 55)}|'
