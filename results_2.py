@@ -250,7 +250,7 @@ def calculate_percentiles(values, percentiles):
             result[p] = sorted_values[int(index)]
         else:
             lower_index = math.floor(index)
-            upper_index = math.ceil(index)
+            upper_index = min(math.ceil(index), len(sorted_values) - 1)
 
             lower_value = sorted_values[int(lower_index)]
             upper_value = sorted_values[int(upper_index)]
@@ -500,9 +500,11 @@ def main():
     process_results_3(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata)
 
     # Print results without percentiles
-    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, metadata, False)
+    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, metadata,
+                    False)
     # Print results with percentiles
-    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, metadata, True)
+    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, metadata,
+                    True)
 
     print('Done!')
 
