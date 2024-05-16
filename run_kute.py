@@ -85,6 +85,8 @@ def main():
             if len(files) == 0:
                 continue
             for file in files:
+                if file.endswith('metadata.txt'):
+                    continue
                 tests_cases.append(os.path.join(root, file))
         for test_case_path in tests_cases:
             name = test_case_path.split('/')[-1].split('.')[0]
