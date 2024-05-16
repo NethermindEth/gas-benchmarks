@@ -1,0 +1,138 @@
+name: Run Benchmarks in multiple clients parallel
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Path to test file'
+        default: 'tests/'
+      warmup:
+        description: 'Name of the warm up file'
+        default: 'warmup/warmup-1000bl-16wi-24tx.txt'
+        type: choice
+        options:
+          - ''
+          - warmup/warmup-100bl-16wi-32tx.txt
+          - warmup/warmup-1000bl-16wi-24tx.txt
+          - warmup/warmup-1000bl-16wi-1000tx.txt
+      client:
+        description: 'Comma-separated list of client names (e.g., nethermind,reth,geth,erigon)'
+        default: 'nethermind,geth,reth'
+        required: true
+      runs:
+        description: 'Number of runs for the application'
+        required: false
+        default: 8
+      images:
+        description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
+        default: 'default'
+
+jobs:
+  set-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix dynamically
+        id: set-matrix
+        run: |
+          runs=${{ github.event.inputs.runs }}
+          echo "runs=$runs"
+          matrix=$(seq -s, 1 $runs)
+          echo "matrix=[${matrix}]"
+          echo "::set-output name=matrix::${matrix}"
+
+  build:
+    needs: set-matrix
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_INSTALL_DIR: "~/.dotnet"
+
+    strategy:
+      matrix:
+        run: ${{ fromJSON(needs.set-matrix.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare kute dependencies
+        run: make prepare_nethermind
+
+      - name: Create results directory
+        run: mkdir results
+
+      - name: Run Node and run benchmarks
+        run: |
+          IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
+          IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
+          run="${{ matrix.run }}"
+          for i in "${!clients[@]}"; do
+            client="${clients[$i]}"
+            image="${images[$i]}"
+            if [ -z "$image" ]; then
+              echo "Image input is empty, using default image."
+              python setup_node.py --client $client
+            else
+              echo "Using provided image: $image for $client"
+              python setup_node.py --client $client --image $image
+            fi
+            if [ -z "${{ github.event.inputs.warmup }}" ]; then
+              echo "Running script without warm up."
+              python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --client $client --run $run
+            else
+              echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
+              python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
+            fi
+            cd "scripts/$client"
+            docker-compose down
+            sudo rm -rf execution-data
+            cd ../..
+          done
+
+      - name: Zip the results folder
+        run: zip -r results-${{ matrix.run }}.zip results
+  combine-results:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Download all results
+        run: |
+          mkdir combined-results
+          for i in $(seq 1 ${{ github.event.inputs.runs }}); do
+            run=$i
+            echo "Downloading results-${run}.zip"
+            gh run download --name results-${run} --dir combined-results
+          done
+
+      - name: Extract all result files
+        run: |
+          for file in combined-results/*.zip; do
+            unzip -o "$file" -d combined-results
+          done
+      - name: Process combined results
+        run: |
+          python results_2.py --resultsPath combined-results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
+
+      - name: Upload combined results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: combined-results
+          path: combined-results
