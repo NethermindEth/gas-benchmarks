@@ -69,6 +69,20 @@ jobs:
 
       - name: Create results directory
         run: mkdir results
+      - name: List leaf directories
+        run: |
+            # Define the directory to search
+            PARENT_DIR="${{ github.event.inputs.test }}"
+            
+            # Find directories that do not contain subdirectories
+            LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
+              if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
+                echo "$dir"
+              fi
+            done)
+            
+            # Export the variable for the next steps
+            echo "LEAF_DIRS=$LEAF_DIRS" >> $GITHUB_ENV
 
       - name: Run Node and run benchmarks
         run: |
@@ -77,62 +91,28 @@ jobs:
           run="${{ matrix.run }}"
           test_path="${{ github.event.inputs.test }}"
           
-          for test_dir in "$test_path"/*/; do
-            if [ -d "$test_dir" ]; then
-              subdirs=("$test_dir"/*/)
-              if [ ${#subdirs[@]} -gt 0 ]; then
-                echo "$test_dir has subdirectories"
-                # Iterate over each subdirectory
-                for subdir in "$test_dir"/*/; do
-                  for i in "${!clients[@]}"; do
-                    client="${clients[$i]}"
-                    image="${images[$i]}"
-                    if [ -z "$image" ]; then
-                      echo "Image input is empty, using default image."
-                      python setup_node.py --client $client
-                    else
-                      echo "Using provided image: $image for $client"
-                      python setup_node.py --client $client --image $image
-                    fi
-                    if [ -z "${{ github.event.inputs.warmup }}" ]; then
-                      echo "Running script without warm up."
-                      python3 run_kute.py --output results --testsPath "$subdir" --jwtPath /tmp/jwtsecret --client $client --run $run
-                    else
-                      echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
-                      python3 run_kute.py --output results --testsPath "$subdir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
-                    fi
-                    cd "scripts/$client"
-                    docker-compose down
-                    sudo rm -rf execution-data
-                    cd ../..
-                  done
-                done
+          for test_dir in $LEAF_DIRS; do
+            for i in "${!clients[@]}"; do
+              client="${clients[$i]}"
+              image="${images[$i]}"
+              if [ -z "$image" ]; then
+                python setup_node.py --client $client
               else
-                echo "$test_dir does not have subdirectories"
-                for i in "${!clients[@]}"; do
-                  client="${clients[$i]}"
-                  image="${images[$i]}"
-                  if [ -z "$image" ]; then
-                    echo "Image input is empty, using default image."
-                    python setup_node.py --client $client
-                  else
-                    echo "Using provided image: $image for $client"
-                    python setup_node.py --client $client --image $image
-                  fi
-                  if [ -z "${{ github.event.inputs.warmup }}" ]; then
-                    echo "Running script without warm up."
-                    python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
-                  else
-                    echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
-                    python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
-                  fi
-                  cd "scripts/$client"
-                  docker-compose down
-                  sudo rm -rf execution-data
-                  cd ../..
-                done
+                echo "Using provided image: $image for $client"
+                python setup_node.py --client $client --image $image
               fi
-            fi
+              if [ -z "${{ github.event.inputs.warmup }}" ]; then
+                echo "Running script without warm up."
+                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+              else
+                echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
+                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
+              fi
+              cd "scripts/$client"
+              docker-compose down
+              sudo rm -rf execution-data
+              cd ../..
+            done
           done
 
       - name: Zip the results folder
