@@ -435,10 +435,10 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
-    parser.add_argument('--testsPath', type=str, help='resultsPath', default='tests/')
+    parser.add_argument('--testsPath', type=str, help='resultsPath', default='tests/Precompiles/Blake2/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
-                                                    'split them by comma, ex: nethermind,geth,reth',
-                        default='nethermind,geth,reth')
+                                                    'split them by comma, ex: nethermind,geth',
+                        default='nethermind,geth')
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='6')
 
     # Parse command-line arguments
