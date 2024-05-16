@@ -75,27 +75,30 @@ jobs:
           IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
           IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
           run="${{ matrix.run }}"
-          for i in "${!clients[@]}"; do
-            client="${clients[$i]}"
-            image="${images[$i]}"
-            if [ -z "$image" ]; then
-              echo "Image input is empty, using default image."
-              python setup_node.py --client $client
-            else
-              echo "Using provided image: $image for $client"
-              python setup_node.py --client $client --image $image
-            fi
-            if [ -z "${{ github.event.inputs.warmup }}" ]; then
-              echo "Running script without warm up."
-              python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --client $client --run $run
-            else
-              echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
-              python3 run_kute.py --output results --testsPath ${{ github.event.inputs.test }} --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
-            fi
-            cd "scripts/$client"
-            docker-compose down
-            sudo rm -rf execution-data
-            cd ../..
+          test_path="${{ github.event.inputs.test }}"
+          for test_dir in "$test_path"/*/; do
+            for i in "${!clients[@]}"; do
+              client="${clients[$i]}"
+              image="${images[$i]}"
+              if [ -z "$image" ]; then
+                echo "Image input is empty, using default image."
+                python setup_node.py --client $client
+              else
+                echo "Using provided image: $image for $client"
+                python setup_node.py --client $client --image $image
+              fi
+              if [ -z "${{ github.event.inputs.warmup }}" ]; then
+                echo "Running script without warm up."
+                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+              else
+                echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
+                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
+              fi
+              cd "scripts/$client"
+              docker-compose down
+              sudo rm -rf execution-data
+              cd ../..
+            done
           done
 
       - name: Zip the results folder
