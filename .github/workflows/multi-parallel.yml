@@ -69,20 +69,26 @@ jobs:
 
       - name: Create results directory
         run: mkdir results
+
       - name: List leaf directories
         run: |
-            # Define the directory to search
-            PARENT_DIR="${{ github.event.inputs.test }}"
-            
-            # Find directories that do not contain subdirectories
-            LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
-              if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
-                echo "$dir"
-              fi
-            done)
-            
-            # Export the variable for the next steps
-            echo "LEAF_DIRS=$LEAF_DIRS" >> $GITHUB_ENV
+          # Define the directory to search
+          PARENT_DIR="tests/"
+          
+          # Find directories that do not contain subdirectories
+          LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
+            if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
+              echo "$dir"
+            fi
+          done)
+          
+          # Join directories with a delimiter (newline)
+          LEAF_DIRS=$(printf "%s\n" "$LEAF_DIRS")
+          
+          # Export the variable for the next steps
+          echo "LEAF_DIRS<<EOF" >> $GITHUB_ENV
+          echo "$LEAF_DIRS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Run Node and run benchmarks
         run: |
