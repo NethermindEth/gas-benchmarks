@@ -122,7 +122,9 @@ jobs:
           done
 
       - name: Zip the results folder
-        run: zip -r results-${{ matrix.run }}.zip results
+        run: |
+          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
+          zip -r results-${CLEANED_RUN}.zip results
   combine-results:
     needs: build
     runs-on: ubuntu-latest
