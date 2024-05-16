@@ -37,10 +37,8 @@ jobs:
         id: set-matrix
         run: |
           runs=${{ github.event.inputs.runs }}
-          echo "runs=$runs"
-          matrix=$(seq -s, 1 $runs)
-          echo "matrix=[${matrix}]"
-          echo "::set-output name=matrix::${matrix}"
+          matrix=$(seq -s, 1 $runs | jq -R -s -c 'split(",") | {run: .}')
+          echo "::set-output name=matrix::$matrix"
 
   build:
     needs: set-matrix
@@ -50,7 +48,7 @@ jobs:
 
     strategy:
       matrix:
-        run: ${{ fromJSON(needs.set-matrix.outputs.matrix) }}
+        run: ${{ fromJSON(needs.set-matrix.outputs.matrix).run }}
 
     steps:
       - uses: actions/checkout@v4
