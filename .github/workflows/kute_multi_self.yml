@@ -28,6 +28,7 @@ on:
         default: 'default'
 
 jobs:
+  timeout-minutes: 3600
   build:
     runs-on: [self-hosted, gas]
     env:
@@ -83,8 +84,8 @@ jobs:
             done
           done
 
-#      - name: Get metrics from results
-#        run: python results_2.py --resultsPath results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
+      - name: Get metrics from results
+        run: python results_2.py --resultsPath results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
 
       - name: Zip the results folder
         run: zip -r results.zip results
