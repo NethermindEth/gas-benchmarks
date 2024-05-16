@@ -1,25 +1,8 @@
-REPO_URL_NETHERMIND = https://github.com/NethermindEth/Nethermind.git
-REPO_URL_GETH = https://github.com/ethereum/go-ethereum.git
-REPO_URL_RETH = https://github.com/paradigmxyz/reth.git
+.PHONY: prepare_tools clean
 
-CLONE_DIR_NETHERMIND = nethermind
-CLONE_DIR_GETH = geth
-CLONE_DIR_RETH = reth
-
-.PHONY: prepare prepare_nethermind prepare_geth prepare_reth clean
-
-prepare: prepare_nethermind prepare_geth prepare_reth
-   	@echo "Please execute next commands:"
-
-prepare_nethermind:
-	git clone $(REPO_URL_NETHERMIND) $(CLONE_DIR_NETHERMIND) --branch fix/jwt-claim-iat-type
+prepare_tools:
+	git clone https://github.com/NethermindEth/nethermind nethermind --branch fix/jwt-claim-iat-type
 	dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release --property WarningLevel=0
 
-prepare_geth:
-	git clone $(REPO_URL_GETH) $(CLONE_DIR_GETH)
-
-prepare_reth:
-	git clone $(REPO_URL_RETH) $(CLONE_DIR_RETH)
-
 clean:
-	rm -rf $(CLONE_DIR_NETHERMIND) $(CLONE_DIR_GETH) $(CLONE_DIR_RETH)
+	rm -rf nethermind
