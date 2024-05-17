@@ -131,11 +131,11 @@ jobs:
           echo "$CLEANED_RUN" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
           zip -r results-${CLEANED_RUN}.zip results
-      - name: Upload results as artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: results
-          path: results-${CLEANED_RUN}.zip
+          name: results-${{ env.CLEANED_RUN }}
+          path: results-${{ env.CLEANED_RUN }}.zip
   combine-results:
     needs: build
     runs-on: ubuntu-latest
