@@ -166,8 +166,9 @@ jobs:
           mkdir -p extracted-results
           find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
 
-##      - name: Process combined results
-##        run: |
+      - name: Process combined results
+        run: |
+          ls -la extracted-results
 ##          python results_2.py --resultsPath combined-results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
 #
       - name: Zip the results folder
