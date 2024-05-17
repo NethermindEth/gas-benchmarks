@@ -70,7 +70,7 @@ jobs:
       - name: Create results directory
         run: |
           mkdir results
-          touch results/test.txt
+          touch results/test-${{ matrix.run }}.txt
       
 
       #      - name: List leaf directories
@@ -165,15 +165,10 @@ jobs:
           mkdir -p extracted-results
           find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
 
-      - name: List all extracted files
-        run: ls -R extracted-results
-
-      - name: Upload combined results as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: extracted-results
-          path: extracted-results
-
+##      - name: Process combined results
+##        run: |
+##          python results_2.py --resultsPath combined-results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
+#
       - name: Zip the results folder
         run: |
           zip -r reports.zip extracted-results 
@@ -183,39 +178,3 @@ jobs:
         with:
           name: reports
           path: reports.zip
-#  combine-results:
-#    needs: build
-#    runs-on: ubuntu-latest
-#    env:
-#      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#
-#    steps:
-#      - uses: actions/checkout@v4
-#
-#      - uses: actions/setup-python@v5
-#        with:
-#          python-version: '3.10'
-#      - uses: actions/download-artifact@v3
-#        with:
-#          name: results-*
-#          path: combined-results
-#
-#      - name: Display structure of downloaded files
-#        run: ls -R combined-results
-#
-#      - name: Extract all result files
-#        run: |
-#          for file in combined-results/*.zip; do
-#            unzip -o "$file" -d combined-results
-#          done
-#      - name: List all extracted files
-#        run: ls -R combined-results
-##      - name: Process combined results
-##        run: |
-##          python results_2.py --resultsPath combined-results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
-#
-#      - name: Upload combined results as artifact
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: combined-results
-#          path: combined-results
