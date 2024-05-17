@@ -162,13 +162,11 @@ jobs:
 
       - name: Extract all result files
         run: |
-          mkdir -p combined-results
-          for file in combined-results/*.zip; do
-            unzip -o "$file" -d combined-results
-          done
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
 
       - name: List all extracted files
-        run: ls -R combined-results
+        run: ls -R extracted-results
 
       - name: Upload combined results as artifact
         uses: actions/upload-artifact@v3
