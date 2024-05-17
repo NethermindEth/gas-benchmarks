@@ -171,8 +171,18 @@ jobs:
       - name: Upload combined results as artifact
         uses: actions/upload-artifact@v3
         with:
-          name: combined-results
-          path: combined-results
+          name: extracted-results
+          path: extracted-results
+
+      - name: Zip the results folder
+        run: |
+          zip -r reports.zip extracted-results 
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: reports
+          path: reports.zip
 #  combine-results:
 #    needs: build
 #    runs-on: ubuntu-latest
