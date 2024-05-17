@@ -154,7 +154,6 @@ jobs:
 
       - uses: actions/download-artifact@v3
         with:
-          name: results-*.zip
           path: combined-results
 
       - name: Display structure of downloaded files
