@@ -137,7 +137,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: results-${{ env.CLEANED_RUN }}
+          name: results-${{ env.CLEANED_RUN }}.zip
           path: results-${{ env.CLEANED_RUN }}.zip
   combine-results:
     needs: build
@@ -154,7 +154,7 @@ jobs:
 
       - uses: actions/download-artifact@v3
         with:
-          name: results-*
+          name: results-*.zip
           path: combined-results
 
       - name: Display structure of downloaded files
