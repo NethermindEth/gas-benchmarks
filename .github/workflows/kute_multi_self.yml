@@ -28,7 +28,6 @@ on:
         default: 'default'
 
 jobs:
-  timeout-minutes: 3600
   build:
     runs-on: [self-hosted, gas]
     env:
