@@ -83,7 +83,9 @@ jobs:
           done
 
       - name: Get metrics from results
-        run: python results_2.py --resultsPath results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
+        run: |
+          runs=${{ github.event.inputs.runs }}
+          python results_2.py --resultsPath results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs
 
       - name: Zip the results folder
         run: zip -r results.zip results

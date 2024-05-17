@@ -167,7 +167,8 @@ jobs:
 
       - name: Process combined results
         run: |
-          python results_2.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
+          runs=${{ github.event.inputs.runs }}
+          python results_2.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs
 
       - name: Zip the results folder
         run: |
