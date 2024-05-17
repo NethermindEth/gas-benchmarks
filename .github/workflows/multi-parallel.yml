@@ -144,7 +144,7 @@ jobs:
           for i in $(seq 1 ${{ github.event.inputs.runs }}); do
             run=$i
             echo "Downloading results-${run}.zip"
-            gh run download --name results-${run} --dir combined-results
+            gh run download --name results-${run}.zip --dir combined-results
           done
 
       - name: Extract all result files
