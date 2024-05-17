@@ -123,6 +123,21 @@ Flags:
 - `--runs` it's used to define the number of runs that you want to generate the report. It's linked to how many times
   you run the benchmarks.
 
+### Script: Run all
+
+If you want to do all the above without step by step, you can use the `run.sh` script.
+
+```sh
+bash run.sh -t "$testPath" -w "$warmupFilePath" -c "$clients" -r $run -i "$images"
+```
+
+Flags:
+- `--t` it's used to define the path where the tests are located.
+- `--w` it's used to define the path where the warmup file is located.
+- `--c` it's used to define the clients that you want to run the benchmarks. Separate the clients with a comma.
+- `--r` it's used to define the number of iterations that you want to run the benchmarks.
+- `--i` it's used to define the images that you want to use to run the benchmarks. Separate the images with a comma.
+
 ## Notes
 
 - The `setup_node.py` script is used to set up the client nodes.
