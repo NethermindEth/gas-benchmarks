@@ -70,7 +70,8 @@ jobs:
       - name: Create results directory
         run: |
           mkdir results
-          touch results/test-${{ matrix.run }}.txt
+          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
+          touch results/test-${CLEANED_RUN}.txt
       
 
       #      - name: List leaf directories
