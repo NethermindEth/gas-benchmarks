@@ -61,79 +61,73 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      #      - name: Install python dependencies
-      #        run: pip install -r requirements.txt
-      #
-      #      - name: Prepare kute dependencies
-      #        run: make prepare_tools
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare kute dependencies
+        run: make prepare_tools
 
       - name: Create results directory
         run: |
           mkdir results
-          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
-          touch results/test-${CLEANED_RUN}.txt
       
 
-      #      - name: List leaf directories
-      #        run: |
-      #          # Define the directory to search
-      #          PARENT_DIR="tests/"
-      #
-      #          # Find directories that do not contain subdirectories
-      #          LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
-      #            if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
-      #              echo "$dir"
-      #            fi
-      #          done)
-      #
-      #          # Join directories with a delimiter (newline)
-      #          LEAF_DIRS=$(printf "%s\n" "$LEAF_DIRS")
-      #
-      #          # Export the variable for the next steps
-      #          echo "LEAF_DIRS<<EOF" >> $GITHUB_ENV
-      #          echo "$LEAF_DIRS" >> $GITHUB_ENV
-      #          echo "EOF" >> $GITHUB_ENV
+      - name: List leaf directories
+        run: |
+          # Define the directory to search
+          PARENT_DIR="tests/"
+      
+          # Find directories that do not contain subdirectories
+          LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
+            if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
+              echo "$dir"
+            fi
+          done)
+      
+          # Join directories with a delimiter (newline)
+          LEAF_DIRS=$(printf "%s\n" "$LEAF_DIRS")
+      
+          # Export the variable for the next steps
+          echo "LEAF_DIRS<<EOF" >> $GITHUB_ENV
+          echo "$LEAF_DIRS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
-      #      - name: Run Node and run benchmarks
-      #        run: |
-      #          IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
-      #          IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
-      #          run="${{ matrix.run }}"
-      #          test_path="${{ github.event.inputs.test }}"
-      #
-      #          for test_dir in $LEAF_DIRS; do
-      #            for i in "${!clients[@]}"; do
-      #              client="${clients[$i]}"
-      #              image="${images[$i]}"
-      #              if [ -z "$image" ]; then
-      #                python setup_node.py --client $client
-      #              else
-      #                echo "Using provided image: $image for $client"
-      #                python setup_node.py --client $client --image $image
-      #              fi
-      #              if [ -z "${{ github.event.inputs.warmup }}" ]; then
-      #                echo "Running script without warm up."
-      #                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
-      #              else
-      #                echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
-      #                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
-      #              fi
-      #              cd "scripts/$client"
-      #              docker-compose down
-      #              sudo rm -rf execution-data
-      #              cd ../..
-      #            done
-      #          done
+      - name: Run Node and run benchmarks
+        run: |
+          IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
+          IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
+          run="${{ matrix.run }}"
+          test_path="${{ github.event.inputs.test }}"
+      
+          for test_dir in $LEAF_DIRS; do
+            for i in "${!clients[@]}"; do
+              client="${clients[$i]}"
+              image="${images[$i]}"
+              if [ -z "$image" ]; then
+                python setup_node.py --client $client
+              else
+                echo "Using provided image: $image for $client"
+                python setup_node.py --client $client --image $image
+              fi
+              if [ -z "${{ github.event.inputs.warmup }}" ]; then
+                echo "Running script without warm up."
+                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+              else
+                echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
+                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
+              fi
+              cd "scripts/$client"
+              docker-compose down
+              sudo rm -rf execution-data
+              cd ../..
+            done
+          done
 
       - name: Zip the results folder
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
           echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
           zip -r results-${CLEANED_RUN}.zip results
-
-      - name: Debug artifact name
-        run: |
-          echo "Uploading artifact: results-${{ env.CLEANED_RUN }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
@@ -158,9 +152,6 @@ jobs:
           path: combined-results
           merge-multiple: true
 
-      - name: Display structure of downloaded files
-        run: ls -R combined-results
-
       - name: Extract all result files
         run: |
           mkdir -p extracted-results
@@ -168,9 +159,8 @@ jobs:
 
       - name: Process combined results
         run: |
-          ls -la extracted-results
-##          python results_2.py --resultsPath combined-results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
-#
+          python results_2.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }}
+
       - name: Zip the results folder
         run: |
           zip -r reports.zip extracted-results 
