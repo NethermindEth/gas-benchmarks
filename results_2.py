@@ -83,6 +83,10 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     response_file = f'{results_path}/{client}_response_{run}_{test_case_name}_{gas_used}M.txt'
     response = True
     result = 0
+    if not os.path.exists(result_file):
+        return False, 0
+    if not os.path.exists(response_file):
+        return False, 0
     # Get the responses from the files
     with open(response_file, 'r') as file:
         text = file.read()
@@ -215,6 +219,17 @@ def get_gas_table(client_results, client, test_cases, gas, method, metadata):
         else:
             gas_table[test_case][0] = test_case
             gas_table[test_case][1] = 'Description not found in metadata'
+        if max_val == 0:
+            gas_table[test_case][2] = f'N/A'
+            gas_table[test_case][3] = f'N/A'
+            gas_table[test_case][4] = f'N/A'
+            gas_table[test_case][5] = f'N/A'
+            gas_table[test_case][6] = f'N/A'
+            gas_table[test_case][7] = f'N/A'
+            gas_table[test_case][8] = f'N/A'
+            gas_table[test_case][9] = f'N/A'
+            gas_table[test_case][10] = f'N/A'
+            continue
         gas_table[test_case][2] = f'{len(results)}'
         gas_table[test_case][3] = f'{int(gas) / max_val:.2f} g/s'
         gas_table[test_case][4] = f'{sum(results) / len(results):.2f} ms'
@@ -272,6 +287,8 @@ def get_gas_table_2(client_results, client, test_cases, gas_set, method, metadat
                 results_per_test_case[test_case] = []
             results = client_results[client][test_case][gas][method]
             for x in results:
+                if x == 0:
+                    continue
                 results_per_test_case[test_case].append(int(gas) / x * 1000)
 
     for test_case, _ in test_cases.items():
@@ -285,6 +302,14 @@ def get_gas_table_2(client_results, client, test_cases, gas_set, method, metadat
         else:
             gas_table_norm[test_case][0] = test_case
             gas_table_norm[test_case][7] = 'Description not found on metadata file'
+        if len(results_norm) == 0:
+            gas_table_norm[test_case][1] = f'N/A'
+            gas_table_norm[test_case][2] = f'N/A'
+            gas_table_norm[test_case][3] = f'N/A'
+            gas_table_norm[test_case][4] = f'N/A'
+            gas_table_norm[test_case][5] = f'N/A'
+            gas_table_norm[test_case][6] = f'N/A'
+            continue
         gas_table_norm[test_case][1] = f'{min(results_norm):.2f}'
         gas_table_norm[test_case][2] = f'{max(results_norm):.2f}'
         percentiles = calculate_percentiles(results_norm, [50, 95, 99])
@@ -306,7 +331,7 @@ def get_gas_resume(client_results, client, test_cases, gas_set, method, metadata
         for gas in gas_set:
             if gas not in client_results[client][test_case]:
                 continue
-            results = [int(gas) / x * 1000 for x in client_results[client][test_case][gas][method]]
+            results = [int(gas) / x * 1000 if x != 0 else 0 for x in client_results[client][test_case][gas][method]]
             gas_table_norm[gas][test_case] = max(results)
 
     for gas in gas_set:
@@ -367,10 +392,10 @@ def process_results_3(client_results, clients, results_paths, test_cases, method
     for client in clients:
         results_to_print += f'{client.capitalize()} Benchmarking Report' + '\n'
         results_to_print += (center_string('Title',
-                                           55) + '| Max (MGas/s) | Min (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description\n')
+                                           68) + '| Max (MGas/s) | Min (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description\n')
         gas_table_norm = get_gas_table_2(client_results, client, test_cases, gas_set, methods[0], metadata)
         for test_case, data in gas_table_norm.items():
-            results_to_print += (f'{align_left_string(data[0], 55)}|'
+            results_to_print += (f'{align_left_string(data[0], 68)}|'
                                  f'{center_string(data[1], 14)}|'
                                  f'{center_string(data[2], 14)}|'
                                  f'{center_string(data[3], 14)}|'
@@ -386,7 +411,7 @@ def process_results_3(client_results, clients, results_paths, test_cases, method
         gas_to_int = [int(x) for x in gas_set]
         for gas in sorted(gas_to_int):
             gas_name = f'{gas}M'
-            results_to_print += f'{align_left_string(gas_name, 6)}: {align_left_string(resume[str(gas)][0], 45)}, {resume[str(gas)][1]:.2f} MGas/s\n'
+            results_to_print += f'{align_left_string(gas_name, 6)}: {align_left_string(resume[str(gas)][0], 48)}, {resume[str(gas)][1]:.2f} MGas/s\n'
         results_to_print += '\n\n'
 
     print(results_to_print)
@@ -435,11 +460,11 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
     parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
-    parser.add_argument('--testsPath', type=str, help='resultsPath', default='tests/Precompiles/Blake2/')
+    parser.add_argument('--testsPath', type=str, help='results', default='tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth',
-                        default='nethermind,geth')
-    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='6')
+                        default='nethermind,geth,reth')
+    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='10')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -495,16 +520,16 @@ def main():
         for item in data:
             metadata[item['Name']] = item
 
-    process_results_2(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, gas_set,
-                      metadata)
+    # process_results_2(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, gas_set,
+    #                   metadata)
     process_results_3(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata)
 
     # Print results without percentiles
-    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, metadata,
-                    False)
+    # process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, metadata,
+    #                 False)
     # Print results with percentiles
-    process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, metadata,
-                    True)
+    # process_results(client_results, clients.split(','), results_paths, test_cases, failed_tests, methods, metadata,
+    #                 True)
 
     print('Done!')
 
