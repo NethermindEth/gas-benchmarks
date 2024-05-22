@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import subprocess
+import yaml
 
 from utils import print_computer_specs
 
@@ -44,12 +45,8 @@ def main():
     client = args.client
     image = args.image
 
-    el_images = {
-        "nethermind": "nethermind/nethermind:1.26.0",
-        "geth": "ethereum/client-go:v1.14.0",
-        "reth": "ghcr.io/paradigmxyz/reth:v0.2.0-beta.6",
-        "erigon": "thorax/erigon:v2.59.3"
-    }
+    with open('images.yaml', 'r') as f:
+        el_images = yaml.safe_load(f)["images"]
 
     if client not in el_images:
         print("Client not supported")
