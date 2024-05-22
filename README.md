@@ -50,6 +50,11 @@ For running the whole pipeline, you can use the `run.sh` script.
 bash run.sh -t "testPath" -w "warmupFilePath" -c "client1,client2" -r runNumber -i "image1,image2"
 ```
 
+Example run:
+```shell
+run.sh -t "tests/" -w "warmup/warmup-1000bl-16wi-24tx.txt" -c "nethermind,geth,reth" -r 8
+```
+
 Flags:
 - `--t` it's used to define the path where the tests are located.
 - `--w` it's used to define the path where the warmup file is located.
