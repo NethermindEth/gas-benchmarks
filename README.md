@@ -71,7 +71,7 @@ export IMAGES='default'
 #### Setup the node
 
 ```
-python setup_node.py --client $client --image $image
+python3 setup_node.py --client $client --image $image
 ```
 
 Flags:
