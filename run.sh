@@ -60,7 +60,9 @@ for run in $(seq 1 $RUNS); do
 done
 
 # Get metrics from results
-python3 results_2.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
+python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
+python3 report_html.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
+
 
 # Zip the results folder
 zip -r results.zip results
