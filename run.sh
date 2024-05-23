@@ -65,4 +65,4 @@ python3 report_html.py --resultsPath results --clients "$CLIENTS" --testsPath "$
 
 
 # Zip the results folder
-zip -r results.zip results
+zip -r results.zip results/reports

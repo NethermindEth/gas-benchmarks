@@ -1,4 +1,4 @@
-name: Run Benchmarks in multiple clients parallel
+name: Run Parallel Benchmarks in multiple clients
 
 on:
   workflow_dispatch:
@@ -173,7 +173,7 @@ jobs:
 
       - name: Zip the results folder
         run: |
-          zip -r reports.zip extracted-results 
+          zip -r reports.zip extracted-results/results/reports
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
