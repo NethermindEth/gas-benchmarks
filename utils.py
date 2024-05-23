@@ -39,7 +39,7 @@ def read_results(text):
                     fields[data[0]] = data[1]
 
         if timestamp is not None and measurement is not None:
-            sections[measurement] = utils.SectionData(timestamp, measurement, tags, fields)
+            sections[measurement] = SectionData(timestamp, measurement, tags, fields)
 
     return sections
 
@@ -62,7 +62,7 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
         for line in text.split('\n'):
             if len(line) < 1:
                 continue
-            if not utils.check_sync_status(line):
+            if not check_sync_status(line):
                 return False, 0
     # Get the results from the files
     with open(result_file, 'r') as file:
