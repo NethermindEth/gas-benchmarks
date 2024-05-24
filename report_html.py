@@ -146,7 +146,9 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
         with open(f'reports/output_{client}.csv', 'w', newline='') as csvfile:
             # Create a CSV writer object
             csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(['Title', 'Max (MGas/s)', 'p50 (MGas/s)', 'p95 (MGas/s)', 'p99 (MGas/s)', 'Min (MGas/s)'])
+            csvwriter.writerow(
+                ['Title', 'Max (MGas/s)', 'p50 (MGas/s)', 'p95 (MGas/s)', 'p99 (MGas/s)', 'Min (MGas/s)', 'N',
+                 'Description'])
             for test_case, data in gas_table.items():
                 csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7]])
 
@@ -194,8 +196,9 @@ def main():
                     client_results[client][test_case_name][gas][method] = []
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
-                        responses, results = utils.extract_response_and_result(results_paths, client, test_case_name, gas,
-                                                                         run, method, fields)
+                        responses, results = utils.extract_response_and_result(results_paths, client, test_case_name,
+                                                                               gas,
+                                                                               run, method, fields)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
     #
