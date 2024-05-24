@@ -3,6 +3,7 @@ import json
 import os
 from bs4 import BeautifulSoup
 import utils
+import csv
 
 
 def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata):
@@ -46,7 +47,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                         '<body>'
                         '<h2>Computer Specs</h2>'
                         '<pre">' + computer_spec + '</pre>')
-
+    csv_table = {}
     for client in clients:
         results_to_print += f'<h1>{client.capitalize()} Benchmarking Report</h1>' + '\n'
         results_to_print += f'<table id="table_{client}">'
@@ -64,6 +65,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              '</thread>\n'
                              '<tbody>\n')
         gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
+        csv_table[client] = gas_table_norm
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'<tr>\n<td class="title">{data[0]}</td>\n'
                                  f'<td>{data[2]}</td>\n'
@@ -135,8 +137,18 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
     soup = BeautifulSoup(results_to_print, 'lxml')
     formatted_html = soup.prettify()
     print(formatted_html)
-    with open(f'{results_paths}/reports/index.html', 'w') as file:
+    if not os.path.exists('reports'):
+        os.mkdir('reports')
+    with open(f'reports/index.html', 'w') as file:
         file.write(formatted_html)
+
+    for client, gas_table in csv_table.items():
+        with open(f'reports/output_{client}.csv', 'w', newline='') as csvfile:
+            # Create a CSV writer object
+            csvwriter = csv.writer(csvfile)
+            csvwriter.writerow(['Title', 'Max (MGas/s)', 'p50 (MGas/s)', 'p95 (MGas/s)', 'p99 (MGas/s)', 'Min (MGas/s)'])
+            for test_case, data in gas_table.items():
+                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7]])
 
 
 def main():
