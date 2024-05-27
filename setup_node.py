@@ -17,7 +17,7 @@ def run_command(client, run_path):
 
 
 def set_image(client, el_images, run_path):
-    if client == "nethermind":
+    if client == "nethermind" or client == "besu":
         specifics = "CHAINSPEC_PATH=/tmp/chainspec.json"
     else:
         specifics = "GENESIS_PATH=/tmp/genesis.json"
