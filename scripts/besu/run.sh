@@ -1,7 +1,7 @@
 # Prepare nethermind image that we will use on the script
 cd scripts/besu
 
-cp chainspec.json /tmp/chainspec.json
+cp besu.json /tmp/besu.json
 cp jwtsecret /tmp/jwtsecret
 
 docker compose up -d

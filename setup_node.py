@@ -17,12 +17,13 @@ def run_command(client, run_path):
 
 
 def set_image(client, el_images, run_path):
-    if client == "nethermind" or client == "besu":
+    if client == "nethermind":
         specifics = "CHAINSPEC_PATH=/tmp/chainspec.json"
+    elif client == "besu":
+        specifics = "CHAINSPEC_PATH=/tmp/besu.json"
+        specifics += "\nEC_ENABLED_MODULES=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,EEA,TXPOOL,PRIV,WEB3\n"
     else:
         specifics = "GENESIS_PATH=/tmp/genesis.json"
-    if client == "besu":
-        specifics += "EC_ENABLED_MODULES=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,EEA,TXPOOL,PRIV,WEB3\n"
     env = f"EC_IMAGE_VERSION={el_images[client]}\n" \
           "EC_DATA_DIR=./execution-data\n" \
           "EC_JWT_SECRET_PATH=/tmp/jwtsecret\n" \
