@@ -163,12 +163,12 @@ def calculate_percentiles(values, percentiles):
 
 def check_sync_status(json_data):
     data = json.loads(json_data)
-    if 'status' in data['result']:
-        return data['result']['status'] == 'VALID'
-    elif 'payloadStatus' in data['result']:
-        return data['result']['payloadStatus']['status'] == 'VALID'
-    else:
-        return False
+    if 'result' in data:
+        if 'status' in data['result']:
+            return data['result']['status'] == 'VALID'
+        elif 'payloadStatus' in data['result']:
+            return data['result']['payloadStatus']['status'] == 'VALID'
+    return False
 
 
 def check_client_response_is_valid(results_paths, client, test_case, length):
