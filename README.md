@@ -52,7 +52,7 @@ bash run.sh -t "testPath" -w "warmupFilePath" -c "client1,client2" -r runNumber 
 
 Example run:
 ```shell
-run.sh -t "tests/" -w "warmup/warmup-1000bl-16wi-24tx.txt" -c "nethermind,geth,reth" -r 8
+bash run.sh -t "tests/" -w "warmup/warmup-1000bl-16wi-24tx.txt" -c "nethermind,geth,reth" -r 8
 ```
 
 Flags:
