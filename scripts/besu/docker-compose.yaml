@@ -22,9 +22,8 @@ services:
     - 8545
     - 8551
     command:
-    - --sync-mode=X_SNAP
-    - --data-storage-format=BONSAI
     - --genesis-file=/tmp/chainspec/chainspec.json
+    - --bonsai-historical-block-limit=10000
     - --data-path=/var/lib/besu/data
     - --metrics-enabled=true
     - --metrics-host=0.0.0.0
