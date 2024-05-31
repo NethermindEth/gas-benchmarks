@@ -1,12 +1,14 @@
 import argparse
 import json
 import os
+
+import yaml
 from bs4 import BeautifulSoup
 import utils
 import csv
 
 
-def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata):
+def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
     # Load the computer specs
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
@@ -49,7 +51,17 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                         '<pre">' + computer_spec + '</pre>')
     csv_table = {}
     for client in clients:
-        results_to_print += f'<h1>{client.capitalize()} Benchmarking Report</h1>' + '\n'
+        image_to_print = ''
+        image_json = json.loads(images)
+        if client in image_json:
+            if image_json[client] != 'default' and image_json[client] != '':
+                image_to_print = image_json[client]
+        if image_to_print == '':
+            with open('images.yaml', 'r') as f:
+                el_images = yaml.safe_load(f)["images"]
+            client_without_tag = client.split("_")[0]
+            image_to_print = el_images[client_without_tag]
+        results_to_print += f'<h1>{client.capitalize()} - {image_to_print} - Benchmarking Report</h1>' + '\n'
         results_to_print += f'<table id="table_{client}">'
         results_to_print += ('<thread>\n'
                              '<tr>\n'
@@ -161,6 +173,9 @@ def main():
                                                     'split them by comma, ex: nethermind,geth',
                         default='nethermind,geth,reth')
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='10')
+    parser.add_argument('--images', type=str, help='Image values per each client',
+                        default='{ "nethermind": "default", "besu": "default", "geth": "default", "reth": "default" , '
+                                '"erigon": "default"}')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -170,6 +185,7 @@ def main():
     clients = args.clients
     tests_path = args.testsPath
     runs = args.runs
+    images = args.images
 
     # Get the computer spec
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
@@ -197,11 +213,10 @@ def main():
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
                         responses, results = utils.extract_response_and_result(results_paths, client, test_case_name,
-                                                                               gas,
-                                                                               run, method, fields)
+                                                                               gas, run, method, fields)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
-    #
+
     gas_set = set()
     for test_case_name, test_case_gas in test_cases.items():
         for gas in test_case_gas:
@@ -217,7 +232,7 @@ def main():
         for item in data:
             metadata[item['Name']] = item
 
-    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata)
+    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
 
     print('Done!')
 

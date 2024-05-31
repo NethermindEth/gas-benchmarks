@@ -25,7 +25,7 @@ on:
         default: 8
       images:
         description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
-        default: 'default'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
 
 jobs:
   set-matrix:
@@ -33,6 +33,14 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+
       - name: Set matrix dynamically
         id: set-matrix
         run: |
@@ -70,23 +78,23 @@ jobs:
       - name: Create results directory
         run: |
           mkdir results
-      
+
 
       - name: List leaf directories
         run: |
           # Define the directory to search
           PARENT_DIR=${{ github.event.inputs.test }}
-      
+          
           # Find directories that do not contain subdirectories
           LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
             if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
               echo "$dir"
             fi
           done)
-      
+          
           # Join directories with a delimiter (newline)
           LEAF_DIRS=$(printf "%s\n" "$LEAF_DIRS")
-      
+          
           # Export the variable for the next steps
           echo "LEAF_DIRS<<EOF" >> $GITHUB_ENV
           echo "$LEAF_DIRS" >> $GITHUB_ENV
@@ -98,7 +106,7 @@ jobs:
           IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
           run="${{ matrix.run }}"
           test_path="${{ github.event.inputs.test }}"
-      
+          
           for test_dir in $LEAF_DIRS; do
             for i in "${!clients[@]}"; do
               client="${clients[$i]}"
@@ -116,7 +124,8 @@ jobs:
                 echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
                 python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
               fi
-              cd "scripts/$client"
+              cl_name=$(echo "$client" | cut -d '_' -f 1)
+              cd "scripts/$cl_name"
               docker-compose down
               sudo rm -rf execution-data
               cd ../..

@@ -1,14 +1,27 @@
 import argparse
 import json
 import os
+
+import yaml
+
 import utils
 
 
-def get_table_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata):
+def get_table_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
     results_to_print = ''
 
     for client in clients:
-        results_to_print += f'{client.capitalize()} Benchmarking Report' + '\n'
+        image_to_print = ''
+        image_json = json.loads(images)
+        if client in image_json:
+            if image_json[client] != 'default' and image_json[client] != '':
+                image_to_print = image_json[client]
+        if image_to_print == '':
+            with open('images.yaml', 'r') as f:
+                el_images = yaml.safe_load(f)["images"]
+            client_without_tag = client.split("_")[0]
+            image_to_print = el_images[client_without_tag]
+        results_to_print += f'{client.capitalize()} - {image_to_print} - Benchmarking Report' + '\n'
         results_to_print += (center_string('Title',
                                            68) + '| Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description\n')
         gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
@@ -52,6 +65,9 @@ def main():
                                                     'split them by comma, ex: nethermind,geth',
                         default='nethermind,geth,reth')
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='10')
+    parser.add_argument('--images', type=str, help='Image values per each client',
+                        default='{ "nethermind": "default", "besu": "default", "geth": "default", "reth": "default" , '
+                                '"erigon": "default"}')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -61,6 +77,7 @@ def main():
     clients = args.clients
     tests_path = args.testsPath
     runs = args.runs
+    images = args.images
 
     # Get the computer spec
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
@@ -87,11 +104,11 @@ def main():
                     client_results[client][test_case_name][gas][method] = []
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
-                        responses, results = utils.extract_response_and_result(results_paths, client, test_case_name, gas,
-                                                                         run, method, fields)
+                        responses, results = utils.extract_response_and_result(results_paths, client, test_case_name,
+                                                                               gas, run, method, fields)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
-    #
+
     gas_set = set()
     for test_case_name, test_case_gas in test_cases.items():
         for gas in test_case_gas:
@@ -107,7 +124,7 @@ def main():
         for item in data:
             metadata[item['Name']] = item
 
-    get_table_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata)
+    get_table_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
 
     print('Done!')
 
