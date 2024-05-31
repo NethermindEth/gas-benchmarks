@@ -73,16 +73,6 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     return response, float(result)
 
 
-def check_sync_status(json_data):
-    data = json.loads(json_data)
-    if 'status' in data['result']:
-        return data['result']['status'] == 'VALID'
-    elif 'payloadStatus' in data['result']:
-        return data['result']['payloadStatus']['status'] == 'VALID'
-    else:
-        return False
-
-
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
     gas_table_norm = {}
     results_per_test_case = {}
@@ -163,6 +153,8 @@ def calculate_percentiles(values, percentiles):
 
 def check_sync_status(json_data):
     data = json.loads(json_data)
+    if 'result' not in data:
+        return False
     if 'status' in data['result']:
         return data['result']['status'] == 'VALID'
     elif 'payloadStatus' in data['result']:
@@ -187,6 +179,8 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
                 if not check_sync_status(line):
                     return False
     return True
+
+
 def get_test_cases(tests_path):
     test_cases = {
         # 'test_case_name': ['gas_used']
