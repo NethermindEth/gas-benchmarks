@@ -62,7 +62,7 @@ def main():
         print("Client not supported")
         return
 
-    images_json = json.loads(images_bulk)
+    images_json = json.loads(f'{images_bulk}')
     if images_json is not None:
         if client in images_json:
             if images_json[client] != 'default' and images_json[client] != '':
