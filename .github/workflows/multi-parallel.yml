@@ -45,7 +45,7 @@ jobs:
         id: set-matrix
         run: |
           runs=${{ github.event.inputs.runs }}
-          clients=${{ github.event.inputs.clients }}
+          clients=${{ github.event.inputs.client }}
           IFS=',' read -ra client_array <<< "$clients"
           matrix=$(jq -n '{"include": []}')
           for client in "${client_array[@]}"; do
