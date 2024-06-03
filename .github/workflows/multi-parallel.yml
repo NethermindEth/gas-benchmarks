@@ -48,14 +48,17 @@ jobs:
           clients="${{ github.event.inputs.client }}"
           IFS=',' read -ra client_array <<< "$clients"
           matrix_elements=()
+          
           for ((i=1; i<=runs; i++)); do
             for client in "${client_array[@]}"; do
-              element=$(jq -n --arg run "$i" --arg client "$client" '{run: $run, client: $client}')
+              element="{'run': '$i', 'client': '$client'}"
               matrix_elements+=("$element")
             done
           done
-          matrix=$(printf '%s\n' "${matrix_elements[@]}" | jq -s)
-          echo "::set-output name=matrix::$(echo "$matrix" | jq -c)"
+          
+          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
+        
+          echo "::set-output name=matrix::$matrix"
 
   build:
     needs: set-matrix
