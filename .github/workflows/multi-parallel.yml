@@ -63,7 +63,7 @@ jobs:
 
     strategy:
       matrix:
-        run: ${{ fromJSON(needs.set-matrix.outputs.matrix).include }}
+        include: ${{ fromJSON(needs.set-matrix.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
