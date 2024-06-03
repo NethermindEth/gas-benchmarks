@@ -17,7 +17,7 @@ on:
           - warmup/warmup-1000bl-16wi-1000tx.txt
       client:
         description: 'Comma-separated list of client names (e.g., nethermind,reth,geth,erigon)'
-        default: 'nethermind,geth,reth'
+        default: 'nethermind,geth,reth,besu,erigon'
         required: true
       runs:
         description: 'Number of runs for the application'
