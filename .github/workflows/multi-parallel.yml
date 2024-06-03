@@ -111,10 +111,10 @@ jobs:
           for test_dir in $LEAF_DIRS; do
             for i in "${!clients[@]}"; do
               client="${clients[$i]}"
-              if [ -z "$image" ]; then
+              if [ -z "$images" ]; then
                 python3 setup_node.py --client $client
               else
-                echo "Using provided image: $image for $client"
+                echo "Using provided image: $images for $client"
                 python3 setup_node.py --client $client --imageBulk $images
               fi
               if [ -z "${{ github.event.inputs.warmup }}" ]; then
