@@ -55,6 +55,8 @@ def main():
     image = args.image
     images_bulk = args.imageBulk
 
+    print(f'image Bulk: {images_bulk}')
+
     with open('images.yaml', 'r') as f:
         el_images = yaml.safe_load(f)["images"]
 
