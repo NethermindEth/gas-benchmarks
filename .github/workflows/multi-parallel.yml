@@ -45,14 +45,16 @@ jobs:
         id: set-matrix
         run: |
           runs=${{ github.event.inputs.runs }}
-          clients=${{ github.event.inputs.client }}
+          clients="${{ github.event.inputs.client }}"
           IFS=',' read -ra client_array <<< "$clients"
-          matrix=$(jq -n '{"include": []}')
-          for client in "${client_array[@]}"; do
-            for ((i=1; i<=$runs; i++)); do
-              matrix=$(echo "$matrix" | jq --arg run "$i" --arg client "$client" '.include += [{run: $run, client: $client}]')
+          matrix_elements=()
+          for ((i=1; i<=runs; i++)); do
+            for client in "${client_array[@]}"; do
+              element=$(jq -n --arg run "$i" --arg client "$client" '{run: $run, client: $client}')
+              matrix_elements+=("$element")
             done
           done
+          matrix=$(printf '%s\n' "${matrix_elements[@]}" | jq -s)
           echo "::set-output name=matrix::$matrix"
 
   build:
@@ -62,8 +64,7 @@ jobs:
       DOTNET_INSTALL_DIR: "~/.dotnet"
 
     strategy:
-      matrix:
-        include: ${{ fromJSON(needs.set-matrix.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.set-matrix.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
