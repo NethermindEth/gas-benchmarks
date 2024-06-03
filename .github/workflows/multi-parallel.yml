@@ -55,7 +55,7 @@ jobs:
             done
           done
           matrix=$(printf '%s\n' "${matrix_elements[@]}" | jq -s)
-          echo "::set-output name=matrix::$matrix"
+          echo "::set-output name=matrix::$(echo "$matrix" | jq -c)"
 
   build:
     needs: set-matrix
