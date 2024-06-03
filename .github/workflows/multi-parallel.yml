@@ -45,7 +45,14 @@ jobs:
         id: set-matrix
         run: |
           runs=${{ github.event.inputs.runs }}
-          matrix=$(seq -s, 1 $runs | jq -R -s -c 'split(",") | {run: .}')
+          clients=${{ github.event.inputs.clients }}
+          IFS=',' read -ra client_array <<< "$clients"
+          matrix=$(jq -n '{"include": []}')
+          for client in "${client_array[@]}"; do
+            for ((i=1; i<=$runs; i++)); do
+              matrix=$(echo "$matrix" | jq --arg run "$i" --arg client "$client" '.include += [{run: $run, client: $client}]')
+            done
+          done
           echo "::set-output name=matrix::$matrix"
 
   build:
@@ -56,7 +63,7 @@ jobs:
 
     strategy:
       matrix:
-        run: ${{ fromJSON(needs.set-matrix.outputs.matrix).run }}
+        run: ${{ fromJSON(needs.set-matrix.outputs.matrix).include }}
 
     steps:
       - uses: actions/checkout@v4
@@ -105,44 +112,44 @@ jobs:
           IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
           IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
           run="${{ matrix.run }}"
+          client="${{ matrix.client }}"
           test_path="${{ github.event.inputs.test }}"
           
           images="${{ github.event.inputs.images }}"
           for test_dir in $LEAF_DIRS; do
-            for i in "${!clients[@]}"; do
-              client="${clients[$i]}"
-              if [ -z "$images" ]; then
-                python3 setup_node.py --client $client
-              else
-                echo "Using provided image: $images for $client"
-                python3 setup_node.py --client $client --imageBulk $images
-              fi
-              if [ -z "${{ github.event.inputs.warmup }}" ]; then
-                echo "Running script without warm up."
-                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
-              else
-                echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
-                python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
-              fi
-              cl_name=$(echo "$client" | cut -d '_' -f 1)
-              cd "scripts/$cl_name"
-              docker-compose down
-              sudo rm -rf execution-data
-              cd ../..
-            done
+            if [ -z "$images" ]; then
+              python3 setup_node.py --client $client
+            else
+              echo "Using provided image: $images for $client"
+              python3 setup_node.py --client $client --imageBulk $images
+            fi
+            if [ -z "${{ github.event.inputs.warmup }}" ]; then
+              echo "Running script without warm up."
+              python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+            else
+              echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
+              python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
+            fi
+            cl_name=$(echo "$client" | cut -d '_' -f 1)
+            cd "scripts/$cl_name"
+            docker-compose down
+            sudo rm -rf execution-data
+            cd ../..
           done
 
       - name: Zip the results folder
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
+          CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
           echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
-          zip -r results-${CLEANED_RUN}.zip results
+          echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: results-${{ env.CLEANED_RUN }}
-          path: results-${{ env.CLEANED_RUN }}.zip
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
   combine-results:
     needs: build
     runs-on: ubuntu-latest
