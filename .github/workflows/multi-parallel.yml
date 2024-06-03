@@ -25,7 +25,7 @@ on:
         default: 8
       images:
         description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
-        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+        default: '"{\"nethermind\":\"default\",\"geth\":\"default\",\"reth\":\"default\",\"erigon\":\"default\",\"besu\":\"default\"}"'
 
 jobs:
   set-matrix:
