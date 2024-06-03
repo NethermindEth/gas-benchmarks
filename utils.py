@@ -100,12 +100,12 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
             gas_table_norm[test_case][0] = test_case
             gas_table_norm[test_case][7] = 'Description not found on metadata file'
         if len(results_norm) == 0:
-            gas_table_norm[test_case][1] = f'N/A'
-            gas_table_norm[test_case][2] = f'N/A'
-            gas_table_norm[test_case][3] = f'N/A'
-            gas_table_norm[test_case][4] = f'N/A'
-            gas_table_norm[test_case][5] = f'N/A'
-            gas_table_norm[test_case][6] = f'N/A'
+            gas_table_norm[test_case][1] = f'0'
+            gas_table_norm[test_case][2] = f'0'
+            gas_table_norm[test_case][3] = f'0'
+            gas_table_norm[test_case][4] = f'0'
+            gas_table_norm[test_case][5] = f'0'
+            gas_table_norm[test_case][6] = f'0'
             continue
         gas_table_norm[test_case][1] = f'{min(results_norm):.2f}'
         gas_table_norm[test_case][2] = f'{max(results_norm):.2f}'
