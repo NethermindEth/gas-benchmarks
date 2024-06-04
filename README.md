@@ -61,6 +61,7 @@ Flags:
 - `--c` it's used to define the clients that you want to run the benchmarks. Separate the clients with a comma.
 - `--r` it's used to define the number of iterations that you want to run the benchmarks. It's a numeric value.
 - `--i` it's used to define the images that you want to use to run the benchmarks. Separate the images with a comma, and match the clients. Use `default` if you want to ignore the values.
+- `--o` it’s used to define the output directory where the results will be saved.
 
 
 Now you're ready to run the benchmarks locally!
