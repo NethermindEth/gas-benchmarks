@@ -59,7 +59,7 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
         if len(text) == 0:
             return False, 0
         # Get latest line
-        for line in text.split('\n'):
+        for line in reversed(text.split('\n')):
             if len(line) < 1:
                 continue
             if not check_sync_status(line):
