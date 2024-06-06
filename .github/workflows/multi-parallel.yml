@@ -1,0 +1,208 @@
+name: Run Parallel Benchmarks in multiple clients
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Path to test file'
+        default: 'tests/'
+      warmup:
+        description: 'Name of the warm up file'
+        default: 'warmup/warmup-1000bl-16wi-24tx.txt'
+        type: choice
+        options:
+          - ''
+          - warmup/warmup-100bl-16wi-32tx.txt
+          - warmup/warmup-1000bl-16wi-24tx.txt
+          - warmup/warmup-1000bl-16wi-1000tx.txt
+      client:
+        description: 'Comma-separated list of client names (e.g., nethermind,reth,geth,erigon)'
+        default: 'nethermind,geth,reth,besu,erigon'
+        required: true
+      runs:
+        description: 'Number of runs for the application'
+        required: false
+        default: 8
+      images:
+        description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
+        default: '"{\"nethermind\":\"default\",\"geth\":\"default\",\"reth\":\"default\",\"erigon\":\"default\",\"besu\":\"default\"}"'
+
+jobs:
+  set-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+
+      - name: Set matrix dynamically
+        id: set-matrix
+        run: |
+          runs=${{ github.event.inputs.runs }}
+          clients="${{ github.event.inputs.client }}"
+          IFS=',' read -ra client_array <<< "$clients"
+          matrix_elements=()
+          
+          for ((i=1; i<=runs; i++)); do
+            for client in "${client_array[@]}"; do
+              element="{'run': '$i', 'client': '$client'}"
+              matrix_elements+=("$element")
+            done
+          done
+          
+          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
+        
+          echo "::set-output name=matrix::$matrix"
+
+  build:
+    needs: set-matrix
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_INSTALL_DIR: "~/.dotnet"
+
+    strategy:
+      matrix: ${{ fromJSON(needs.set-matrix.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare kute dependencies
+        run: make prepare_tools
+
+      - name: Create results directory
+        run: |
+          mkdir results
+
+
+      - name: List leaf directories
+        run: |
+          # Define the directory to search
+          PARENT_DIR=${{ github.event.inputs.test }}
+          
+          # Find directories that do not contain subdirectories
+          LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
+            if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
+              echo "$dir"
+            fi
+          done)
+          
+          # Join directories with a delimiter (newline)
+          LEAF_DIRS=$(printf "%s\n" "$LEAF_DIRS")
+          
+          # Export the variable for the next steps
+          echo "LEAF_DIRS<<EOF" >> $GITHUB_ENV
+          echo "$LEAF_DIRS" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Run Node and run benchmarks
+        run: |
+          IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
+          IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
+          run="${{ matrix.run }}"
+          client="${{ matrix.client }}"
+          test_path="${{ github.event.inputs.test }}"
+          
+          images="${{ github.event.inputs.images }}"
+          for test_dir in $LEAF_DIRS; do
+            if [ -z "$images" ]; then
+              python3 setup_node.py --client $client
+            else
+              echo "Using provided image: $images for $client"
+              python3 setup_node.py --client $client --imageBulk $images
+            fi
+            if [ -z "${{ github.event.inputs.warmup }}" ]; then
+              echo "Running script without warm up."
+              python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+            else
+              echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
+              python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
+            fi
+            cl_name=$(echo "$client" | cut -d '_' -f 1)
+            cd "scripts/$cl_name"
+            docker-compose down
+            sudo rm -rf execution-data
+            cd ../..
+          done
+
+      - name: Zip the results folder
+        run: |
+          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
+          CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
+          echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
+          echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+  combine-results:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v3
+        with:
+          path: combined-results
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Process combined results
+        run: |
+          runs=${{ github.event.inputs.runs }}
+          images="${{ github.event.inputs.images }}"
+          if [ -z "$image" ]; then
+            python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs 
+            python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs 
+          else
+            python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
+            python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
+          fi
+
+      - name: Zip the results folder
+        run: |
+          zip -r reports.zip reports
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: reports
+          path: reports.zip
