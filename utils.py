@@ -262,6 +262,10 @@ class PayloadResponse:
 def print_computer_specs():
     info = "Computer Specs:\n"
     cpu = cpuinfo.get_cpu_info()
+    try:
+        cpu_freq = psutil.cpu_freq().current
+    except AttributeError:
+        cpu_freq = "N/A"
     system_info = {
         'Processor': platform.processor(),
         'System': platform.system(),
@@ -272,7 +276,7 @@ def print_computer_specs():
         'RAM': f'{psutil.virtual_memory().total / (1024 ** 3):.2f} GB',
         'CPU': cpu['brand_raw'],
         'Numbers of CPU': cpu['count'],
-        'CPU GHz': cpu['hz_actual_friendly']
+        'CPU GHz': f'{cpu_freq} MHz' if cpu_freq != "N/A" else "N/A"
     }
 
     # Print the specifications
