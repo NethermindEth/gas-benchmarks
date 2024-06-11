@@ -129,7 +129,7 @@ def process_results(client_results, results_paths, method, field, test_case):
 
 
 def standard_deviation(numbers):
-    if len(numbers) == 0:
+    if len(numbers) < 2 or numbers is None:
         return None
     return statistics.stdev(numbers)
 
@@ -199,9 +199,6 @@ def print_processed_responses(results_paths, tests_path, method):
                             results += f'{empty_string}{center_string(fields_key, 6)}|'
                         for value in fields:
                             results += center_string(f'{value :.2f} ms', 11) + "|"
-                        if len(fields) == 0:
-                            results += center_string(f'N/A', 11)
-                            continue
                         st_dev = standard_deviation(fields)
                         if st_dev is None:
                             results += center_string(f'N/A', 11)
