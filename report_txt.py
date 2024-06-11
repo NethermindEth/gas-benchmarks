@@ -184,9 +184,9 @@ def print_processed_responses(results_paths, tests_path, method):
                     string_centered = center_string('client/iteration', 20)
                     results += f'{string_centered}|'
                     for i in range(1, len(processed_responses[client][test_case][method]['max']) + 1):
-                        size += 11
-                        results += f'{center_string(str(i), 10)}|'
-                    size += 10
+                        size += 12
+                        results += f'{center_string(str(i), 11)}|'
+                    size += 15
                     results += '   stdev\n'
                     i = 0
                     for fields_key in processed_responses[client][test_case][method]:
@@ -198,13 +198,13 @@ def print_processed_responses(results_paths, tests_path, method):
                             empty_string = ' ' * 14
                             results += f'{empty_string}{center_string(fields_key, 6)}|'
                         for value in fields:
-                            results += f' {value / 1000:.2f} ms |'
+                            results += center_string(f'{value :.2f} ms', 11) + "|"
                         st_dev = standard_deviation(fields)
                         if st_dev is None:
-                            results += '   N/A\n'
+                            results += center_string(f'N/A', 11)
                         else:
-                            st_dev_str = f'{st_dev / 1000:.2f}'
-                            results += f' {center_string(st_dev_str, 10)}\n'
+                            st_dev_str = f'{st_dev :.2f} ms'
+                            results += f' {center_string(st_dev_str, 11)}\n'
                         i += 1
                     results += ('-' * size) + '\n'
                 results += '\n'
@@ -240,7 +240,7 @@ def main():
 
     client_results = {}
     methods = ['engine_newPayloadV3']
-    fields = ['max', 'min', 'mean', 'sum']
+    fields = ['max', 'min', 'mean']
     for client in clients.split(','):
         processed_responses[client] = {}
         failed_tests[client] = {}
