@@ -118,12 +118,13 @@ def process_results(client_results, results_paths, method, field, test_case):
     # plt.figure(figsize=(10, 5))
     for client, data in client_results.items():
         results_max = []
-        for i in range(1, len(data['results']) + 1):
+        for i in range(0, len(data['results'])):
             try:
                 results_max.append(float(data['results'][str(i)][method].fields[field]))
             except KeyError as e:
                 results_max.append(0)
-                print(f"Error: {e} in {client} {test_case} {method} {field} {i}")
+                # print(f"Error: {e} in {client} {test_case} {method} {field} {i}")
+                # exit(0)
 
         processed_responses[client][test_case][method][field] = results_max
 
@@ -201,7 +202,7 @@ def print_processed_responses(results_paths, tests_path, method):
                             results += center_string(f'{value :.2f} ms', 11) + "|"
                         st_dev = standard_deviation(fields)
                         if st_dev is None:
-                            results += center_string(f'N/A', 11)
+                            results += center_string(f'N/A', 11) + '\n'
                         else:
                             st_dev_str = f'{st_dev :.2f} ms'
                             results += f' {center_string(st_dev_str, 11)}\n'
@@ -221,7 +222,7 @@ def main():
     parser.add_argument('--reportPath', type=str, help='Path to report cases', default='reports')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to '
                                                     'compare, split them by comma, ex: nethermind,geth',
-                        default='nethermind,erigon,geth,reth,besu')
+                        default='nethermind,nethermind_gmp,nethermind_gmpnew')
 
     # Parse command-line arguments
     args = parser.parse_args()

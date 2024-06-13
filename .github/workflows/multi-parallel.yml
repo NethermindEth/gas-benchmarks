@@ -26,6 +26,10 @@ on:
       images:
         description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
         default: '"{\"nethermind\":\"default\",\"geth\":\"default\",\"reth\":\"default\",\"erigon\":\"default\",\"besu\":\"default\"}"'
+      txt_report:
+        description: 'Mark as true to generate txt report'
+        required: false
+        default: 'false'
 
 jobs:
   set-matrix:
@@ -196,6 +200,10 @@ jobs:
             python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
             python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
           fi
+
+      - name: Generate Report
+        if: ${{ github.event.inputs.txt_report == 'true' }}
+        run: |
           python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} 
 
       - name: Zip the results folder
