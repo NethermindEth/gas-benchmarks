@@ -149,13 +149,11 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
     soup = BeautifulSoup(results_to_print, 'lxml')
     formatted_html = soup.prettify()
     print(formatted_html)
-    if not os.path.exists('reports'):
-        os.mkdir('reports')
-    with open(f'reports/index.html', 'w') as file:
+    with open(f'{results_paths}/reports/index.html', 'w') as file:
         file.write(formatted_html)
 
     for client, gas_table in csv_table.items():
-        with open(f'reports/output_{client}.csv', 'w', newline='') as csvfile:
+        with open(f'{results_paths}/reports/output_{client}.csv', 'w', newline='') as csvfile:
             # Create a CSV writer object
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(

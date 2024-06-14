@@ -90,7 +90,7 @@ jobs:
           python3 report_html.py --resultsPath results --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs
 
       - name: Zip the results folder
-        run: zip -r results.zip reports
+        run: zip -r results.zip extracted-results/results/reports
 
       - name: Upload results as artifact
         uses: actions/upload-artifact@v4

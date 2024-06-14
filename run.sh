@@ -6,16 +6,18 @@ WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth"
 RUNS=8
 IMAGES="default"
+OUTPUT_DIR="results"
 
 # Parse command line arguments
-while getopts "t:w:c:r:i:" opt; do
+while getopts "t:w:c:r:i:o:" opt; do
   case $opt in
     t) TEST_PATH="$OPTARG" ;;
     w) WARMUP_FILE="$OPTARG" ;;
     c) CLIENTS="$OPTARG" ;;
     r) RUNS="$OPTARG" ;;
     i) IMAGES="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images]" >&2
+    o) OUTPUT_DIR="$OPTARG" ;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o output_dir]" >&2
        exit 1 ;;
   esac
 done
@@ -24,7 +26,7 @@ IFS=',' read -ra CLIENT_ARRAY <<< "$CLIENTS"
 IFS=',' read -ra IMAGE_ARRAY <<< "$IMAGES"
 
 # Set up environment
-mkdir -p results
+mkdir -p "$OUTPUT_DIR"
 
 # Install dependencies
 pip install -r requirements.txt
@@ -46,10 +48,10 @@ for run in $(seq 1 $RUNS); do
 
     if [ -z "$WARMUP_FILE" ]; then
       echo "Running script without warm up."
-      python3 run_kute.py --output results --testsPath "$TEST_PATH" --jwtPath /tmp/jwtsecret --client $client --run $run
+      python3 run_kute.py --output "$OUTPUT_DIR" --testsPath "$TEST_PATH" --jwtPath /tmp/jwtsecret --client $client --run $run
     else
       echo "Using provided warm up file: $WARMUP_FILE"
-      python3 run_kute.py --output results --testsPath "$TEST_PATH" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
+      python3 run_kute.py --output "$OUTPUT_DIR" --testsPath "$TEST_PATH" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
     fi
 
     cd "scripts/$client"
@@ -60,9 +62,9 @@ for run in $(seq 1 $RUNS); do
 done
 
 # Get metrics from results
-python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
-python3 report_html.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
+python3 report_tables.py --resultsPath "$OUTPUT_DIR" --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
+python3 report_html.py --resultsPath "$OUTPUT_DIR" --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
 
 
 # Zip the results folder
-zip -r results.zip reports
+zip -r "${OUTPUT_DIR}.zip" "$OUTPUT_DIR"
