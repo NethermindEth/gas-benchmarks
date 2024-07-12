@@ -104,7 +104,7 @@ jobs:
       - name: List leaf directories
         run: |
           # Define the directory to search
-          PARENT_DIR=${{ github.event.inputs.test }}
+          PARENT_DIR=private-repo/${{ github.event.inputs.test }}
           
           # Find directories that do not contain subdirectories
           LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
