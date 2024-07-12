@@ -87,9 +87,6 @@ jobs:
       - name: Install python dependencies
         run: pip install -r requirements.txt
 
-      - name: Prepare kute dependencies
-        run: make prepare_tools
-
       - name: Create results directory
         run: |
           mkdir results
@@ -123,6 +120,9 @@ jobs:
           echo "LEAF_DIRS<<EOF" >> $GITHUB_ENV
           echo "$LEAF_DIRS" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
+
+      - name: Prepare kute dependencies
+        run: make prepare_tools
 
       - name: Run Node and run benchmarks
         run: |
