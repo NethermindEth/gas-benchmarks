@@ -59,7 +59,7 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
         if len(text) == 0:
             return False, 0
         # Get latest line
-        for line in text.split('\n'):
+        for line in reversed(text.split('\n')):
             if len(line) < 1:
                 continue
             if not check_sync_status(line):
@@ -262,6 +262,10 @@ class PayloadResponse:
 def print_computer_specs():
     info = "Computer Specs:\n"
     cpu = cpuinfo.get_cpu_info()
+    try:
+        cpu_freq = psutil.cpu_freq().current
+    except AttributeError:
+        cpu_freq = "N/A"
     system_info = {
         'Processor': platform.processor(),
         'System': platform.system(),
@@ -272,7 +276,7 @@ def print_computer_specs():
         'RAM': f'{psutil.virtual_memory().total / (1024 ** 3):.2f} GB',
         'CPU': cpu['brand_raw'],
         'Numbers of CPU': cpu['count'],
-        'CPU GHz': cpu['hz_actual_friendly']
+        'CPU GHz': f'{cpu_freq} MHz' if cpu_freq != "N/A" else "N/A"
     }
 
     # Print the specifications

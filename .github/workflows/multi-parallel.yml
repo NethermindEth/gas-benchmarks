@@ -38,10 +38,10 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: 3.x
 
@@ -208,7 +208,7 @@ jobs:
 
       - name: Zip the results folder
         run: |
-          zip -r reports.zip reports
+          zip -r reports.zip extracted-results/results/reports
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
