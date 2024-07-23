@@ -167,15 +167,14 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
 
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
-    parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results')
+    parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results/results')
     parser.add_argument('--testsPath', type=str, help='results', default='tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth',
-                        default='nethermind,geth,reth')
-    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='10')
+                        default='nethermind,geth,reth,erigon,besu')
+    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
-                        default='{ "nethermind": "default", "besu": "default", "geth": "default", "reth": "default" , '
-                                '"erigon": "default"}')
+                        default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -231,6 +230,24 @@ def main():
         data = json.load(open(f'{tests_path}/metadata.json', 'r'))
         for item in data:
             metadata[item['Name']] = item
+
+    # Create .csv with raw results per client
+    for client in client_results:
+        with open(f'reports/raw_results_{client}.csv', 'w', newline='') as csvfile:
+            # Create a CSV writer object
+            csvwriter = csv.writer(csvfile)
+            rows = ['Test Case', 'Gas'] + [f'Run {i}' for i in range(1, runs + 1)] + ['Description']
+            csvwriter.writerow(rows)
+            for test_case_name, test_case_gas in test_cases.items():
+                for gas in test_case_gas:
+                    name = test_case_name
+                    description = 'Description not found on metadata file'
+                    if test_case_name in metadata:
+                        name = metadata[test_case_name]['Title']
+                        description = metadata[test_case_name]['Description']
+
+                    rows = [name, gas] + client_results[client][test_case_name][gas][methods[0]] + [description]
+                    csvwriter.writerow(rows)
 
     get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
 
