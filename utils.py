@@ -7,6 +7,7 @@ import platform
 
 import numpy as np
 import psutil
+from bs4 import BeautifulSoup
 
 
 def read_results(text):
@@ -282,3 +283,31 @@ def print_computer_specs():
         info += line + "\n"
     return info + "\n"
 
+
+def merge_csv(first_data, second_data):
+    # Take headers from first file, and ignore headers from second file
+    headers = first_data[0]
+
+    # Merge the data
+    result = [headers]
+    result.extend(first_data[1:])
+    result.extend(second_data[1:])
+    return result
+
+
+def merge_html(first_data, second_data):
+    # Load the HTML data
+    first_soup = BeautifulSoup(first_data, 'html.parser')
+    second_soup = BeautifulSoup(second_data, 'html.parser')
+
+    # Merge the elements of the tables that has the same id on both HTML files
+    for first_table, second_table in zip(first_soup.find_all('table'), second_soup.find_all('table')):
+        if first_table['id'] == second_table['id']:
+            second_table.find_all('thread')[0].decompose()
+            # Only merge the elements of the table, not the table itself, Completely remove from second table thread,
+            # will be the same on both files
+            for first_element, second_element in zip(first_table.find_all('tr'), second_table.find_all('tr')):
+                first_element.append(second_element)
+
+
+    return first_soup.prettify()
