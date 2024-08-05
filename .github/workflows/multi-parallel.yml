@@ -188,8 +188,6 @@ jobs:
         run: |
           mkdir -p extracted-results
           find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
-          mkdir -p reports
-          cp -r extracted-results/results/docker_* reports/
 
       - name: Process combined results
         run: |
@@ -210,6 +208,7 @@ jobs:
 
       - name: Zip the results folder
         run: |
+          cp -r extracted-results/results/docker_* reports/
           zip -r reports.zip reports
 
       - name: Upload artifact
