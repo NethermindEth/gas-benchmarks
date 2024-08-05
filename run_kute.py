@@ -94,7 +94,7 @@ def main():
             print(f"Running {client} for the {run} time with test case {test_case_path}")
             response = run_command(test_case_path, jwt_path, response_file, execution_url, kute_arguments)
             # Print docker compose logs for debugging
-            command = f'docker compose -f scripts/{client}/docker-compose.yaml logs -n 100 > {output_folder}/docker_logs_{client}_{run}_{name}.txt'
+            command = f'docker compose -f scripts/{client}/docker-compose.yaml logs > {output_folder}/docker_logs_{client}_{run}_{name}.txt'
             subprocess.run(command, shell=True, capture_output=True, text=True)
             save_to(output_folder, f'{client}_results_{run}_{name}.txt',
                     response)
