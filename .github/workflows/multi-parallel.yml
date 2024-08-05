@@ -61,7 +61,7 @@ jobs:
           done
           
           matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
-        
+          
           echo "::set-output name=matrix::$matrix"
 
   build:
@@ -188,7 +188,6 @@ jobs:
         run: |
           mkdir -p extracted-results
           find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
-#          Copy all the folders from extracted-results/results/ that match docker_* to reports/
           mkdir -p reports
           cp -r extracted-results/results/docker_* reports/
 
