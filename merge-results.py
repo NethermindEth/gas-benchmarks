@@ -12,9 +12,9 @@ import csv
 
 def main():
     parser = argparse.ArgumentParser(description='Benchmark script')
-    parser.add_argument('--first', type=str, help='Path to gather the results', default='reports/')
-    parser.add_argument('--second', type=str, help='results', default='reports_2/')
-    parser.add_argument('--output', type=str, help='Number of runs the program will process', default='merge/')
+    parser.add_argument('--first', type=str, help='Path to gather the results', default='merge5/')
+    parser.add_argument('--second', type=str, help='results', default='reports8/')
+    parser.add_argument('--output', type=str, help='Number of runs the program will process', default='merge6/')
 
     # Parse command-line arguments
     args = parser.parse_args()
