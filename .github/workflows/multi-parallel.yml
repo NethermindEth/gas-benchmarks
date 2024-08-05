@@ -208,7 +208,8 @@ jobs:
 
       - name: Zip the results folder
         run: |
-          cp -r extracted-results/results/docker_* reports/
+          mkdir -p reports/docker
+          cp -r extracted-results/results/docker_* reports/docker
           zip -r reports.zip reports
 
       - name: Upload artifact
