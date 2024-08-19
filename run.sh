@@ -3,25 +3,24 @@
 # Default inputs
 TEST_PATH="tests/"
 WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
-CLIENTS="nethermind,geth,reth"
+CLIENTS="nethermind,geth,reth,besu,erigon"
 RUNS=8
-IMAGES="default"
+IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
 
 # Parse command line arguments
-while getopts "t:w:c:r:i:" opt; do
+while getopts "t:w:c:r:i:x" opt; do
   case $opt in
     t) TEST_PATH="$OPTARG" ;;
     w) WARMUP_FILE="$OPTARG" ;;
     c) CLIENTS="$OPTARG" ;;
     r) RUNS="$OPTARG" ;;
     i) IMAGES="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images]" >&2
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-x]" >&2
        exit 1 ;;
   esac
 done
 
 IFS=',' read -ra CLIENT_ARRAY <<< "$CLIENTS"
-IFS=',' read -ra IMAGE_ARRAY <<< "$IMAGES"
 
 # Set up environment
 mkdir -p results
@@ -30,39 +29,51 @@ mkdir -p results
 pip install -r requirements.txt
 make prepare_tools
 
+# Find leaf directories
+LEAF_DIRS=$(find "$TEST_PATH" -type d | while read -r dir; do
+  if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
+    echo "$dir"
+  fi
+done)
+
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
-  for i in "${!CLIENT_ARRAY[@]}"; do
-    client="${CLIENT_ARRAY[$i]}"
-    image="${IMAGE_ARRAY[$i]}"
+  for client in "${CLIENT_ARRAY[@]}"; do
+    for test_dir in $LEAF_DIRS; do
+      if [ -z "$IMAGES" ]; then
+        python3 setup_node.py --client $client
+      else
+        echo "Using provided image: $IMAGES for $client"
+        python3 setup_node.py --client $client --imageBulk "$IMAGES"
+      fi
 
-    if [ -z "$image" ]; then
-      echo "Image input is empty, using default image."
-      python3 setup_node.py --client $client
-    else
-      echo "Using provided image: $image for $client"
-      python3 setup_node.py --client $client --image $image
-    fi
+      if [ -z "$WARMUP_FILE" ]; then
+        echo "Running script without warm up."
+        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+      else
+        echo "Using provided warm up file: $WARMUP_FILE"
+        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
+      fi
 
-    if [ -z "$WARMUP_FILE" ]; then
-      echo "Running script without warm up."
-      python3 run_kute.py --output results --testsPath "$TEST_PATH" --jwtPath /tmp/jwtsecret --client $client --run $run
-    else
-      echo "Using provided warm up file: $WARMUP_FILE"
-      python3 run_kute.py --output results --testsPath "$TEST_PATH" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
-    fi
-
-    cd "scripts/$client"
-    docker compose down
-    sudo rm -rf execution-data
-    cd ../..
+      cl_name=$(echo "$client" | cut -d '_' -f 1)
+      cd "scripts/$cl_name"
+      docker compose down
+      sudo rm -rf execution-data
+      cd ../..
+    done
   done
 done
 
-# Get metrics from results
-python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
-python3 report_html.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
+# Process results
+if [ -z "$IMAGES" ]; then
+  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
+  python3 report_html.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
+else
+  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS --images "$IMAGES"
+  python3 report_html.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS --images "$IMAGES"
+fi
 
-
-# Zip the results folder
-zip -r results.zip reports
+# Prepare and zip the results
+mkdir -p reports/docker
+cp -r results/docker_* reports/docker
+zip -r reports.zip reports
