@@ -22,7 +22,7 @@ on:
       runs:
         description: 'Number of runs for the application'
         required: false
-        default: 32
+        default: 15
       images:
         description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
         default: '"{\"nethermind\":\"default\",\"geth\":\"default\",\"reth\":\"default\",\"erigon\":\"default\",\"besu\":\"default\"}"'
