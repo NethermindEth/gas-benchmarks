@@ -26,6 +26,7 @@ services:
     - --bonsai-historical-block-limit=10000
     - --bonsai-limit-trie-logs-enabled=false
     - --Xbonsai-parallel-tx-processing-enabled=true
+    - --Xplugin-rocksdb-high-spec-enabled=true
     - --data-path=/var/lib/besu/data
     - --metrics-enabled=true
     - --metrics-host=0.0.0.0
