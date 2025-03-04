@@ -163,7 +163,7 @@ jobs:
           zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
@@ -188,7 +188,7 @@ jobs:
       - name: Install python dependencies
         run: pip install -r requirements.txt
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: combined-results
           merge-multiple: true
@@ -227,7 +227,7 @@ jobs:
           zip -r reports.zip reports
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: reports
           path: reports.zip
