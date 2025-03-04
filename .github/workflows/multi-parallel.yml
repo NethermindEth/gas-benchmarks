@@ -22,7 +22,7 @@ on:
       runs:
         description: 'Number of runs for the application'
         required: false
-        default: 8
+        default: 15
       images:
         description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
         default: '"{\"nethermind\":\"default\",\"geth\":\"default\",\"reth\":\"default\",\"erigon\":\"default\",\"besu\":\"default\"}"'
@@ -208,8 +208,6 @@ jobs:
 
       - name: Zip the results folder
         run: |
-          mkdir -p reports/docker
-          cp -r extracted-results/results/docker_* reports/docker
           zip -r reports.zip reports
 
       - name: Upload artifact
