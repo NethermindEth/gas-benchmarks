@@ -43,7 +43,7 @@ services:
       - --ws
       - --ws.addr=0.0.0.0
       - --ws.port=8546
-      - --ws.api=admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,eth-call-bundle
+      - --ws.api=admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots,flashbots,miner,mev
       - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
       - --authrpc.addr=0.0.0.0
       - --authrpc.port=8551
