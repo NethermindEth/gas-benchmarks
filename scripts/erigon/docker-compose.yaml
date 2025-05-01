@@ -40,7 +40,6 @@ services:
     - --http.corsdomain=*
     - --http.api=web3,eth,net,engine
     - --txpool.disable
-    - --chain=${NETWORK}
     - --authrpc.addr=0.0.0.0
     - --authrpc.port=8551
     - --authrpc.vhosts=*
