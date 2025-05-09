@@ -80,7 +80,7 @@ def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
             else:
                 logging.info(f"Table '{table_name}' already exists. Checking for missing columns...")
                 
-                # Columns to check and add if they don't exist
+                # Migration: columns to check and add if they don't exist
                 # Format: (column_name, column_definition_for_add_column)
                 columns_to_ensure: List[Tuple[str, str]] = [
                     ("client_version", "TEXT NULL"),
@@ -161,6 +161,7 @@ if __name__ == "__main__":
     try:
         # For interactive password entry.
         # In automated CI/CD, prefer environment variables or other secure secret injection.
+        # However, we need to run the script only once, so we can use getpass.
         db_password = getpass.getpass(prompt=f"Enter password for PostgreSQL user '{args.db_user}' (or press Enter if handled by .pgpass/env var): ")
         if not db_password: # If user just presses enter, rely on other auth methods
             logging.info("No password entered directly; assuming .pgpass or environment variable for authentication.")
@@ -180,9 +181,5 @@ if __name__ == "__main__":
     }
     if db_password: # Only add password to params if it was actually provided
         db_params["password"] = db_password
-
-    # The SQL generation for CREATE TABLE is handled within execute_sql_on_db if needed.
-    # sql_to_execute = get_sql_for_benchmark_table(args.table_name)
-    # logging.debug("\n-- SQL to be executed: --\n%s\n--------------------------\n", sql_to_execute)
     
     execute_sql_on_db(db_params, args.table_name) 

@@ -2,12 +2,11 @@ import psycopg2
 import csv
 import os
 import argparse
-# import getpass # Removed for CLI password
 import sys
 import glob
 import re
 from bs4 import BeautifulSoup, Tag # For parsing HTML if computer_specs.txt is not found
-import logging # Added for logging
+import logging 
 from typing import Any, Dict, List, Optional, Tuple # Added for type hinting
 
 # --- Constants ---
@@ -49,9 +48,8 @@ def get_db_connection(db_params: Dict[str, Any]) -> Optional[psycopg2.extensions
         logging.info(f"Successfully connected to database '{db_params['dbname']}' on {db_params['host']}.")
     except psycopg2.OperationalError as error:
         logging.error(f"Error connecting to PostgreSQL: {error}")
-        # sys.exit(1) # Consider if exiting here is always desired or should be handled by caller
         return None
-    except Exception as error: # Catch any other psycopg2 errors or general errors
+    except Exception as error:
         logging.error(f"An unexpected error occurred during database connection: {error}")
         return None
     return conn
@@ -72,10 +70,9 @@ def insert_benchmark_record(cursor: psycopg2.extensions.cursor, table_name: str,
         cursor.execute(sql, list(record_data.values()))
     except (psycopg2.DataError, psycopg2.IntegrityError) as error:
         logging.error(f"Data error inserting record: {error}\nSQL: {sql}\nRecord data: {record_data}")
-        # Optionally re-raise or handle more gracefully
-    except psycopg2.Error as error: # Catch other psycopg2 specific errors
+    except psycopg2.Error as error:
         logging.error(f"Database error inserting record: {error}\nSQL: {sql}\nRecord data: {record_data}")
-    except Exception as error: # Catch any other unexpected errors
+    except Exception as error:
         logging.error(f"Unexpected error inserting record: {error}\nSQL: {sql}\nRecord data: {record_data}")
 
 
@@ -315,7 +312,7 @@ def populate_data_for_client(
     cursor: psycopg2.extensions.cursor, 
     table_name: str, 
     client_name: str, 
-    client_version: Optional[str], # Added client_version
+    client_version: Optional[str],
     reports_dir: str, 
     aggregated_stats_map: Dict[str, Dict[str, Any]], 
     computer_specs: Dict[str, Any]
@@ -386,7 +383,7 @@ def populate_data_for_client(
 
                     record: Dict[str, Any] = {
                         'client_name': client_name,
-                        'client_version': client_version, # Added client_version
+                        'client_version': client_version,
                         'test_title': test_case_name_raw,
                         'max_mgas_s': agg_stats.get('max_mgas_s'),
                         'p50_mgas_s': agg_stats.get('p50_mgas_s'),
@@ -430,8 +427,7 @@ def main() -> None:
     parser.add_argument("--db-host", required=True, help="PostgreSQL database host.")
     parser.add_argument("--db-port", type=int, default=5432, help="PostgreSQL database port.")
     parser.add_argument("--db-user", required=True, help="PostgreSQL database user.")
-    # Note: For production systems, avoid passing passwords as CLI arguments.
-    # Consider using environment variables, a .pgpass file, or a secrets management tool.
+    # Note: Use github actions secrets for the password.
     parser.add_argument("--db-password", required=True, help="PostgreSQL database password.")
     parser.add_argument("--db-name", required=True, help="PostgreSQL database name.")
     parser.add_argument("--table-name", default="benchmark_data", help="Name of the target table in the database.")
@@ -462,7 +458,6 @@ def main() -> None:
         sys.exit(1)
     
     total_records_inserted = 0
-    # html_title_text: Optional[str] = None # Replaced by main_page_text_content
     main_page_text_content: Optional[str] = None
 
     # Try to read index.html and get its full text content
