@@ -469,7 +469,9 @@ def main() -> None:
                 main_page_text_content = soup.get_text(separator='\n')
                 if main_page_text_content:
                     logging.info(f"Successfully read and extracted text content from {html_index_path}")
-                    logging.debug(f"First 500 chars of extracted text from {html_index_path}: {main_page_text_content[:500].replace('\n', ' ')}") # Log a sample
+                    # Prepare the string for logging, ensuring no backslashes in f-string expressions
+                    log_sample_text = main_page_text_content[:500].replace('\n', ' ')
+                    logging.debug(f"First 500 chars of extracted text from {html_index_path}: {log_sample_text}")
                 else:
                     logging.warning(f"Could not extract any text content from {html_index_path} using soup.get_text()")
         except Exception as e:
