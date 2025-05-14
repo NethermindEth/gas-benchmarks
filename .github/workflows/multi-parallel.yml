@@ -225,6 +225,8 @@ jobs:
       DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
       DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
     steps:
+      - uses: actions/checkout@v4
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
