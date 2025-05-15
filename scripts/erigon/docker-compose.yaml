@@ -31,6 +31,7 @@ services:
     - "8008:8008/tcp"
     - "8551:8551"
     command:
+    - --externalcl
     - --private.api.addr=0.0.0.0:9090
     - --nat=any
     - --http
@@ -40,7 +41,6 @@ services:
     - --http.corsdomain=*
     - --http.api=web3,eth,net,engine
     - --txpool.disable
-    - --chain=${NETWORK}
     - --authrpc.addr=0.0.0.0
     - --authrpc.port=8551
     - --authrpc.vhosts=*

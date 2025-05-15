@@ -154,7 +154,7 @@ jobs:
           zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
@@ -179,7 +179,7 @@ jobs:
       - name: Install python dependencies
         run: pip install -r requirements.txt
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           path: combined-results
           merge-multiple: true
@@ -211,7 +211,48 @@ jobs:
           zip -r reports.zip reports
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: reports
           path: reports.zip
+
+  populate-db:
+    needs: combine-results
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install python dependencies for submodule
+        run: |
+          pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: combined-results # Download artifacts from previous jobs
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Populate Benchmark DB
+        run: |
+          python fill_postgres_db.py \
+            --db-host ${{ env.DB_HOST }} \
+            --db-port ${{ env.DB_PORT }} \
+            --db-user ${{ env.DB_USER }} \
+            --db-name monitoring \
+            --table-name gas_limit_benchmarks \
+            --db-password "${{ env.DB_PASSWORD }}" \
+            --log-level DEBUG \
+            --reports-dir 'extracted-results/reports/'
