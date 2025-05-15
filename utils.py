@@ -273,7 +273,7 @@ def print_computer_specs():
         'RAM': f'{psutil.virtual_memory().total / (1024 ** 3):.2f} GB',
         'CPU': cpu['brand_raw'],
         'Numbers of CPU': cpu['count'],
-        'CPU GHz': cpu['hz_actual_friendly']
+        'CPU GHz': cpu.get('hz_actual_friendly', 'N/A')
     }
 
     # Print the specifications
