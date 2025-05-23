@@ -2,6 +2,7 @@ services:
   execution-sync:
     container_name: gas-execution-client-sync
     image: ${EC_IMAGE_VERSION}
+    pull_policy: always
     networks:
       - gas
     volumes:
@@ -17,6 +18,7 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
     image: ${EC_IMAGE_VERSION}
+    pull_policy: always
     networks:
       - gas
     volumes:

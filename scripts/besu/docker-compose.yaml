@@ -4,6 +4,7 @@ services:
     container_name: gas-execution-client
     restart: unless-stopped
     image: ${EC_IMAGE_VERSION}
+    pull_policy: always
     networks:
       - gas
     volumes:
