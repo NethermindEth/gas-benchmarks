@@ -53,6 +53,13 @@ services:
       options:
         max-size: 10m
         max-file: "10"
+  alloy:
+    environment:
+      GA_METRICS_LABELS_EXECUTION_CLIENT: "reth"
+      GA_METRICS_ENDPOINT_PATH: "/debug/metrics/prometheus"
+    extends:
+      file: ../addons/alloy/compose.yaml
+      service: alloy
 networks:
   gas:
     name: gas-network

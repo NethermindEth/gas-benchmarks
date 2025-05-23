@@ -1,0 +1,30 @@
+prometheus.scrape "execution_client" {
+  targets = [
+    // execution client metrics endpoint
+    {
+      "__address__": sys.env("GA_METRICS_ENDPOINT"),
+      "instance": sys.env("GA_METRICS_LABELS_INSTANCE"),
+      "network": sys.env("GA_METRICS_LABELS_NETWORK"),
+      "testnet": sys.env("GA_METRICS_LABELS_TESTNET"),
+      "execution_client": sys.env("GA_METRICS_LABELS_EXECUTION_CLIENT"),
+    },
+  ]
+
+  forward_to = [
+    prometheus.remote_write.default.receiver,
+  ]
+
+  scrape_interval = sys.env("GA_METRICS_SCRAPE_INTERVAL")
+  metrics_path = sys.env("GA_METRICS_ENDPOINT_PATH")
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = sys.env("GA_PROMETHEUS_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = sys.env("GA_PROMETHEUS_REMOTE_WRITE_USERNAME")
+      password = sys.env("GA_PROMETHEUS_REMOTE_WRITE_PASSWORD")
+    }
+  }
+} 

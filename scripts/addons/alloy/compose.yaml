@@ -1,0 +1,28 @@
+services:
+  alloy:
+    image: grafana/alloy:latest
+    depends_on:
+      - execution
+    networks:
+      - gas
+    expose:
+      - 12345
+    ports:
+      - 12345:12345
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy
+    environment:
+      GA_METRICS_ENDPOINT: "execution:8008"
+      GA_METRICS_SCRAPE_INTERVAL: "12s"
+      GA_METRICS_ENDPOINT_PATH: "/metrics"
+      GA_METRICS_LABELS_INSTANCE: "${GA_METRICS_LABELS_INSTANCE}"
+      GA_METRICS_LABELS_TESTNET: "${GA_METRICS_LABELS_TESTNET}"
+      GA_METRICS_LABELS_EXECUTION_CLIENT: "${GA_METRICS_LABELS_EXECUTION_CLIENT}"
+      GA_PROMETHEUS_REMOTE_WRITE_URL: "${GA_PROMETHEUS_REMOTE_WRITE_URL}"
+      GA_PROMETHEUS_REMOTE_WRITE_USERNAME: "${GA_PROMETHEUS_REMOTE_WRITE_USERNAME}"
+      GA_PROMETHEUS_REMOTE_WRITE_PASSWORD: "${GA_PROMETHEUS_REMOTE_WRITE_PASSWORD}"
+    command:
+      - run
+      - --server.http.listen-address=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy

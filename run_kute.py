@@ -7,17 +7,60 @@ import subprocess
 
 from utils import print_computer_specs
 
+
+PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
+PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
+PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
+
 executables = {
-    'kute': './nethermind/tools/Nethermind.Tools.Kute/bin/Release/net8.0/Nethermind.Tools.Kute'
+    "kute": "./nethermind/tools/Nethermind.Tools.Kute/bin/Release/net8.0/Nethermind.Tools.Kute"
 }
 
 
-def run_command(test_case_file, jwt_secret, response, ec_url, kute_extra_arguments):
+def get_command_env(
+    client: str,
+    test_case_file: str,
+):
+    command_env = os.environ.copy()
+
+    prometheus_endpoint = command_env.get(PROMETHEUS_ENDPOINT_ENV_VAR, "")
+    prometheus_username = command_env.get(PROMETHEUS_USERNAME_ENV_VAR, "")
+    prometheus_password = command_env.get(PROMETHEUS_PASSWORD_ENV_VAR, "")
+
+    test_case_name = os.path.splitext(os.path.split(test_case_file)[-1])[0]
+
+    command_env["GA_PROMETHEUS_REMOTE_WRITE_URL"] = prometheus_endpoint
+    command_env["GA_PROMETHEUS_REMOTE_WRITE_USERNAME"] = prometheus_username
+    command_env["GA_PROMETHEUS_REMOTE_WRITE_PASSWORD"] = prometheus_password
+    command_env["GA_METRICS_LABELS_INSTANCE"] = f"{client}-{test_case_name}"
+    command_env["GA_METRICS_LABELS_TESTNET"] = "gas-benchmarks-testnet"
+    command_env["GA_METRICS_LABELS_EXECUTION_CLIENT"] = client
+
+    return command_env
+
+
+def run_command(
+    client,
+    test_case_file,
+    jwt_secret,
+    response,
+    ec_url,
+    kute_extra_arguments,
+):
     # Add logic here to run the appropriate command for each client
-    command = f'{executables["kute"]} -i {test_case_file} -s {jwt_secret} -r {response} -a {ec_url} ' \
-              f'{kute_extra_arguments} '
+    command = (
+        f"{executables['kute']} -i {test_case_file} -s {jwt_secret} -r {response} -a {ec_url} "
+        f"{kute_extra_arguments} "
+    )
     print(command)
-    results = subprocess.run(command, shell=True, capture_output=True, text=True)
+    # Prepare env variables
+    command_env = get_command_env(
+        client,
+        test_case_file,
+    )
+    results = subprocess.run(
+        command, shell=True, capture_output=True, text=True, env=command_env
+    )
     print(results.stderr)
     return results.stdout
 
@@ -29,26 +72,52 @@ def save_to(output_folder, file_name, content):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Benchmark script')
-    parser.add_argument('--testsPath', type=str, help='Path to test case folder', default='small_tests')
-    parser.add_argument('--client', type=str, help='Name of the client we are testing')
-    parser.add_argument('--run', type=int, help='Number of times the test was run', default=0)
-    parser.add_argument('--jwtPath', type=str,
-                        help='Path to the JWT secret used to communicate with the client you want to test')
-    parser.add_argument('--output', type=str, help='Output folder for metrics charts generation. If the folder does '
-                                                   'not exist will be created.',
-                        default='results')
+    parser = argparse.ArgumentParser(description="Benchmark script")
+    parser.add_argument(
+        "--testsPath", type=str, help="Path to test case folder", default="small_tests"
+    )
+    parser.add_argument("--client", type=str, help="Name of the client we are testing")
+    parser.add_argument(
+        "--run", type=int, help="Number of times the test was run", default=0
+    )
+    parser.add_argument(
+        "--jwtPath",
+        type=str,
+        help="Path to the JWT secret used to communicate with the client you want to test",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Output folder for metrics charts generation. If the folder does "
+        "not exist will be created.",
+        default="results",
+    )
     # Executables path
-    parser.add_argument('--dotnetPath', type=str, help='Path to dotnet executable, needed if testing nethermind and '
-                                                       'you need to use something different to dotnet.',
-                        default='dotnet')
-    parser.add_argument('--kutePath', type=str, help='Path to kute executable.',
-                        default=executables["kute"])
-    parser.add_argument('--kuteArguments', type=str, help='Extra arguments for Kute.',
-                        default='')
-    parser.add_argument('--ecURL', type=str, help='Execution client where we will be running kute url.',
-                        default='http://localhost:8551')
-    parser.add_argument('--warmupPath', type=str, help='Set path to warm up file.', default='')
+    parser.add_argument(
+        "--dotnetPath",
+        type=str,
+        help="Path to dotnet executable, needed if testing nethermind and "
+        "you need to use something different to dotnet.",
+        default="dotnet",
+    )
+    parser.add_argument(
+        "--kutePath",
+        type=str,
+        help="Path to kute executable.",
+        default=executables["kute"],
+    )
+    parser.add_argument(
+        "--kuteArguments", type=str, help="Extra arguments for Kute.", default=""
+    )
+    parser.add_argument(
+        "--ecURL",
+        type=str,
+        help="Execution client where we will be running kute url.",
+        default="http://localhost:8551",
+    )
+    parser.add_argument(
+        "--warmupPath", type=str, help="Set path to warm up file.", default=""
+    )
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -58,8 +127,8 @@ def main():
     jwt_path = args.jwtPath
     execution_url = args.ecURL
     output_folder = args.output
-    executables['dotnet'] = args.dotnetPath
-    executables['kute'] = args.kutePath
+    executables["dotnet"] = args.dotnetPath
+    executables["kute"] = args.kutePath
     kute_arguments = args.kuteArguments
     warmup_file = args.warmupPath
     client = args.client
@@ -69,14 +138,18 @@ def main():
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    if warmup_file != '':
-        warmup_response_file = os.path.join(output_folder, f'warmup_{client}_response_{run}.txt')
-        warmup_response = run_command(warmup_file, jwt_path, warmup_response_file, execution_url, kute_arguments)
-        save_to(output_folder, f'warmup_{client}_results_{run}.txt', warmup_response)
+    if warmup_file != "":
+        warmup_response_file = os.path.join(
+            output_folder, f"warmup_{client}_response_{run}.txt"
+        )
+        warmup_response = run_command(
+            warmup_file, jwt_path, warmup_response_file, execution_url, kute_arguments
+        )
+        save_to(output_folder, f"warmup_{client}_results_{run}.txt", warmup_response)
 
     # Print Computer specs
     computer_specs = print_computer_specs()
-    save_to(output_folder, 'computer_specs.txt', computer_specs)
+    save_to(output_folder, "computer_specs.txt", computer_specs)
 
     # if test case path is a folder, run all the test cases in the folder
     if os.path.isdir(tests_paths):
@@ -85,28 +158,48 @@ def main():
             if len(files) == 0:
                 continue
             for file in files:
-                if file.endswith('metadata.txt'):
+                if file.endswith("metadata.txt"):
                     continue
                 tests_cases.append(os.path.join(root, file))
         for test_case_path in tests_cases:
-            name = test_case_path.split('/')[-1].split('.')[0]
-            response_file = os.path.join(output_folder, f'{client}_response_{run}_{name}.txt')
-            print(f"Running {client} for the {run} time with test case {test_case_path}")
-            response = run_command(test_case_path, jwt_path, response_file, execution_url, kute_arguments)
+            name = test_case_path.split("/")[-1].split(".")[0]
+            response_file = os.path.join(
+                output_folder, f"{client}_response_{run}_{name}.txt"
+            )
+            print(
+                f"Running {client} for the {run} time with test case {test_case_path}"
+            )
+            response = run_command(
+                client,
+                test_case_path,
+                jwt_path,
+                response_file,
+                execution_url,
+                kute_arguments,
+            )
             # Print docker compose logs for debugging
             # command = f'docker compose -f scripts/{client}/docker-compose.yaml logs > {output_folder}/docker_logs_{client}_{run}_{name}.txt'
             # subprocess.run(command, shell=True, capture_output=True, text=True)
-            save_to(output_folder, f'{client}_results_{run}_{name}.txt',
-                    response)
+            save_to(output_folder, f"{client}_results_{run}_{name}.txt", response)
         return
     else:
-        response_file = os.path.join(output_folder, f'{client}_response_{run}.txt')
+        response_file = os.path.join(output_folder, f"{client}_response_{run}.txt")
         print(f"Running {client} for the {run} time with test case {tests_paths}")
-        response = run_command(tests_paths, jwt_path, response_file, execution_url, kute_arguments)
-        test_case_without_extension = os.path.splitext(tests_paths.split('/')[-1])[0]
-        save_to(output_folder, f'{client}_results_{run}_{test_case_without_extension}.txt',
-                response)
+        response = run_command(
+            client,
+            tests_paths,
+            jwt_path,
+            response_file,
+            execution_url,
+            kute_arguments,
+        )
+        test_case_without_extension = os.path.splitext(tests_paths.split("/")[-1])[0]
+        save_to(
+            output_folder,
+            f"{client}_results_{run}_{test_case_without_extension}.txt",
+            response,
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
