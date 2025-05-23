@@ -8,10 +8,6 @@ import yaml
 
 from utils import print_computer_specs
 
-PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
-PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
-PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
-
 
 def run_command(client, run_path):
     # Add logic here to run the appropriate command for each client
@@ -26,9 +22,6 @@ def set_env(
     client,
     el_images,
     run_path,
-    prometheus_endpoint="",
-    prometheus_username="",
-    prometheus_password="",
 ):
     if client == "nethermind":
         specifics = "CHAINSPEC_PATH=/tmp/chainspec.json"
@@ -42,12 +35,6 @@ def set_env(
         "EC_DATA_DIR=./execution-data\n"
         "EC_JWT_SECRET_PATH=/tmp/jwtsecret\n"
         f"{specifics}"
-        f"GA_PROMETHEUS_REMOTE_WRITE_URL={prometheus_endpoint}"
-        f"GA_PROMETHEUS_REMOTE_WRITE_USERNAME={prometheus_username}"
-        f"GA_PROMETHEUS_REMOTE_WRITE_PASSWORD='{prometheus_password}'"
-        f"GA_METRICS_LABELS_INSTANCE={client}"
-        f"GA_METRICS_LABELS_TESTNET=gas-benchmarks-testnet"
-        f"GA_METRICS_LABELS_EXECUTION_CLIENT={client}"
     )
 
     env_file_path = os.path.join(run_path, ".env")
@@ -78,11 +65,6 @@ def main():
 
     # Parse command-line arguments
     args = parser.parse_args()
-
-    # Get Prometheus config from environment variables
-    prometheus_endpoint = os.getenv(PROMETHEUS_ENDPOINT_ENV_VAR)
-    prometheus_username = os.getenv(PROMETHEUS_USERNAME_ENV_VAR)
-    prometheus_password = os.getenv(PROMETHEUS_PASSWORD_ENV_VAR)
 
     # Get client name and test case folder from command-line arguments
     client = args.client
@@ -117,9 +99,6 @@ def main():
         client_without_tag,
         el_images,
         run_path,
-        prometheus_endpoint=prometheus_endpoint,
-        prometheus_username=prometheus_username,
-        prometheus_password=prometheus_password,
     )
 
     # Start the client
