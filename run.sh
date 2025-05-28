@@ -6,7 +6,7 @@ WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon"
 RUNS=8
 IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
-FILTER='150M'
+OPCODES_WARMUP_FILTER='150M'
 OPCODES_WARMUP_COUNT=1
 
 # Parse command line arguments
@@ -17,7 +17,7 @@ while getopts "t:w:c:r:i:f:o:x" opt; do
     c) CLIENTS="$OPTARG" ;;
     r) RUNS="$OPTARG" ;;
     i) IMAGES="$OPTARG" ;;
-    f) FILTER="$OPTARG" ;;
+    f) OPCODES_WARMUP_FILTER="$OPTARG" ;;
     o) OPCODES_WARMUP_COUNT="$OPTARG" ;;
     *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-f filter] [-o opcodesWarmupCount] [-x]" >&2
        exit 1 ;;
@@ -53,11 +53,10 @@ for run in $(seq 1 $RUNS); do
       fi
 
       # Prepare temp dir for filtered scenarios (if needed)
-      if [ -n "$FILTER" ]; then
+      if [ -n "$OPCODES_WARMUP_FILTER" ]; then
         TMP_DIR=$(mktemp -d)
-        echo "Filtering scenarios in $test_dir for '$FILTER'..."
-        # Copy only matching scenario files (json/yaml)
-        grep -Rl --include="*.txt" "$FILTER" "$test_dir" | while read -r src; do
+        echo "Filtering scenarios in $test_dir for '$OPCODES_WARMUP_FILTER'..."
+        grep -Rl --include="*.txt" "$OPCODES_WARMUP_FILTER" "$test_dir" | while read -r src; do
           cp "$src" "$TMP_DIR"
         done
         TEST_DIR_TO_USE="$TMP_DIR"
@@ -69,18 +68,18 @@ for run in $(seq 1 $RUNS); do
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
         echo 'Running warmup scenarios - warmup number: $warmup_count...'
         if [ -z "$WARMUP_FILE" ]; then
-          python3 run_kute.py --output warmupresults --testsPath "$TEST_DIR_TO_USE" --jwtPath /tmp/jwtsecret --client $client --run $run
+          python3 run_kute.py --output warmupresults --testsPath "$TEST_DIR_TO_USE"/Address_150M.txt --jwtPath /tmp/jwtsecret --client $client --run $run
         else
-          python3 run_kute.py --output warmupresults --testsPath "$TEST_DIR_TO_USE" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
+          python3 run_kute.py --output warmupresults --testsPath "$TEST_DIR_TO_USE"/Address_150M.txt --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
         fi
       done
       
       # Actual run
       echo 'Running measured scenarios...'
       if [ -z "$WARMUP_FILE" ]; then
-        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+        python3 run_kute.py --output results --testsPath "$test_dir"/Address_150M.txt --jwtPath /tmp/jwtsecret --client $client --run $run
       else
-        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
+        python3 run_kute.py --output results --testsPath "$test_dir"/Address_150M.txt --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
       fi
 
       cl_name=$(echo "$client" | cut -d '_' -f 1)
