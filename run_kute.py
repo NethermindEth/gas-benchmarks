@@ -8,7 +8,7 @@ import subprocess
 from utils import print_computer_specs
 
 executables = {
-    'kute': './nethermind/tools/Nethermind.Tools.Kute/bin/Release/net8.0/Nethermind.Tools.Kute'
+    'kute': './nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release'
 }
 
 
