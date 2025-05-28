@@ -59,6 +59,7 @@ for run in $(seq 1 $RUNS); do
         grep -Rl --include="*.txt" "$OPCODES_WARMUP_FILTER" "$test_dir" | while read -r src; do
           cp "$src" "$TMP_DIR"
         done
+        ls $TMP_DIR
         TEST_DIR_TO_USE="$TMP_DIR"
       else
         TEST_DIR_TO_USE="$test_dir"
