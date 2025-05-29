@@ -12,7 +12,7 @@ PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
 PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
 
 executables = {
-    "kute": "./nethermind/tools/Nethermind.Tools.Kute/bin/Release/net8.0/Nethermind.Tools.Kute"
+    "kute": "./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute"
 }
 
 
