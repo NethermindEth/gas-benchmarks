@@ -2,24 +2,23 @@
 
 # Default inputs
 TEST_PATH="tests/"
+WARMUP_OPCODES_PATH="warmup-tests/"
 WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon"
 RUNS=8
 IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
-OPCODES_WARMUP_FILTER='150M'
-OPCODES_WARMUP_COUNT=1
+OPCODES_WARMUP_COUNT=10
 
 # Parse command line arguments
-while getopts "t:w:c:r:i:f:o:x" opt; do
+while getopts "t:w:c:r:i:o:x" opt; do
   case $opt in
     t) TEST_PATH="$OPTARG" ;;
     w) WARMUP_FILE="$OPTARG" ;;
     c) CLIENTS="$OPTARG" ;;
     r) RUNS="$OPTARG" ;;
     i) IMAGES="$OPTARG" ;;
-    f) OPCODES_WARMUP_FILTER="$OPTARG" ;;
     o) OPCODES_WARMUP_COUNT="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-f filter] [-o opcodesWarmupCount] [-x]" >&2
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-x]" >&2
        exit 1 ;;
   esac
 done
@@ -52,26 +51,13 @@ for run in $(seq 1 $RUNS); do
         python3 setup_node.py --client $client --imageBulk "$IMAGES"
       fi
 
-      # Prepare temp dir for filtered scenarios (if needed)
-      if [ -n "$OPCODES_WARMUP_FILTER" ]; then
-        TMP_DIR=$(mktemp -d)
-        echo "Filtering scenarios in $test_dir for '$OPCODES_WARMUP_FILTER'..."
-        grep -Rl --include="*.txt" "$OPCODES_WARMUP_FILTER" "$test_dir" | while read -r src; do
-          cp "$src" "$TMP_DIR"
-        done
-        ls $TMP_DIR
-        TEST_DIR_TO_USE="$TMP_DIR"
-      else
-        TEST_DIR_TO_USE="$test_dir"
-      fi
-
       # Warmup run
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
         echo 'Running warmup scenarios - warmup number: $warmup_count...'
         if [ -z "$WARMUP_FILE" ]; then
-          python3 run_kute.py --output warmupresults --testsPath "$TEST_DIR_TO_USE"/Address_150M.txt --jwtPath /tmp/jwtsecret --client $client --run $run
+          python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH"/Address_150M.txt --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments -f engine_newPayloadV[234]
         else
-          python3 run_kute.py --output warmupresults --testsPath "$TEST_DIR_TO_USE"/Address_150M.txt --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
+          python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH"/Address_150M.txt --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run --kuteArguments -f engine_newPayloadV[234]
         fi
       done
       
