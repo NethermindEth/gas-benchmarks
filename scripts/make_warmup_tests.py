@@ -3,60 +3,66 @@ import argparse, json, shutil
 from pathlib import Path
 
 def bump_last_nibble(h: str) -> str:
-    """If h is a hex string like '0x...', bump its last nibble."""
+    """Increment the final hex digit of a 0x... string, mod 16."""
     if not (h.startswith("0x") and len(h) > 2):
         return h
-    last = h[-1]
     try:
-        new_last = format((int(last, 16) + 1) % 16, 'x')
-        return h[:-1] + new_last
+        last = int(h[-1], 16)
     except ValueError:
         return h
+    return h[:-1] + format((last + 1) % 16, 'x')
+
+def process_line(line: str, counters: dict) -> str:
+    line = line.rstrip("\n")
+    if not line.strip():
+        return "\n"
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        return line + "\n"
+
+    # Only touch engine_newPayloadV3
+    if obj.get("method") == "engine_newPayloadV3" and isinstance(obj.get("params"), list):
+        params = obj["params"]
+        if params and isinstance(params[0], dict):
+            payload = params[0]
+            sr = payload.get("stateRoot")
+            if isinstance(sr, str):
+                new = bump_last_nibble(sr)
+                if new != sr:
+                    payload["stateRoot"] = new
+                    counters["bumped"] += 1
+
+    counters["total_lines"] += 1
+    return json.dumps(obj) + "\n"
 
 def main():
     p = argparse.ArgumentParser(
-        description="Mirror tests/*.txt → warmup-tests/*.txt, bumping each JSON's stateRoot nibble"
+        description="Mirror tests → warmup-tests, bumping only engine_newPayloadV3.stateRoot"
     )
-    p.add_argument("-s", "--source", default="tests", help="Source tests root")
-    p.add_argument("-d", "--dest",   default="warmup-tests", help="Destination root")
+    p.add_argument("-s", "--source", default="tests", help="Source directory")
+    p.add_argument("-d", "--dest",   default="warmup-tests", help="Destination directory")
     args = p.parse_args()
 
     src_root = Path(args.source)
     dst_root = Path(args.dest)
 
-    # Recreate dest
     if dst_root.exists():
         shutil.rmtree(dst_root)
     dst_root.mkdir(parents=True)
 
-    total_lines = 0
-    bumped = 0
+    counters = {"total_lines": 0, "bumped": 0}
 
     for src in src_root.rglob("*.txt"):
         rel = src.relative_to(src_root)
         dst = dst_root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
 
-        with src.open("r") as fin, dst.open("w") as fout:
+        with src.open() as fin, dst.open("w") as fout:
             for line in fin:
-                total_lines += 1
-                line = line.rstrip("\n")
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    fout.write(line + "\n")
-                    continue
+                fout.write(process_line(line, counters))
 
-                if isinstance(obj, dict) and "stateRoot" in obj and isinstance(obj["stateRoot"], str):
-                    orig = obj["stateRoot"]
-                    new = bump_last_nibble(orig)
-                    if new != orig:
-                        bumped += 1
-                        obj["stateRoot"] = new
-
-                fout.write(json.dumps(obj) + "\n")
-
-    print(f"Processed {total_lines} lines; bumped {bumped} stateRoot values into '{dst_root}'")
+    print(f"Processed {counters['total_lines']} payload lines; bumped {counters['bumped']} stateRoot values into '{dst_root}'")
 
 if __name__ == "__main__":
     main()
