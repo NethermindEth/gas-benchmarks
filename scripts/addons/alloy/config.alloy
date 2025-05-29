@@ -142,9 +142,9 @@ loki.write "remote" {
     collector = "alloy-external",
     project = sys.env("NETHERMIND_PROJECT"),
     external_provider = sys.env("EXTERNAL_PROVIDER"),
-    instance = sys.env("GA_METRICS_LABELS_INSTANCE"),
-    network = sys.env("GA_METRICS_LABELS_NETWORK"),
-    testnet = sys.env("GA_METRICS_LABELS_TESTNET"),
-    execution_client = sys.env("GA_METRICS_LABELS_EXECUTION_CLIENT"),
+    instance = sys.env("METRICS_LABELS_INSTANCE"),
+    network = sys.env("METRICS_LABELS_NETWORK"),
+    testnet = sys.env("METRICS_LABELS_TESTNET"),
+    execution_client = sys.env("METRICS_LABELS_EXECUTION_CLIENT"),
   }
 }
