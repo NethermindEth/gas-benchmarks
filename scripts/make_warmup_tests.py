@@ -1,45 +1,44 @@
 #!/usr/bin/env python3
-import os
-import json
-import shutil
+import json, shutil
 from pathlib import Path
 
-# adjust this to your real tests root
 SRC_ROOT = Path("tests")
 DST_ROOT = Path("warmup-tests")
 
-# clean out any old data
+# Recreate warmup-tests/
 if DST_ROOT.exists():
     shutil.rmtree(DST_ROOT)
 DST_ROOT.mkdir(parents=True)
 
-def bump_hex_digit(hchar: str) -> str:
-    """Increment a single hex digit (0–f) mod 16."""
-    val = int(hchar, 16)
-    return hex((val + 1) % 16)[2:]
+def bump_last_nibble(hroot: str) -> str:
+    """Given a hex string starting with 0x, bump the last hex digit mod16."""
+    if not hroot.startswith("0x") or len(hroot) < 3:
+        return hroot
+    last = hroot[-1]
+    try:
+        new_last = format((int(last, 16) + 1) % 16, 'x')
+        return hroot[:-1] + new_last
+    except ValueError:
+        return hroot
 
 for src in SRC_ROOT.rglob("*.txt"):
-    # skip dirs that still have subdirs
-    if any(src.parent.iterdir()):
-        # ensure we're at a leaf directory
-        if any(p.is_dir() for p in src.parent.iterdir()):
-            continue
-
     rel = src.relative_to(SRC_ROOT)
     dst = DST_ROOT / rel
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     with src.open() as fin, dst.open("w") as fout:
         for line in fin:
-            line = line.strip()
-            if not line:
+            line = line.rstrip("\n")
+            if not line.strip():
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                fout.write(line + "\n")
                 continue
 
-            obj = json.loads(line)
-            sr = obj.get("stateRoot", "")
-            if sr.startswith("0x") and len(sr) > 3:
-                # bump the last hex char
-                new_last = bump_hex_digit(sr[-1])
-                obj["stateRoot"] = sr[:-1] + new_last
-
+            if "stateRoot" in obj:
+                obj["stateRoot"] = bump_last_nibble(obj["stateRoot"])
             fout.write(json.dumps(obj) + "\n")
+
+print(f"✓ Generated {sum(1 for _ in DST_ROOT.rglob('*.txt'))} files in {DST_ROOT}")
