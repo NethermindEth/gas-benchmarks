@@ -3,6 +3,7 @@ services:
     image: grafana/alloy:latest
     depends_on:
       - execution
+    restart: unless-stopped
     networks:
       - gas
     expose:
@@ -11,18 +12,16 @@ services:
       - 12345:12345
     volumes:
       - ./config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      GA_METRICS_ENDPOINT: "execution:8008"
-      GA_METRICS_SCRAPE_INTERVAL: "12s"
-      GA_METRICS_ENDPOINT_PATH: "/metrics"
-      GA_METRICS_LABELS_INSTANCE: "${GA_METRICS_LABELS_INSTANCE}"
-      GA_METRICS_LABELS_TESTNET: "${GA_METRICS_LABELS_TESTNET}"
-      GA_METRICS_LABELS_EXECUTION_CLIENT: "${GA_METRICS_LABELS_EXECUTION_CLIENT}"
-      GA_PROMETHEUS_REMOTE_WRITE_URL: "${GA_PROMETHEUS_REMOTE_WRITE_URL}"
-      GA_PROMETHEUS_REMOTE_WRITE_USERNAME: "${GA_PROMETHEUS_REMOTE_WRITE_USERNAME}"
-      GA_PROMETHEUS_REMOTE_WRITE_PASSWORD: "${GA_PROMETHEUS_REMOTE_WRITE_PASSWORD}"
-    command:
-      - run
-      - --server.http.listen-address=0.0.0.0:12345
-      - --storage.path=/var/lib/alloy/data
-      - /etc/alloy/config.alloy
+      METRICS_SCRAPE_INTERVAL: "12s"
+      METRICS_ENDPOINT_PATH: "/metrics"
+      METRICS_LABELS_INSTANCE: "${GA_METRICS_LABELS_INSTANCE}"
+      METRICS_LABELS_TESTNET: "${GA_METRICS_LABELS_TESTNET}"
+      METRICS_LABELS_EXECUTION_CLIENT: "${GA_METRICS_LABELS_EXECUTION_CLIENT}"
+      PROMETHEUS_REMOTE_WRITE_URL: "${GA_PROMETHEUS_REMOTE_WRITE_URL}"
+      LOKI_REMOTE_WRITE_URL: "${GA_LOKI_REMOTE_WRITE_URL}"
+      NETHERMIND_PROJECT: "core-gas-benchmarking"
+      EXTERNAL_PROVIDER: "github-gas-benchmarking"
+      BASIC_AUTH_USERNAME: "${GA_PROMETHEUS_REMOTE_WRITE_USERNAME}"
+      BASIC_AUTH_PASSWORD: "${GA_PROMETHEUS_REMOTE_WRITE_PASSWORD}"

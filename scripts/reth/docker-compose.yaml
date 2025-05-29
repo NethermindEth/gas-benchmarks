@@ -53,10 +53,14 @@ services:
       options:
         max-size: 10m
         max-file: "10"
+    labels:
+      metrics_enabled: "true"
+      metrics_port: "8008"
+      logs_enabled: "false"
   alloy:
     environment:
-      GA_METRICS_LABELS_EXECUTION_CLIENT: "reth"
-      GA_METRICS_ENDPOINT_PATH: "/debug/metrics/prometheus"
+      METRICS_LABELS_EXECUTION_CLIENT: "reth"
+      METRICS_ENDPOINT_PATH: "/debug/metrics/prometheus"
     extends:
       file: ../addons/alloy/compose.yaml
       service: alloy
