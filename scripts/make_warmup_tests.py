@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-import argparse, json, shutil
+import argparse, json, shutil, os
 from pathlib import Path
 
+# your real genesis root
+GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
+
 def bump_last_nibble(h: str) -> str:
-    """Increment the final hex digit of a 0x... string, mod 16."""
-    if not (h.startswith("0x") and len(h) > 2):
-        return h
+    if not (h.startswith("0x") and len(h) > 2): return h
     try:
         last = int(h[-1], 16)
     except ValueError:
@@ -14,55 +15,44 @@ def bump_last_nibble(h: str) -> str:
 
 def process_line(line: str, counters: dict) -> str:
     line = line.rstrip("\n")
-    if not line.strip():
+    if not line.strip(): 
         return "\n"
     try:
         obj = json.loads(line)
     except json.JSONDecodeError:
         return line + "\n"
 
-    # Only touch engine_newPayloadV3
-    if obj.get("method") == "engine_newPayloadV3" and isinstance(obj.get("params"), list):
-        params = obj["params"]
-        if params and isinstance(params[0], dict):
-            payload = params[0]
-            sr = payload.get("stateRoot")
-            if isinstance(sr, str):
-                new = bump_last_nibble(sr)
-                if new != sr:
-                    payload["stateRoot"] = new
-                    counters["bumped"] += 1
+    if obj.get("method") == "engine_newPayloadV3":
+        payload = obj["params"][0]
+        # force the valid root, then bump it
+        payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
+        counters["bumped"] += 1
 
-    counters["total_lines"] += 1
+    counters["total"] += 1
     return json.dumps(obj) + "\n"
 
 def main():
-    p = argparse.ArgumentParser(
-        description="Mirror tests → warmup-tests, bumping only engine_newPayloadV3.stateRoot"
-    )
-    p.add_argument("-s", "--source", default="tests", help="Source directory")
-    p.add_argument("-d", "--dest",   default="warmup-tests", help="Destination directory")
+    p = argparse.ArgumentParser()
+    p.add_argument("-s","--source",default="tests")
+    p.add_argument("-d","--dest",  default="warmup-tests")
     args = p.parse_args()
 
-    src_root = Path(args.source)
-    dst_root = Path(args.dest)
+    src = Path(args.source)
+    dst = Path(args.dest)
+    if dst.exists(): shutil.rmtree(dst)
+    dst.mkdir(parents=True)
 
-    if dst_root.exists():
-        shutil.rmtree(dst_root)
-    dst_root.mkdir(parents=True)
+    counters = {"total":0, "bumped":0}
 
-    counters = {"total_lines": 0, "bumped": 0}
-
-    for src in src_root.rglob("*.txt"):
-        rel = src.relative_to(src_root)
-        dst = dst_root / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-
-        with src.open() as fin, dst.open("w") as fout:
+    for txt in src.rglob("*.txt"):
+        rel = txt.relative_to(src)
+        out = dst/rel
+        out.parent.mkdir(exist_ok=True, parents=True)
+        with txt.open() as fin, out.open("w") as fout:
             for line in fin:
                 fout.write(process_line(line, counters))
 
-    print(f"Processed {counters['total_lines']} payload lines; bumped {counters['bumped']} stateRoot values into '{dst_root}'")
+    print(f"Processed {counters['total']} payload lines, bumped {counters['bumped']} stateRoots into {dst}")
 
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
