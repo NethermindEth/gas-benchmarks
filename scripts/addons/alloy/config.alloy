@@ -14,6 +14,13 @@ discovery.relabel "filter_metrics_enabled" {
     action        = "keep"
   }
 
+  // Ensure metrics from other containers are not included
+  rule {
+    source_labels = ["__meta_docker_container_label_instance"]
+    regex         = sys.env("METRICS_LABELS_INSTANCE")
+    action        = "keep"
+  }
+
   rule {
     source_labels = ["__meta_docker_container_label_metrics_port"]
     target_label  = "__metrics_port"
@@ -48,6 +55,13 @@ discovery.relabel "filter_logs_enabled" {
     rule {
         source_labels = ["__meta_docker_container_label_logs_enabled"]
         regex         = "true"
+        action        = "keep"
+    }
+
+    // Ensure logs from other containers are not included
+    rule {
+        source_labels = ["__meta_docker_container_label_instance"]
+        regex         = sys.env("METRICS_LABELS_INSTANCE")
         action        = "keep"
     }
 

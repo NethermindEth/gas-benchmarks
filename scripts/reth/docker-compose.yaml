@@ -57,6 +57,7 @@ services:
       metrics_enabled: "true"
       metrics_port: "8008"
       logs_enabled: "false"
+      instance: "${GA_METRICS_LABELS_INSTANCE}"
   alloy:
     environment:
       METRICS_LABELS_EXECUTION_CLIENT: "reth"

@@ -6,6 +6,7 @@ import subprocess
 from utils import print_computer_specs
 
 
+LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
 PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
 PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
 PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
@@ -21,12 +22,14 @@ def get_command_env(
 ):
     command_env = os.environ.copy()
 
+    loki_endpoint = command_env.get(LOKI_ENDPOINT_ENV_VAR, "")
     prometheus_endpoint = command_env.get(PROMETHEUS_ENDPOINT_ENV_VAR, "")
     prometheus_username = command_env.get(PROMETHEUS_USERNAME_ENV_VAR, "")
     prometheus_password = command_env.get(PROMETHEUS_PASSWORD_ENV_VAR, "")
 
     test_case_name = os.path.splitext(os.path.split(test_case_file)[-1])[0]
 
+    command_env["GA_LOKI_REMOTE_WRITE_URL"] = loki_endpoint
     command_env["GA_PROMETHEUS_REMOTE_WRITE_URL"] = prometheus_endpoint
     command_env["GA_PROMETHEUS_REMOTE_WRITE_USERNAME"] = prometheus_username
     command_env["GA_PROMETHEUS_REMOTE_WRITE_PASSWORD"] = prometheus_password
