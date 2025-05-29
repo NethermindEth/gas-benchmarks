@@ -53,7 +53,7 @@ for run in $(seq 1 $RUNS); do
 
       # Warmup run
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
-        echo 'Running warmup scenarios - warmup number: $warmup_count...'
+        echo "Running warmup scenarios - warmup number: $warmup_count..."
         if [ -z "$WARMUP_FILE" ]; then
           python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH"/Address_150M.txt --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
         else
