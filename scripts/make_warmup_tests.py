@@ -2,7 +2,7 @@
 import json, shutil
 from pathlib import Path
 
-SRC_ROOT = Path("tests")
+SRC_ROOT = Path("tests-vm")
 DST_ROOT = Path("warmup-tests")
 
 # Recreate warmup-tests/
