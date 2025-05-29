@@ -7,7 +7,7 @@ WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon"
 RUNS=8
 IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
-OPCODES_WARMUP_COUNT=10
+OPCODES_WARMUP_COUNT=1
 
 # Parse command line arguments
 while getopts "t:w:c:r:i:o:x" opt; do
