@@ -42,6 +42,10 @@ def process_line(line: str, counters: dict) -> str:
         # 3) otherwise bump stateRoot
         payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
         counters["bumped"] += 1
+
+       # 4) overwrite blockNumber if requested
+       if block_number is not None:
+           payload["blockNumber"] = block_number
     else:
         # drop every non-newPayloadV3
         counters["dropped"] += 1
@@ -139,11 +143,15 @@ def main():
         rel = src.relative_to(src_root)
         out = dst_root / rel
         out.parent.mkdir(parents=True, exist_ok=True)
+        # reset per-file block counter
+        file_block = 1
         with src.open() as fin, out.open("w") as fout:
             for line in fin:
-                nl = process_line(line, counters)
+                nl = process_line(line, counters, file_block)
                 if nl:
                     fout.write(nl)
+                    # only bump when we actually emitted a payload
+                    file_block += 1
 
     print(
         f"Processed {counters['total']} payloads, "
