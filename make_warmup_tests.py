@@ -18,7 +18,7 @@ def bump_last_nibble(h: str) -> str:
         return h
     return h[:-1] + format((last + 1) % 16, 'x')
 
-def process_line(line: str, counters: dict) -> str:
+def process_line(line: str, counters: dict, block_number: int = None) -> str:
     line = line.rstrip("\n")
     if not line.strip():
         return "\n"
