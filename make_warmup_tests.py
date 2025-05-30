@@ -4,6 +4,7 @@ from pathlib import Path
 
 # your real genesis root
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
+IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
 
 def bump_last_nibble(h: str) -> str:
     if not (h.startswith("0x") and len(h) > 2):
@@ -113,7 +114,7 @@ def main():
 
     # Generate infra, send all invalid payloads, capture from logs valid block_hash, regenerate warmup tests
     subprocess.run(
-        ["python3", "setup_node.py", "--client", "geth"],
+        ["python3", "setup_node.py", "--client", "geth", "--imageBulk", "$IMAGES"],
         check=True
     )
     subprocess.run(
