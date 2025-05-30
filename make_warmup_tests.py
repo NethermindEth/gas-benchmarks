@@ -79,8 +79,6 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
     return replaced_files
 
 def main():
-    mkdir -p generationresults
-    
     p = argparse.ArgumentParser(
         description="Make warmup-tests: drop real-genesis blocks, bump others"
     )
