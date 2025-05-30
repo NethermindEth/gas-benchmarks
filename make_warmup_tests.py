@@ -28,16 +28,16 @@ def process_line(line: str, counters: dict, block_number: int = None) -> str:
         return line + "\n"
 
     if obj.get("method") == "engine_newPayloadV3":
-        payload = obj["params"][0]
+        payload = obj["params"][0]       
 
-        # 1) force the correct parentHash
-        payload["parentHash"] = GENESIS_PARENT
-
-        # 2) drop any payload that already uses the real genesis root
+        # 1) skip payload that already uses the real genesis root
         sr = payload.get("stateRoot")
         if sr == GENESIS_ROOT:
             counters["dropped"] += 1
-            return ""
+            return json.dumps(obj) + "\n"
+        
+        # 2) force the correct parentHash
+        payload["parentHash"] = GENESIS_PARENT
 
         # 3) otherwise bump stateRoot
         payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
@@ -112,6 +112,46 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
     print(f"[debug] total files changed: {replaced_files}")
     return replaced_files
 
+def chain_parenthashes(tests_root: Path, genesis_parent: str) -> int:
+    """
+    In-place: for every .txt under tests_root, parse each engine_newPayloadV3,
+    and set its parentHash to the previous payload's blockHash (or genesis_parent for the first).
+    Returns the number of files modified.
+    """
+    changed_files = 0
+
+    for txt in tests_root.rglob("*.txt"):
+        prev = genesis_parent
+        new_lines = []
+        file_changed = False
+
+        for raw in txt.read_text().splitlines(keepends=True):
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                new_lines.append(raw)
+                continue
+
+            if obj.get("method") == "engine_newPayloadV3":
+                payload = obj["params"][0]
+                old_parent = payload.get("parentHash")
+                # if it's not already the correct prev, patch it
+                if old_parent != prev:
+                    payload["parentHash"] = prev
+                    file_changed = True
+                # now bump prev to this payload's blockHash
+                prev = payload.get("blockHash", prev)
+
+                new_lines.append(json.dumps(obj) + "\n")
+            else:
+                new_lines.append(raw)
+
+        if file_changed:
+            txt.write_text("".join(new_lines))
+            changed_files += 1
+
+    return changed_files
+
 def teardown(cl_name: str):
     script_dir = Path("scripts") / cl_name
     if not script_dir.is_dir():
@@ -184,7 +224,11 @@ def main():
     fixed = fix_blockhashes(dst_root, mapping)
     print(f"✅ Replaced blockHash in {fixed} test file(s).")
 
-    # 4) cleanup docker & data
+    # 4) re-chain parentHash so each payload points to the prior blockHash
+    chained = chain_parenthashes(dst_root, GENESIS_PARENT)
+    print(f"🔗 Re-chained parentHash in {chained} file(s).")
+
+    # 5) cleanup docker & data
     #teardown("geth")
 
 if __name__ == "__main__":
