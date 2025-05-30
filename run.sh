@@ -40,6 +40,9 @@ LEAF_DIRS=$(find "$TEST_PATH" -type d | while read -r dir; do
   fi
 done)
 
+# regenerate warmup scenarios in case of new tests added
+python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
+
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
   for client in "${CLIENT_ARRAY[@]}"; do
