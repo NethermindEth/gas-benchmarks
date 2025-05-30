@@ -73,7 +73,7 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
         text = txt.read_text()
         new_text = text
         for got, want in mapping.items():
-            new_text = new_text.replace(got, want)
+            new_text = new_text.replace(want, got)
         if new_text != text:
             txt.write_text(new_text)
             replaced_files += 1
