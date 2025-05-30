@@ -166,7 +166,7 @@ def main():
     mapping = collect_mismatches("gas-execution-client")
     if not mapping:
         print("⚠️  No blockhash mismatches found; nothing to fix.")
-        teardown("geth")
+        #teardown("geth")
         return
 
     print("🔍 Found blockHash mismatches:", json.dumps(mapping, indent=2))
@@ -174,7 +174,7 @@ def main():
     print(f"✅ Replaced blockHash in {fixed} test file(s).")
 
     # 4) cleanup docker & data
-    teardown("geth")
+    #teardown("geth")
 
 if __name__ == "__main__":
     main()
