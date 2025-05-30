@@ -114,7 +114,11 @@ def main():
 
     # Generate infra, send all invalid payloads, capture from logs valid block_hash, regenerate warmup tests
     subprocess.run(
-        ["python3", "setup_node.py", "--client", "geth", "--imageBulk", "$IMAGES"],
+        [
+            "python3", "setup_node.py", 
+            "--client", "geth",
+            "--imageBulk", IMAGES,
+        ],
         check=True
     )
     subprocess.run(
