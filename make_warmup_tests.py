@@ -65,7 +65,9 @@ def collect_mismatches(container: str = "gas-execution-client") -> dict:
     for line in logs.splitlines():
         mo = pat.search(line)
         if mo:
-            want, got = mo.group(1), mo.group(2)
+            want_raw, got_raw = mo.group(1), mo.group(2)
+            want = "0x" + want_raw
+            got  = "0x" + got_raw
             m[got] = want
     return m
 
