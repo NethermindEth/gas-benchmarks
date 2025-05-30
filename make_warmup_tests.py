@@ -2,9 +2,12 @@
 import argparse, json, shutil, subprocess, re, sys
 from pathlib import Path
 
-# your real genesis root
-GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
-IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+# your real genesis roots
+GENESIS_ROOT   = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
+GENESIS_PARENT = "0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc"
+
+# your image‐bulk JSON
+IMAGES = '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
 
 def bump_last_nibble(h: str) -> str:
     if not (h.startswith("0x") and len(h) > 2):
@@ -26,18 +29,23 @@ def process_line(line: str, counters: dict) -> str:
 
     if obj.get("method") == "engine_newPayloadV3":
         payload = obj["params"][0]
+
+        # 1) force the correct parentHash
+        payload["parentHash"] = GENESIS_PARENT
+
+        # 2) drop any payload that already uses the real genesis root
         sr = payload.get("stateRoot")
-        # drop any payload that already uses the real genesis root
         if sr == GENESIS_ROOT:
             counters["dropped"] += 1
-            return ""  # skip this line entirely
+            return ""
 
-        # otherwise force genesis root + bump, then write
+        # 3) otherwise bump stateRoot
         payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
         counters["bumped"] += 1
     else:
+        # drop every non-newPayloadV3
         counters["dropped"] += 1
-        return "" # skip any line which is not newPayload as is not needed for warming
+        return ""
 
     counters["total"] += 1
     return json.dumps(obj) + "\n"
@@ -52,59 +60,62 @@ def collect_mismatches(container: str = "gas-execution-client") -> dict:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    pattern = re.compile(
-        r'blockhash mismatch, want ([0-9a-f]{64}), got ([0-9a-f]{64})'
-    )
-    mapping = {}
+    pat = re.compile(r'blockhash mismatch, want ([0-9a-f]{64}), got ([0-9a-f]{64})')
+    m = {}
     for line in logs.splitlines():
-        m = pattern.search(line)
-        if m:
-            want, got = m.group(1), m.group(2)
-            mapping[got] = want
-    return mapping
+        mo = pat.search(line)
+        if mo:
+            want, got = mo.group(1), mo.group(2)
+            m[got] = want
+    return m
 
 def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
     """
-    In-place replace all occurrences of each 'got' hash in mapping.keys()
-    with its 'want' in every .txt under tests_root. Returns number of files changed.
+    Only replace the payload.blockHash field in engine_newPayloadV3 lines,
+    swapping any 'got'→'want' according to mapping. Returns number of files changed.
     """
     replaced_files = 0
     for txt in tests_root.rglob("*.txt"):
-        text = txt.read_text()
-        new_text = text
-        for got, want in mapping.items():
-            new_text = new_text.replace(want, got)
-        if new_text != text:
-            txt.write_text(new_text)
+        changed = False
+        out_lines = []
+
+        for raw in txt.read_text().splitlines(keepends=True):
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                out_lines.append(raw)
+                continue
+
+            if obj.get("method") == "engine_newPayloadV3":
+                payload = obj["params"][0]
+                bh = payload.get("blockHash")
+                if bh in mapping:
+                    payload["blockHash"] = mapping[bh]
+                    changed = True
+                    out_lines.append(json.dumps(obj) + "\n")
+                    continue
+
+            out_lines.append(raw)
+
+        if changed:
+            txt.write_text("".join(out_lines))
             replaced_files += 1
+
     return replaced_files
 
 def teardown(cl_name: str):
-    # compute the directory
     script_dir = Path("scripts") / cl_name
     if not script_dir.is_dir():
-        raise FileNotFoundError(f"Directory not found: {script_dir}")
-
-    # 1) docker compose down
-    subprocess.run(
-        ["docker", "compose", "down"],
-        cwd=script_dir,
-        check=True
-    )
-
-    # 2) sudo rm -rf execution-data
-    exec_data = script_dir / "execution-data"
-    if exec_data.exists():
-        subprocess.run(
-            ["sudo", "rm", "-rf", str(exec_data)],
-            check=True
-        )
-    else:
-        print(f"[i] No execution-data directory at {exec_data}")
+        print(f"[!] No such directory {script_dir}, skipping teardown")
+        return
+    subprocess.run(["docker", "compose", "down"], cwd=script_dir, check=True)
+    data_dir = script_dir / "execution-data"
+    if data_dir.exists():
+        subprocess.run(["sudo", "rm", "-rf", str(data_dir)], check=True)
 
 def main():
     p = argparse.ArgumentParser(
-        description="Make warmup-tests: drop real-genesis blocks, bump others"
+        description="Make warmup-tests: drop real-genesis, bump others, fix parentHash + blockHash"
     )
     p.add_argument("-s","--source",default="tests-vm", help="Source root")
     p.add_argument("-d","--dest",  default="warmup-tests", help="Destination root")
@@ -112,63 +123,56 @@ def main():
 
     src_root = Path(args.source)
     dst_root = Path(args.dest)
-
     if dst_root.exists():
         shutil.rmtree(dst_root)
     dst_root.mkdir(parents=True)
 
     counters = {"total":0, "bumped":0, "dropped":0}
 
+    # 1) scan + bump + force parentHash
     for src in src_root.rglob("*.txt"):
         rel = src.relative_to(src_root)
         out = dst_root / rel
         out.parent.mkdir(parents=True, exist_ok=True)
         with src.open() as fin, out.open("w") as fout:
             for line in fin:
-                new_line = process_line(line, counters)
-                if new_line:  # only write non-empty
-                    fout.write(new_line)
+                nl = process_line(line, counters)
+                if nl:
+                    fout.write(nl)
 
     print(
-        f"Processed {counters['total']} lines, "
-        f"bumped {counters['bumped']} payloads, "
-        f"dropped {counters['dropped']} real-root payloads into '{dst_root}'"
+        f"Processed {counters['total']} payloads, "
+        f"bumped {counters['bumped']} stateRoots, "
+        f"dropped {counters['dropped']} into '{dst_root}'"
     )
 
-    # Generate infra, send all invalid payloads, capture from logs valid block_hash, regenerate warmup tests
+    # 2) spin up node & send invalid payloads
     subprocess.run(
-        [
-            "python3", "setup_node.py", 
-            "--client", "geth",
-            "--imageBulk", IMAGES,
-        ],
+        ["python3", "setup_node.py", "--client", "geth", "--imageBulk", IMAGES],
         check=True
     )
-    subprocess.run(
-        [
-            "python3", "run_kute.py",
-            "--output", "generationresults",
-            "--testsPath", str(dst_root),
-            "--jwtPath", "/tmp/jwtsecret",
-            "--client", "geth",
-            "--run", "1"
-        ],
-        check=True
-    )
-    
+    subprocess.run([
+        "python3", "run_kute.py",
+        "--output", "generationresults",
+        "--testsPath", str(dst_root),
+        "--jwtPath", "/tmp/jwtsecret",
+        "--client", "geth",
+        "--run", "1"
+    ], check=True)
+
+    # 3) collect mismatches & patch only blockHash fields
     mapping = collect_mismatches("gas-execution-client")
     if not mapping:
-        print("⚠️  No blockhash mismatches found in container logs; nothing to fix.")
+        print("⚠️  No blockhash mismatches found; nothing to fix.")
         teardown("geth")
         return
-    print("🔍  Collected mappings:")
-    print(json.dumps(mapping, indent=2))
-    
-    fixed = fix_blockhashes(dst_root, mapping)
-    print(f"Replaced blockhash in {fixed} test files ({len(mapping)} distinct mismatches).")
 
-    #cleanup
+    print("🔍 Found blockHash mismatches:", json.dumps(mapping, indent=2))
+    fixed = fix_blockhashes(dst_root, mapping)
+    print(f"✅ Replaced blockHash in {fixed} test file(s).")
+
+    # 4) cleanup docker & data
     teardown("geth")
 
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
