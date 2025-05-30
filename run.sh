@@ -54,16 +54,16 @@ for run in $(seq 1 $RUNS); do
       # Warmup run
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
         echo "Running warmup scenarios - warmup number: $warmup_count..."
-        if [ -z "$WARMUP_FILE" ]; then
-          python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
-        else
-          python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
-        fi
+        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
       done
       
       # Actual run
       echo 'Running measured scenarios...'
-      python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+      if [ -z "$WARMUP_FILE" ]; then
+        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+      else
+        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret -warmupPath "$WARMUP_FILE" --client $client --run $run
+      fi
 
       cl_name=$(echo "$client" | cut -d '_' -f 1)
       cd "scripts/$cl_name"
