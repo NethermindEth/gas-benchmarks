@@ -79,6 +79,29 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
             replaced_files += 1
     return replaced_files
 
+def teardown(cl_name: str):
+    # compute the directory
+    script_dir = Path("scripts") / cl_name
+    if not script_dir.is_dir():
+        raise FileNotFoundError(f"Directory not found: {script_dir}")
+
+    # 1) docker compose down
+    subprocess.run(
+        ["docker", "compose", "down"],
+        cwd=script_dir,
+        check=True
+    )
+
+    # 2) sudo rm -rf execution-data
+    exec_data = script_dir / "execution-data"
+    if exec_data.exists():
+        subprocess.run(
+            ["sudo", "rm", "-rf", str(exec_data)],
+            check=True
+        )
+    else:
+        print(f"[i] No execution-data directory at {exec_data}")
+
 def main():
     p = argparse.ArgumentParser(
         description="Make warmup-tests: drop real-genesis blocks, bump others"
@@ -139,6 +162,9 @@ def main():
         return
     fixed = fix_blockhashes(dst_root, mapping)
     print(f"Replaced blockhash in {fixed} test files ({len(mapping)} distinct mismatches).")
+
+    #cleanup
+    teardown("geth")
 
 if __name__=="__main__":
     main()
