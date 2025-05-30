@@ -112,8 +112,22 @@ def main():
     )
 
     # Generate infra, send all invalid payloads, capture from logs valid block_hash, regenerate warmup tests
-    python3 setup_node.py --client geth
-    python3 run_kute.py --output generationresults --testsPath "$dst_root" --jwtPath /tmp/jwtsecret --client geth --run 1
+    subprocess.run(
+        ["python3", "setup_node.py", "--client", "geth"],
+        check=True
+    )
+    subprocess.run(
+        [
+            "python3", "run_kute.py",
+            "--output", "generationresults",
+            "--testsPath", str(dst_root),
+            "--jwtPath", "/tmp/jwtsecret",
+            "--client", "geth",
+            "--run", "1"
+        ],
+        check=True
+    )
+    
     mapping = collect_mismatches("gas-execution-client")
     if not mapping:
         print("⚠️  No blockhash mismatches found in container logs; nothing to fix.")
