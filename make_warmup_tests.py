@@ -140,7 +140,8 @@ def chain_parenthashes(tests_root: Path, genesis_parent: str) -> int:
                     payload["parentHash"] = prev
                     file_changed = True
                 # now bump prev to this payload's blockHash
-                prev = payload.get("blockHash", prev)
+                if prev == genesis_parent:
+                    prev = payload.get("blockHash", prev)
 
                 new_lines.append(json.dumps(obj) + "\n")
             else:
@@ -197,9 +198,13 @@ def main():
         f"Processed {counters['total']} payloads, "
         f"bumped {counters['bumped']} stateRoots, "
         f"dropped {counters['dropped']} into '{dst_root}'"
-    )
+    )    
 
-    # 2) spin up node & send invalid payloads
+    # 2) re-chain parentHash so each payload points to the prior blockHash
+    chained = chain_parenthashes(dst_root, GENESIS_PARENT)
+    print(f"🔗 Re-chained parentHash in {chained} file(s).")
+
+    # 3) spin up node & send invalid payloads
     subprocess.run(
         ["python3", "setup_node.py", "--client", "geth", "--imageBulk", IMAGES],
         check=True
@@ -213,7 +218,7 @@ def main():
         "--run", "1"
     ], check=True)
 
-    # 3) collect mismatches & patch only blockHash fields
+    # 4) collect mismatches & patch only blockHash fields
     mapping = collect_mismatches("gas-execution-client")
     if not mapping:
         print("⚠️  No blockhash mismatches found; nothing to fix.")
@@ -223,10 +228,6 @@ def main():
     print("🔍 Found blockHash mismatches:", json.dumps(mapping, indent=2))
     fixed = fix_blockhashes(dst_root, mapping)
     print(f"✅ Replaced blockHash in {fixed} test file(s).")
-
-    # 4) re-chain parentHash so each payload points to the prior blockHash
-    chained = chain_parenthashes(dst_root, GENESIS_PARENT)
-    print(f"🔗 Re-chained parentHash in {chained} file(s).")
 
     # 5) cleanup docker & data
     #teardown("geth")
