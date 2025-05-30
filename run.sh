@@ -63,11 +63,7 @@ for run in $(seq 1 $RUNS); do
       
       # Actual run
       echo 'Running measured scenarios...'
-      if [ -z "$WARMUP_FILE" ]; then
-        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
-      else
-        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
-      fi
+      python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
 
       cl_name=$(echo "$client" | cut -d '_' -f 1)
       cd "scripts/$cl_name"
