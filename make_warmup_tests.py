@@ -45,7 +45,7 @@ def process_line(line: str, counters: dict, block_number: int = None) -> str:
 
         # 4) overwrite blockNumber if requested
         if block_number is not None:
-            payload["blockNumber"] = block_number
+            payload["blockNumber"] = hex(block_number)
     else:
         # drop every non-newPayloadV3
         counters["dropped"] += 1
