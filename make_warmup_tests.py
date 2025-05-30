@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, shutil
+import argparse, json, shutil, subprocess, re
 from pathlib import Path
 
 # your real genesis root
