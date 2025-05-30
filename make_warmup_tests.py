@@ -43,9 +43,9 @@ def process_line(line: str, counters: dict) -> str:
         payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
         counters["bumped"] += 1
 
-       # 4) overwrite blockNumber if requested
-       if block_number is not None:
-           payload["blockNumber"] = block_number
+        # 4) overwrite blockNumber if requested
+        if block_number is not None:
+            payload["blockNumber"] = block_number
     else:
         # drop every non-newPayloadV3
         counters["dropped"] += 1
