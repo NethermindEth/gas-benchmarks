@@ -92,7 +92,7 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
         new_text = text
         file_changed = False
 
-        for old, new in mapping.items():
+        for new, old in mapping.items():
             # build the exact phrase we want to swap
             before = f'"blockHash": "{old}"'
             after  = f'"blockHash": "{new}"'
