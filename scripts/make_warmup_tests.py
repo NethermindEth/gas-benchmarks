@@ -35,7 +35,8 @@ def process_line(line: str, counters: dict) -> str:
         payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
         counters["bumped"] += 1
     else:
-        return "" # skip any line which is not FCU as is not needed for warming
+        counters["dropped"] += 1
+        return "" # skip any line which is not newPayload as is not needed for warming
 
     counters["total"] += 1
     return json.dumps(obj) + "\n"
