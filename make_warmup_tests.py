@@ -70,40 +70,28 @@ def collect_mismatches(container: str = "gas-execution-client") -> dict:
             got  = "0x" + got_raw
             m[got] = want
     return m
-
+    
 def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
     """
-    Only replace the payload.blockHash field in engine_newPayloadV3 lines,
-    swapping any 'got'→'want' according to mapping. Returns number of files changed.
+    In-place, for every .txt under tests_root, replace
+      "blockHash": "<old>"
+    with
+      "blockHash": "<new>"
+    according to mapping {old: new}. Returns number of files changed.
     """
     replaced_files = 0
     for txt in tests_root.rglob("*.txt"):
-        changed = False
-        out_lines = []
-
-        for raw in txt.read_text().splitlines(keepends=True):
-            try:
-                obj = json.loads(raw)
-            except json.JSONDecodeError:
-                out_lines.append(raw)
-                continue
-
-            if obj.get("method") == "engine_newPayloadV3":
-                payload = obj["params"][0]
-                bh = payload.get("blockHash")
-                if bh in mapping:
-                    payload["blockHash"] = mapping[bh]
-                    changed = True
-                    out_lines.append(json.dumps(obj) + "\n")
-                    continue
-
-            out_lines.append(raw)
-
-        if changed:
-            txt.write_text("".join(out_lines))
+        text = txt.read_text()
+        new_text = text
+        for old, new in mapping.items():
+            # only touch the blockHash field
+            new_text = new_text.replace(
+                f'"blockHash": "{old}"',
+                f'"blockHash": "{new}"'
+            )
+        if new_text != text:
+            txt.write_text(new_text)
             replaced_files += 1
-
-    return replaced_files
 
 def teardown(cl_name: str):
     script_dir = Path("scripts") / cl_name
