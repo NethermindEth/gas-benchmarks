@@ -73,25 +73,40 @@ def collect_mismatches(container: str = "gas-execution-client") -> dict:
     
 def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
     """
-    In-place, for every .txt under tests_root, replace
+    In-place: for every .txt under tests_root, replace
       "blockHash": "<old>"
     with
       "blockHash": "<new>"
-    according to mapping {old: new}. Returns number of files changed.
+    according to mapping {old: new}.
+    Returns number of files changed.
     """
     replaced_files = 0
+
+    # Debug: print the mapping so you can confirm the exact keys
+    print("[debug] blockHash mapping:")
+    for old, new in mapping.items():
+        print(f"  {old!r} → {new!r}")
+
     for txt in tests_root.rglob("*.txt"):
-        text = txt.read_text()
+        text    = txt.read_text()
         new_text = text
+        file_changed = False
+
         for old, new in mapping.items():
-            # only touch the blockHash field
-            new_text = new_text.replace(
-                f'"blockHash": "{old}"',
-                f'"blockHash": "{new}"'
-            )
-        if new_text != text:
+            # build the exact phrase we want to swap
+            before = f'"blockHash": "{old}"'
+            after  = f'"blockHash": "{new}"'
+            if before in new_text:
+                file_changed = True
+                print(f"[debug] {txt}: replacing {before} → {after}")
+                new_text = new_text.replace(before, after)
+
+        if file_changed:
             txt.write_text(new_text)
             replaced_files += 1
+
+    print(f"[debug] total files changed: {replaced_files}")
+    return replaced_files
 
 def teardown(cl_name: str):
     script_dir = Path("scripts") / cl_name
