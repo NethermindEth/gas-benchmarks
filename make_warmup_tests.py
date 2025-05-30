@@ -191,8 +191,9 @@ def main():
                 nl = process_line(line, counters, file_block)
                 if nl:
                     fout.write(nl)
-                    # only bump when we actually emitted a payload
-                    file_block += 1
+                    # only bump when we actually emitted a payload and as we always refer to parentHash=1 then max blocknumber can be 2
+                    if file_block == 1:
+                        file_block += 1
 
     print(
         f"Processed {counters['total']} payloads, "
