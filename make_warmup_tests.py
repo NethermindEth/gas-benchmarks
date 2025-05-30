@@ -41,7 +41,46 @@ def process_line(line: str, counters: dict) -> str:
     counters["total"] += 1
     return json.dumps(obj) + "\n"
 
+def collect_mismatches(container: str = "gas-execution-client") -> dict:
+    """
+    Parse `docker logs <container>` for blockhash mismatches and return
+    a dict mapping 'got' -> 'want'.
+    """
+    logs = subprocess.check_output(
+        ["docker", "logs", container],
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    pattern = re.compile(
+        r'blockhash mismatch, want ([0-9a-f]{64}), got ([0-9a-f]{64})'
+    )
+    mapping = {}
+    for line in logs.splitlines():
+        m = pattern.search(line)
+        if m:
+            want, got = m.group(1), m.group(2)
+            mapping[got] = want
+    return mapping
+
+def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
+    """
+    In-place replace all occurrences of each 'got' hash in mapping.keys()
+    with its 'want' in every .txt under tests_root. Returns number of files changed.
+    """
+    replaced_files = 0
+    for txt in tests_root.rglob("*.txt"):
+        text = txt.read_text()
+        new_text = text
+        for got, want in mapping.items():
+            new_text = new_text.replace(got, want)
+        if new_text != text:
+            txt.write_text(new_text)
+            replaced_files += 1
+    return replaced_files
+
 def main():
+    mkdir -p generationresults
+    
     p = argparse.ArgumentParser(
         description="Make warmup-tests: drop real-genesis blocks, bump others"
     )
@@ -73,6 +112,16 @@ def main():
         f"bumped {counters['bumped']} payloads, "
         f"dropped {counters['dropped']} real-root payloads into '{dst_root}'"
     )
+
+    # Generate infra, send all invalid payloads, capture from logs valid block_hash, regenerate warmup tests
+    python3 setup_node.py --client geth
+    python3 run_kute.py --output generationresults --testsPath "$dst_root" --jwtPath /tmp/jwtsecret --client geth --run 1
+    mapping = collect_mismatches("gas-execution-client")
+    if not mapping:
+        print("⚠️  No blockhash mismatches found in container logs; nothing to fix.")
+        return
+    fixed = fix_blockhashes(dst_root, mapping)
+    print(f"Replaced blockhash in {fixed} test files ({len(mapping)} distinct mismatches).")
 
 if __name__=="__main__":
     main()
