@@ -45,7 +45,7 @@ def main():
     p = argparse.ArgumentParser(
         description="Make warmup-tests: drop real-genesis blocks, bump others"
     )
-    p.add_argument("-s","--source",default="tests", help="Source root")
+    p.add_argument("-s","--source",default="tests-vm", help="Source root")
     p.add_argument("-d","--dest",  default="warmup-tests", help="Destination root")
     args = p.parse_args()
 
