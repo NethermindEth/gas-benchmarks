@@ -1,44 +1,44 @@
-version: "3.9"
 services:
   execution:
     stop_grace_period: 30m
     container_name: gas-execution-client
     restart: unless-stopped
     image: ${EC_IMAGE_VERSION}
+    pull_policy: always
     networks:
-    - gas
+      - gas
     volumes:
-    - ${EC_DATA_DIR}:/var/lib/besu/data
-    - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
-    - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
+      - ${EC_DATA_DIR}:/var/lib/besu/data
+      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
     user: root
     ports:
-    - 30303:30303/tcp
-    - 30303:30303/udp
-    - 8008:8008/tcp
-    - 8545:8545
-    - 8551:8551
+      - 30303:30303/tcp
+      - 30303:30303/udp
+      - 8008:8008/tcp
+      - 8545:8545
+      - 8551:8551
     expose:
-    - 8545
-    - 8551
+      - 8545
+      - 8551
     command:
-    - --genesis-file=/tmp/chainspec/chainspec.json
-    - --bonsai-historical-block-limit=10000
-    - --bonsai-limit-trie-logs-enabled=false
-    - --data-path=/var/lib/besu/data
-    - --metrics-enabled=true
-    - --metrics-host=0.0.0.0
-    - --metrics-port=8008
-    - --engine-rpc-enabled=true
-    - --engine-jwt-secret=/tmp/jwt/jwtsecret
-    - --engine-rpc-port=8551
-    - --engine-host-allowlist=*
-    - --rpc-http-enabled=true
-    - --rpc-http-host=0.0.0.0
-    - --rpc-http-port=8545
-    - --rpc-http-api=${EC_ENABLED_MODULES}
-    - --rpc-http-cors-origins=*
-    - --host-allowlist=*
+      - --genesis-file=/tmp/chainspec/chainspec.json
+      - --bonsai-historical-block-limit=10000
+      - --bonsai-limit-trie-logs-enabled=false
+      - --data-path=/var/lib/besu/data
+      - --metrics-enabled=true
+      - --metrics-host=0.0.0.0
+      - --metrics-port=8008
+      - --engine-rpc-enabled=true
+      - --engine-jwt-secret=/tmp/jwt/jwtsecret
+      - --engine-rpc-port=8551
+      - --engine-host-allowlist=*
+      - --rpc-http-enabled=true
+      - --rpc-http-host=0.0.0.0
+      - --rpc-http-port=8545
+      - --rpc-http-api=${EC_ENABLED_MODULES}
+      - --rpc-http-cors-origins=*
+      - --host-allowlist=*
     logging:
       driver: json-file
       options:

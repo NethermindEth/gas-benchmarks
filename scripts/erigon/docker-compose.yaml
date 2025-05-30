@@ -1,15 +1,15 @@
-version: "3.9"
 services:
   execution-sync:
     user: "root:root"
     container_name: gas-execution-client-sync
     image: ${EC_IMAGE_VERSION}
+    pull_policy: always
     networks:
-    - gas
+      - gas
     volumes:
-    - ${EC_DATA_DIR}:/var/lib/erigon
-    - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
-    - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+      - ${EC_DATA_DIR}:/var/lib/erigon
+      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     entrypoint: erigon init --datadir=/var/lib/erigon /tmp/genesis/genesis.json
   execution:
     user: "root:root"
@@ -20,37 +20,38 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
     image: ${EC_IMAGE_VERSION}
+    pull_policy: always
     networks:
-    - gas
+      - gas
     volumes:
-    - ${EC_DATA_DIR}:/var/lib/erigon
-    - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${EC_DATA_DIR}:/var/lib/erigon
+      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
-    - "30303:30303/tcp"
-    - "30303:30303/udp"
-    - "8008:8008/tcp"
-    - "8551:8551"
+      - "30303:30303/tcp"
+      - "30303:30303/udp"
+      - "8008:8008/tcp"
+      - "8551:8551"
     command:
-    - --externalcl
-    - --private.api.addr=0.0.0.0:9090
-    - --nat=any
-    - --http
-    - --http.addr=0.0.0.0
-    - --http.port=8545
-    - --http.vhosts=*
-    - --http.corsdomain=*
-    - --http.api=web3,eth,net,engine
-    - --txpool.disable
-    - --authrpc.addr=0.0.0.0
-    - --authrpc.port=8551
-    - --authrpc.vhosts=*
-    - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
-    - --datadir=/var/lib/erigon
-    - --healthcheck
-    - --metrics
-    - --metrics.addr=0.0.0.0
-    - --metrics.port=8008
-    - --db.size.limit=2GB
+      - --externalcl
+      - --private.api.addr=0.0.0.0:9090
+      - --nat=any
+      - --http
+      - --http.addr=0.0.0.0
+      - --http.port=8545
+      - --http.vhosts=*
+      - --http.corsdomain=*
+      - --http.api=web3,eth,net,engine
+      - --txpool.disable
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.port=8551
+      - --authrpc.vhosts=*
+      - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
+      - --datadir=/var/lib/erigon
+      - --healthcheck
+      - --metrics
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=8008
+      - --db.size.limit=2GB
     logging:
       driver: json-file
       options:
