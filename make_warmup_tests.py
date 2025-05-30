@@ -159,13 +159,13 @@ def main():
     mapping = collect_mismatches("gas-execution-client")
     if not mapping:
         print("⚠️  No blockhash mismatches found in container logs; nothing to fix.")
-        teardown("geth")
+        #teardown("geth")
         return
     fixed = fix_blockhashes(dst_root, mapping)
     print(f"Replaced blockhash in {fixed} test files ({len(mapping)} distinct mismatches).")
 
     #cleanup
-    teardown("geth")
+    #teardown("geth")
 
 if __name__=="__main__":
     main()
