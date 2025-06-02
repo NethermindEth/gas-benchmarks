@@ -63,7 +63,7 @@ for run in $(seq 1 $RUNS); do
         python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
       done
 
-      if warmed == False:
+      if warmed == False; then
         python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
         warmed = True
       fi
