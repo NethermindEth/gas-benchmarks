@@ -47,8 +47,9 @@ for run in $(seq 1 $RUNS); do
       fname=$(basename "$fullpath")
 
       # Build the two separate paths:
-      warmup_path="$WARMUP_DIR/$fname"
-      proper_path="$TEST_DIR/$fname"
+      root_dir="$(pwd)"
+      warmup_path="$root_dir/$WARMUP_DIR/$fname"
+      proper_path="$root_dir/$TEST_DIR/$fname"
 
       if [ -z "$IMAGES" ]; then
         python3 setup_node.py --client $client
