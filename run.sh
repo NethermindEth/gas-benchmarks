@@ -44,12 +44,9 @@ for run in $(seq 1 $RUNS); do
   for client in "${CLIENT_ARRAY[@]}"; do
     warmed=false
     for test_file in $TEST_FILES; do
-      fname=$(basename "$fullpath")
-
       # Build the two separate paths:
-      root_dir="$(pwd)"
-      warmup_path="$root_dir/$WARMUP_OPCODES_PATH/$fname"
-      proper_path="$root_dir/$TEST_PATH/$fname"
+      warmup_path="$WARMUP_OPCODES_PATH/$fname"
+      proper_path="$TEST_PATH/$fname"
 
       if [ -z "$IMAGES" ]; then
         python3 setup_node.py --client $client
