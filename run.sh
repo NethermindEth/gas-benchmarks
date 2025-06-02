@@ -42,7 +42,14 @@ python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
   for client in "${CLIENT_ARRAY[@]}"; do
+    warmed = False
     for test_file in $TEST_FILES; do
+      fname=$(basename "$fullpath")
+
+      # Build the two separate paths:
+      warmup_path="$WARMUP_DIR/$fname"
+      proper_path="$TEST_DIR/$fname"
+
       if [ -z "$IMAGES" ]; then
         python3 setup_node.py --client $client
       else
@@ -53,9 +60,12 @@ for run in $(seq 1 $RUNS); do
       # Warmup run
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
         echo "Running warmup scenarios - warmup number: $warmup_count..."
-        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
-        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
+        python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
       done
+
+      if warmed == False:
+        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
+        warmed = True
       
       # Actual run
       echo 'Running measured scenarios...'
