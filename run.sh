@@ -54,15 +54,12 @@ for run in $(seq 1 $RUNS); do
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
         echo "Running warmup scenarios - warmup number: $warmup_count..."
         python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
+        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
       done
       
       # Actual run
       echo 'Running measured scenarios...'
-      if [ -z "$WARMUP_FILE" ]; then
-        python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
-      else
-        python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
-      fi
+      python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
     done
 
     cl_name=$(echo "$client" | cut -d '_' -f 1)
