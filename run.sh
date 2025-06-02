@@ -33,12 +33,8 @@ mkdir -p warmupresults
 pip install -r requirements.txt
 make prepare_tools
 
-# Find leaf directories
-LEAF_DIRS=$(find "$TEST_PATH" -type d | while read -r dir; do
-  if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
-    echo "$dir"
-  fi
-done)
+# Find tests
+TEST_FILES=$(find "$TEST_PATH" -type f -name '*.txt')
 
 # regenerate warmup scenarios in case of new tests added
 python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
@@ -46,7 +42,7 @@ python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
   for client in "${CLIENT_ARRAY[@]}"; do
-    for test_dir in $LEAF_DIRS; do
+    for test_file in $TEST_FILES; do
       if [ -z "$IMAGES" ]; then
         python3 setup_node.py --client $client
       else
@@ -63,17 +59,17 @@ for run in $(seq 1 $RUNS); do
       # Actual run
       echo 'Running measured scenarios...'
       if [ -z "$WARMUP_FILE" ]; then
-        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+        python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
       else
-        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
+        python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
       fi
-
-      cl_name=$(echo "$client" | cut -d '_' -f 1)
-      cd "scripts/$cl_name"
-      docker compose down
-      sudo rm -rf execution-data
-      cd ../..
     done
+
+    cl_name=$(echo "$client" | cut -d '_' -f 1)
+    cd "scripts/$cl_name"
+    docker compose down
+    sudo rm -rf execution-data
+    cd ../..
   done
 done
 
