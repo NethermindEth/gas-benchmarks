@@ -66,6 +66,7 @@ for run in $(seq 1 $RUNS); do
       if warmed == False:
         python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
         warmed = True
+      fi
       
       # Actual run
       echo 'Running measured scenarios...'
