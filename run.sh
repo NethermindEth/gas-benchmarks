@@ -42,7 +42,7 @@ python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
   for client in "${CLIENT_ARRAY[@]}"; do
-    warmed = False
+    warmed=false
     for test_file in $TEST_FILES; do
       fname=$(basename "$fullpath")
 
@@ -64,9 +64,9 @@ for run in $(seq 1 $RUNS); do
         python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
       done
 
-      if warmed == False; then
+      if [ "$warmed" = "false" ]; then
         python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
-        warmed = True
+        warmed=true
       fi
       
       # Actual run
