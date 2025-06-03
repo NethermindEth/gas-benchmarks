@@ -41,25 +41,30 @@ done
 
 # regenerate warmup scenarios in case of new tests added
 python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
-
+echo "After warmup"
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
+  echo "Run $run"
   for client in "${CLIENT_ARRAY[@]}"; do
+    echo "Client $client"
     warmed=false
+    
+    if [ -z "$IMAGES" ]; then
+      python3 setup_node.py --client $client
+    else
+      echo "Using provided image: $IMAGES for $client"
+      python3 setup_node.py --client $client --imageBulk "$IMAGES"
+    fi
+    echo "After node setup"
+    
     for test_file in $TEST_FILES; do
+      echo "Test file $test_file"
       # Build the two separate paths:
       IFS='/' parts=(${(s:/:)test_file})
       last_part="${parts[-1]}"
       
       warmup_path="$WARMUP_OPCODES_PATH/$last_part"
       proper_path="$TEST_PATH/$last_part"
-
-      if [ -z "$IMAGES" ]; then
-        python3 setup_node.py --client $client
-      else
-        echo "Using provided image: $IMAGES for $client"
-        python3 setup_node.py --client $client --imageBulk "$IMAGES"
-      fi
 
       # Warmup run
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
