@@ -60,8 +60,8 @@ for run in $(seq 1 $RUNS); do
     for test_file in $TEST_FILES; do
       echo "Test file $test_file"
       # Build the two separate paths:
-      IFS='/' parts=(${(s:/:)test_file})
-      last_part="${parts[-1]}"
+      IFS='/' read -r -a parts <<< "$test_file"
+      last_part="${parts[${#parts[@]}-1]}"
       
       warmup_path="$WARMUP_OPCODES_PATH/$last_part"
       proper_path="$TEST_PATH/$last_part"
