@@ -41,12 +41,9 @@ done
 
 # regenerate warmup scenarios in case of new tests added
 python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
-echo "After warmup"
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
-  echo "Run $run"
   for client in "${CLIENT_ARRAY[@]}"; do
-    echo "Client $client"
     warmed=false
     
     if [ -z "$IMAGES" ]; then
@@ -55,21 +52,23 @@ for run in $(seq 1 $RUNS); do
       echo "Using provided image: $IMAGES for $client"
       python3 setup_node.py --client $client --imageBulk "$IMAGES"
     fi
-    echo "After node setup"
     
-    for test_file in $TEST_FILES; do
-      echo "Test file $test_file"
+    for test_file in "${TEST_FILES[@]}"; do
       # Build the two separate paths:
       IFS='/' read -r -a parts <<< "$test_file"
-      last_part="${parts[${#parts[@]}-1]}"
+      filename="${parts[${#parts[@]}-1]}"
       
-      warmup_path="$WARMUP_OPCODES_PATH/$last_part"
-      proper_path="$TEST_PATH/$last_part"
+      warmup_path="$WARMUP_OPCODES_PATH/$filename"
+      proper_path="$TEST_PATH/$filename"
+      prefix="${filename%%_*}_"
 
       # Warmup run
-      for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
-        echo "Running warmup scenarios - warmup number: $warmup_count..."
-        python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
+      for warmup_file in "$WARMUP_OPCODES_PATH"/${prefix}*.txt; do
+        [ -e "$warmup_file" ] || continue  # skip if no match
+        for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
+          echo "Running warmup scenario $warmup_file - warmup number: $warmup_count..."
+          python3 run_kute.py --output warmupresults --testsPath "$warmup_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
+        done
       done
 
       if [ "$warmed" = "false" ]; then
