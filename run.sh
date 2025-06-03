@@ -34,7 +34,10 @@ pip install -r requirements.txt
 make prepare_tools
 
 # Find tests
-TEST_FILES=$(find "$TEST_PATH" -type f -name '*.txt')
+TEST_FILES=()
+for file in $(find "$TEST_PATH" -type f -name '*.txt'); do
+  TEST_FILES+=("$file")
+done
 
 # regenerate warmup scenarios in case of new tests added
 python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
@@ -45,8 +48,11 @@ for run in $(seq 1 $RUNS); do
     warmed=false
     for test_file in $TEST_FILES; do
       # Build the two separate paths:
-      warmup_path="$WARMUP_OPCODES_PATH/$fname"
-      proper_path="$TEST_PATH/$fname"
+      IFS='/' parts=(${(s:/:)test_file})
+      last_part="${parts[-1]}"
+      
+      warmup_path="$WARMUP_OPCODES_PATH/$last_part"
+      proper_path="$TEST_PATH/$last_part"
 
       if [ -z "$IMAGES" ]; then
         python3 setup_node.py --client $client
