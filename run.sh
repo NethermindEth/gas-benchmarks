@@ -51,6 +51,12 @@ for run in $(seq 1 $RUNS); do
     else
       echo "Using provided image: $IMAGES for $client"
       python3 setup_node.py --client $client --imageBulk "$IMAGES"
+    fi    
+
+    # Generic warmup
+    if [ "$warmed" = "false" ]; then
+      python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
+      warmed=true
     fi
     
     for test_file in "${TEST_FILES[@]}"; do
@@ -62,19 +68,19 @@ for run in $(seq 1 $RUNS); do
       proper_path="$TEST_PATH/$filename"
       prefix="${filename%%_*}_"
 
-      # Warmup run
-      for warmup_file in "$WARMUP_OPCODES_PATH"/${prefix}*.txt; do
-        [ -e "$warmup_file" ] || continue  # skip if no match
-        for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do        
-          echo "Running warmup scenario $warmup_file - warmup number: $warmup_count..."
-          python3 run_kute.py --output warmupresults --testsPath "$warmup_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
-        done
-      done
+      # Create temporary warmup directory (e.g., warmup-tmp/Number)
+      warmup_group_dir="warmup-tmp/$prefix"
+      mkdir -p "$warmup_group_dir"
+      rm -f "$warmup_group_dir"/*.txt  # Clear any stale files from previous runs
 
-      if [ "$warmed" = "false" ]; then
-        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
-        warmed=true
-      fi
+      # Copy all matching warmup files into that directory
+      find "$WARMUP_OPCODES_PATH" -type f -name "${prefix}_*.txt" -exec cp {} "$warmup_group_dir" \;
+
+      # Run warmup once on the batch
+      for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
+        echo "Running warmup group: $prefix - warmup #$warmup_count"
+        python3 run_kute.py --output warmupresults --testsPath "$warmup_group_dir" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
+      done
       
       # Actual run
       echo 'Running measured scenarios...'
