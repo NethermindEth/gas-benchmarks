@@ -139,3 +139,39 @@ python fill_postgres_db.py \
 ```
 
 This script will scan the specified reports directory, parse the client benchmark data and computer specifications, and insert individual run records into the `gas_benchmark_results` table.
+
+## Continuous Metrics Posting
+
+A new script `run_and_post_metrics.sh` is available to run the benchmarks and post metrics continuously in an infinite loop.
+This script updates the local repository with `git pull`, runs the benchmark tests, populates the PostgreSQL database, and cleans up the reports directory.
+
+**Usage:**
+
+```sh
+./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" [--warmup warmup/warmup-1000bl-16wi-24tx.txt]
+```
+
+**Parameters:**
+
+- `--table-name`: The database table name where benchmark data will be inserted.
+- `--db-user`: The database user.
+- `--db-host`: The database host.
+- `--db-password`: The database password.
+- `--warmup`: (Optional) The warmup file to use. Defaults to `warmup/warmup-1000bl-16wi-24tx.txt`.
+
+**Examples:**
+
+Using the default warmup file:
+```sh
+./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass"
+```
+
+Using a custom warmup file and run in background:
+```sh
+nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --warmup "warmup/custom_warmup.txt" &
+```
+
+Prevent creating of `nohup.txt` (to save disk space):
+```sh
+nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --warmup "warmup/custom_warmup.txt" > /dev/null 2>&1 &
+```
