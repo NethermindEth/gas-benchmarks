@@ -91,7 +91,7 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
     for old, new in mapping.items():
         print(f"  {old!r} → {new!r}")
 
-    for txt in tests_root.rglob("*.txt"):
+    for txt in tests_root.rglob("*150M*.txt"):
         text    = txt.read_text()
         new_text = text
         file_changed = False
