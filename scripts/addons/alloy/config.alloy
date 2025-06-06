@@ -1,0 +1,150 @@
+//######################################################################
+//# DISCOVERY
+//######################################################################
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "filter_metrics_enabled" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_metrics_enabled"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  // Ensure metrics from other containers are not included
+  rule {
+    source_labels = ["__meta_docker_container_label_instance"]
+    regex         = sys.env("METRICS_LABELS_INSTANCE")
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_metrics_port"]
+    target_label  = "__metrics_port"
+    action        = "replace"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_network_ip", "__metrics_port"]
+    separator     = ":"
+    target_label  = "__address__"
+    action        = "replace"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "app"
+    action        = "replace"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.+)"
+    replacement   = "$1"
+    target_label  = "container"
+    action        = "replace"
+  }
+}
+
+discovery.relabel "filter_logs_enabled" {
+    targets = discovery.docker.containers.targets
+
+    rule {
+        source_labels = ["__meta_docker_container_label_logs_enabled"]
+        regex         = "true"
+        action        = "keep"
+    }
+
+    // Ensure logs from other containers are not included
+    rule {
+        source_labels = ["__meta_docker_container_label_instance"]
+        regex         = sys.env("METRICS_LABELS_INSTANCE")
+        action        = "keep"
+    }
+
+    rule {
+        source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label  = "app"
+        action        = "replace"
+    }
+
+    rule {
+        source_labels = ["__meta_docker_container_name"]
+        regex         = "/(.+)"
+        replacement   = "$1"
+        target_label  = "container"
+        action        = "replace"
+    }
+}
+
+//######################################################################
+//# METRICS
+//######################################################################
+prometheus.scrape "docker_containers" {
+  targets    = discovery.relabel.filter_metrics_enabled.output
+  forward_to = [prometheus.remote_write.remote.receiver]
+  job_name  = "docker_containers"
+  scrape_interval = sys.env("METRICS_SCRAPE_INTERVAL")
+  metrics_path = sys.env("METRICS_ENDPOINT_PATH")
+}
+
+prometheus.remote_write "remote" {
+  endpoint {
+    url = sys.env("PROMETHEUS_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = sys.env("BASIC_AUTH_USERNAME")
+      password = sys.env("BASIC_AUTH_PASSWORD")
+    }
+  }
+  external_labels = {
+    collector = "alloy-external",
+    project = sys.env("NETHERMIND_PROJECT"),
+    external_provider = sys.env("EXTERNAL_PROVIDER"),
+    instance = sys.env("METRICS_LABELS_INSTANCE"),
+    network = sys.env("METRICS_LABELS_NETWORK"),
+    testnet = sys.env("METRICS_LABELS_TESTNET"),
+    execution_client = sys.env("METRICS_LABELS_EXECUTION_CLIENT"),
+  }
+}
+
+//######################################################################
+//# LOGS
+//######################################################################
+loki.source.docker "containers_logs" {
+  host = "unix:///var/run/docker.sock"
+  targets = discovery.relabel.filter_logs_enabled.output
+  forward_to = [loki.process.filter.receiver]
+}
+
+loki.process "filter" {
+    forward_to = [loki.write.remote.receiver]
+
+    stage.drop {
+        older_than = "1m"
+    }
+    stage.docker {}
+}
+
+loki.write "remote" {
+  endpoint {
+    url = sys.env("LOKI_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = sys.env("BASIC_AUTH_USERNAME")
+      password = sys.env("BASIC_AUTH_PASSWORD")
+    }
+  }
+  external_labels = {
+    collector = "alloy-external",
+    project = sys.env("NETHERMIND_PROJECT"),
+    external_provider = sys.env("EXTERNAL_PROVIDER"),
+    instance = sys.env("METRICS_LABELS_INSTANCE"),
+    network = sys.env("METRICS_LABELS_NETWORK"),
+    testnet = sys.env("METRICS_LABELS_TESTNET"),
+    execution_client = sys.env("METRICS_LABELS_EXECUTION_CLIENT"),
+  }
+}
