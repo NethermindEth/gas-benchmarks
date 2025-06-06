@@ -65,21 +65,11 @@ for run in $(seq 1 $RUNS); do
       filename="${parts[${#parts[@]}-1]}"
       
       warmup_path="$WARMUP_OPCODES_PATH/$filename"
-      proper_path="$TEST_PATH/$filename"
-      prefix="${filename%%_*}_"
-
-      # Create temporary warmup directory (e.g., warmup-tmp/Number)
-      warmup_group_dir="warmup-tmp/$prefix"
-      mkdir -p "$warmup_group_dir"
-      rm -f "$warmup_group_dir"/*.txt  # Clear any stale files from previous runs
-
-      # Copy all matching warmup files into that directory
-      find "$WARMUP_OPCODES_PATH" -type f -name "${prefix}_*.txt" -exec cp {} "$warmup_group_dir" \;
-
+      
       # Run warmup once on the batch
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
         echo "Running warmup group: $prefix - warmup #$warmup_count"
-        python3 run_kute.py --output warmupresults --testsPath "$warmup_group_dir" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
+        python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
       done
       
       # Actual run
