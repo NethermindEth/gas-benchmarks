@@ -180,7 +180,7 @@ def main():
     counters = {"total":0, "bumped":0, "dropped":0}
 
     # 1) scan + bump + force parentHash
-    for src in src_root.rglob("*.txt"):
+    for src in src_root.rglob("*150M*.txt"):
         rel = src.relative_to(src_root)
         out = dst_root / rel
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -191,7 +191,7 @@ def main():
                 nl = process_line(line, counters, file_block)
                 if nl:
                     fout.write(nl)
-                    # only bump when we actually emitted a payload and as we always refer to parentHash=1 then max blocknumber can be 2
+                    # bump block number after first payload
                     if file_block == 1:
                         file_block += 1
 
