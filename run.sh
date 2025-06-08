@@ -64,7 +64,8 @@ for run in $(seq 1 $RUNS); do
       IFS='/' read -r -a parts <<< "$test_file"
       filename="${parts[${#parts[@]}-1]}"
       
-      warmup_path="$WARMUP_OPCODES_PATH/$filename"
+      warmup_filename="$(echo "$filename" | sed -E 's/_[0-9]+M/_150M/')"
+      warmup_path="$WARMUP_OPCODES_PATH/$warmup_filename"
       
       # Run warmup once on the batch
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
