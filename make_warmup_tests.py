@@ -179,22 +179,36 @@ def main():
 
     counters = {"total":0, "bumped":0, "dropped":0}
 
-    # 1) scan + bump + force parentHash
-    for src in src_root.rglob("*150M*.txt"):
-        rel = src.relative_to(src_root)
-        out = dst_root / rel
-        out.parent.mkdir(parents=True, exist_ok=True)
-        # reset per-file block counter
-        file_block = 1
-        with src.open() as fin, out.open("w") as fout:
-            for line in fin:
-                nl = process_line(line, counters, file_block)
-                if nl:
-                    fout.write(nl)
-                    # bump block number after first payload
-                    if file_block == 1:
-                        file_block += 1
+     # 1) scan + bump + force parentHash
+     for src in src_root.rglob("*150M*.txt"):
+         rel = src.relative_to(src_root)
+         out = dst_root / rel
+         out.parent.mkdir(parents=True, exist_ok=True)
+         # reset per-file block counter
+         file_block = 1
 
+         # read once, find last newPayloadV3
+         lines = src.read_text().splitlines(keepends=True)
+         payload_idxs = [
+             i for i, L in enumerate(lines)
+             if json.loads(L).get("method")=="engine_newPayloadV3"
+         ]
+         last_idx = payload_idxs[-1] if payload_idxs else None
+ 
+         with out.open("w") as fout:
+             with src.open() as fin, out.open("w") as fout:
+             for idx, line in enumerate(lines):
+                 if idx == last_idx:
+                     # only tweak the very last newPayload
+                     out_obj = json.loads(line)
+                     out_line = process_line(json.dumps(out_obj)+"\n",
+                                             counters, file_block)
+                     fout.write(out_line)
+                     file_block += 1
+                 else:
+                     # copy everything else untouched
+                     fout.write(line)
+                     
     print(
         f"Processed {counters['total']} payloads, "
         f"bumped {counters['bumped']} stateRoots, "
