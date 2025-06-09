@@ -42,7 +42,7 @@ def main():
     parser.add_argument('--image', type=str, help='Docker image of the client we are going to use.')
     parser.add_argument('--imageBulk', type=str, help='Docker image of the client we are going to use.',
                         default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default"}, '
-                                '"erigon": "default"}')
+                        '"erigon": "default", "nimbus": "default"}')
 
     # Parse command-line arguments
     args = parser.parse_args()

@@ -171,10 +171,10 @@ def main():
     parser.add_argument('--testsPath', type=str, help='results', default='tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth',
-                        default='nethermind,geth,reth,erigon,besu')
+                        default='nethermind,geth,reth,erigon,besu,nimbus')
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
-                        default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}')
+                        default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default"}')
 
     # Parse command-line arguments
     args = parser.parse_args()
