@@ -84,7 +84,7 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
         print(f"  {old!r} → {new!r}")
 
     for txt in tests_root.rglob("*150M*.txt"):
-        text    = txt.read_text()
+        text = txt.read_text()
         new_text = text
         file_changed = False
 
@@ -171,32 +171,32 @@ def main():
 
     counters = {"total":0, "bumped":0, "dropped":0}
 
-     # 1) scan + bump + force parentHash
-     for src in src_root.rglob("*150M*.txt"):
-         rel = src.relative_to(src_root)
-         out = dst_root / rel
-         out.parent.mkdir(parents=True, exist_ok=True)
+    # 1) scan + bump + force parentHash
+    for src in src_root.rglob("*150M*.txt"):
+        rel = src.relative_to(src_root)
+        out = dst_root / rel
+        out.parent.mkdir(parents=True, exist_ok=True)
 
-         # read once, find last newPayloadV3
-         lines = src.read_text().splitlines(keepends=True)
-         payload_idxs = [
-             i for i, L in enumerate(lines)
-             if json.loads(L).get("method")=="engine_newPayloadV3"
-         ]
-         last_idx = payload_idxs[-1] if payload_idxs else None
+        # read once, find last newPayloadV3
+        lines = src.read_text().splitlines(keepends=True)
+        payload_idxs = [
+            i for i, L in enumerate(lines)
+            if json.loads(L).get("method")=="engine_newPayloadV3"
+        ]
+        last_idx = payload_idxs[-1] if payload_idxs else None
  
-         with out.open("w") as fout:
-             with src.open() as fin, out.open("w") as fout:
-             for idx, line in enumerate(lines):
-                 if idx == last_idx:
-                     # only tweak the very last newPayload
-                     out_obj = json.loads(line)
-                     out_line = process_line(json.dumps(out_obj)+"\n",
-                                             counters)
-                     fout.write(out_line)
-                 else:
-                     # copy everything else untouched
-                     fout.write(line)
+        with out.open("w") as fout:
+            with src.open() as fin, out.open("w") as fout:
+            for idx, line in enumerate(lines):
+                if idx == last_idx:
+                    # only tweak the very last newPayload
+                    out_obj = json.loads(line)
+                    out_line = process_line(json.dumps(out_obj)+"\n",
+                                            counters)
+                    fout.write(out_line)
+                else:
+                    # copy everything else untouched
+                    fout.write(line)
                      
     print(
         f"Processed {counters['total']} payloads, "
