@@ -7,6 +7,9 @@
 #   --db-host      The database host.
 #   --db-password  The database password.
 #   --warmup       The warmup file (default: warmup/warmup-1000bl-16wi-24tx.txt)
+#   --prometheus-endpoint   The Prometheus endpoint URL.
+#   --prometheus-username   The Prometheus basic auth username.
+#   --prometheus-password   The Prometheus basic auth password.
 #
 # Example usage:
 #   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --warmup "warmup/mycustom.txt" &
@@ -39,6 +42,18 @@ while [[ $# -gt 0 ]]; do
       WARMUP_FILE="$2"
       shift 2
       ;;
+    --prometheus-endpoint)
+      PROMETHEUS_ENDPOINT="$2"
+      shift 2
+      ;;
+    --prometheus-username)
+      PROMETHEUS_USERNAME="$2"
+      shift 2
+      ;;
+    --prometheus-password)
+      PROMETHEUS_PASSWORD="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1"
       exit 1
@@ -47,7 +62,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file>]"
+  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password>]"
   exit 1
 fi
 
@@ -55,7 +70,8 @@ fi
 while true; do
   git pull
   # Run the benchmark testing using specified warmup file
-  bash run.sh -t "tests-vm/" -w "$WARMUP_FILE" -r1
+  PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
+    bash run.sh -t "tests-vm/" -w "$WARMUP_FILE" -r1
 
   # Populate the Postgres DB with the metrics data
   python fill_postgres_db.py --db-host "$DB_HOST" --db-port 5432 --db-user "$DB_USER" --db-name monitoring --table-name "$TABLE_NAME" --db-password "$DB_PASSWORD" --reports-dir 'reports'
