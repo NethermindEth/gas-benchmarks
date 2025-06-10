@@ -95,11 +95,6 @@ def main():
     run_path = os.path.join(os.getcwd(), "scripts")
     run_path = os.path.join(run_path, client_without_tag)
 
-    set_env(
-        client_without_tag,
-        el_images,
-        run_path,
-    )
 
     # Start the client
     run_command(client, run_path)
