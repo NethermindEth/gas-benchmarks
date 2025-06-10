@@ -63,17 +63,3 @@ for run in $(seq 1 $RUNS); do
     done
   done
 done
-
-# Process results
-if [ -z "$IMAGES" ]; then
-  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
-  python3 report_html.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS
-else
-  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS --images "$IMAGES"
-  python3 report_html.py --resultsPath results --clients "$CLIENTS" --testsPath "$TEST_PATH" --runs $RUNS --images "$IMAGES"
-fi
-
-# Prepare and zip the results
-mkdir -p reports/docker
-cp -r results/docker_* reports/docker
-zip -r reports.zip reports
