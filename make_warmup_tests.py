@@ -18,7 +18,7 @@ def bump_last_nibble(h: str) -> str:
         return h
     return h[:-1] + format((last + 1) % 16, 'x')
 
-def process_line(line: str, counters: dict, block_number: int = None) -> str:
+def process_line(line: str, counters: dict) -> str:
     line = line.rstrip("\n")
     if not line.strip():
         return "\n"
@@ -31,21 +31,13 @@ def process_line(line: str, counters: dict, block_number: int = None) -> str:
         payload = obj["params"][0]       
 
         # 1) skip payload that already uses the real genesis root
-        sr = payload.get("stateRoot")
-        if sr == GENESIS_ROOT:
+        if not payload["blockNumber"] = 0x3:
             counters["dropped"] += 1
             return json.dumps(obj) + "\n"
-        
-        # 2) force the correct parentHash
-        payload["parentHash"] = GENESIS_PARENT
 
-        # 3) otherwise bump stateRoot
+        # 2) otherwise bump stateRoot
         payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
         counters["bumped"] += 1
-
-        # 4) overwrite blockNumber if requested
-        if block_number is not None:
-            payload["blockNumber"] = hex(block_number)
     else:
         # drop every non-newPayloadV3
         counters["dropped"] += 1
@@ -184,8 +176,6 @@ def main():
          rel = src.relative_to(src_root)
          out = dst_root / rel
          out.parent.mkdir(parents=True, exist_ok=True)
-         # reset per-file block counter
-         file_block = 1
 
          # read once, find last newPayloadV3
          lines = src.read_text().splitlines(keepends=True)
@@ -202,9 +192,8 @@ def main():
                      # only tweak the very last newPayload
                      out_obj = json.loads(line)
                      out_line = process_line(json.dumps(out_obj)+"\n",
-                                             counters, file_block)
+                                             counters)
                      fout.write(out_line)
-                     file_block += 1
                  else:
                      # copy everything else untouched
                      fout.write(line)
