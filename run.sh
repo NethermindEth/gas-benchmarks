@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Default inputs
-TEST_PATH="tests/"
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
+TEST_PATH="tests-vm/"
+WARMUP_FILE=""
 CLIENTS="nethermind"
-RUNS=8
+RUNS=1
 IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
 
 # Parse command line arguments
