@@ -55,7 +55,7 @@ fi
 while true; do
   git pull
   # Run the benchmark testing using specified warmup file
-  bash run.sh -t "tests-vm/" -w "$WARMUP_FILE" -r1
+  bash run.sh -t "tests-vm/Origin_150M.txt" -w "$WARMUP_FILE" -r1
 
   # Populate the Postgres DB with the metrics data
   python fill_postgres_db.py --db-host "$DB_HOST" --db-port 5432 --db-user "$DB_USER" --db-name monitoring --table-name "$TABLE_NAME" --db-password "$DB_PASSWORD" --reports-dir 'reports'
