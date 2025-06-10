@@ -26,8 +26,8 @@ IFS=',' read -ra CLIENT_ARRAY <<< "$CLIENTS"
 mkdir -p results
 
 # Install dependencies
-pip install -r requirements.txt
-make prepare_tools
+#pip install -r requirements.txt
+#make prepare_tools
 
 # Find leaf directories
 LEAF_DIRS=$(find "$TEST_PATH" -type d | while read -r dir; do
