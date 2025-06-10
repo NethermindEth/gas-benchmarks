@@ -56,10 +56,10 @@ for run in $(seq 1 $RUNS); do
       fi
 
       cl_name=$(echo "$client" | cut -d '_' -f 1)
-      cd "scripts/$cl_name"
-      docker compose down
-      sudo rm -rf execution-data
-      cd ../..
+      #cd "scripts/$cl_name"
+      #docker compose down
+      #sudo rm -rf execution-data
+      #cd ../..
     done
   done
 done
