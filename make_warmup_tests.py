@@ -31,7 +31,7 @@ def process_line(line: str, counters: dict) -> str:
         payload = obj["params"][0]       
 
         # 1) skip payload that already uses the real genesis root
-        if not payload["blockNumber"] == 0x3:
+        if not payload["blockNumber"] == "0x3":
             counters["dropped"] += 1
             return json.dumps(obj) + "\n"
 
