@@ -178,7 +178,7 @@ def main():
         out.parent.mkdir(parents=True, exist_ok=True)
         with src.open() as fin, out.open("w") as fout:
             for line in fin:
-                nl = process_line(line, counters, file_block)
+                nl = process_line(line, counters)
                 if nl:
                     fout.write(nl)
                      
