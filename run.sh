@@ -47,7 +47,7 @@ for run in $(seq 1 $RUNS); do
         python3 setup_node.py --client $client --imageBulk "$IMAGES"
       fi
 
-      for run in $(seq 1 10); do
+      for run in $(seq 1 2); do
         if [ -z "$WARMUP_FILE" ]; then
           echo "Running script without warm up."
           python3 run_kute.py --output WARMresults --testsPath "warmup-tests/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run
