@@ -49,10 +49,10 @@ for run in $(seq 1 $RUNS); do
 
       if [ -z "$WARMUP_FILE" ]; then
         echo "Running script without warm up."
-        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
+        python3 run_kute.py --output results --testsPath "$test_dir/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run
       else
         echo "Using provided warm up file: $WARMUP_FILE"
-        python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
+        python3 run_kute.py --output results --testsPath "$test_dir/Origin_150M.txt" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
       fi
 
       cl_name=$(echo "$client" | cut -d '_' -f 1)
