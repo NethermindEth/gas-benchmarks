@@ -2,7 +2,7 @@
 
 # Default inputs
 TEST_PATH="tests/"
-WARMUP_OPCODES_PATH="warmup-tests/"
+WARMUP_OPCODES_PATH="warmup-tests"
 WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon"
 RUNS=8
@@ -70,12 +70,12 @@ for run in $(seq 1 $RUNS); do
       # Run warmup once on the batch
       for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
         echo "Running warmup group: $prefix - warmup #$warmup_count"
-        python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f engine_newPayloadV3"
+        python3 run_kute.py --output warmupresults --testsPath "$warmup_path/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments "-f /.*(engine_newPayloadV3)/"
       done
       
       # Actual run
       echo 'Running measured scenarios...'
-      python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
+      python3 run_kute.py --output results --testsPath "$test_file/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run
     done
 
     cl_name=$(echo "$client" | cut -d '_' -f 1)
