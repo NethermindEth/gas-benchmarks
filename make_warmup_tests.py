@@ -176,27 +176,11 @@ def main():
         rel = src.relative_to(src_root)
         out = dst_root / rel
         out.parent.mkdir(parents=True, exist_ok=True)
-
-        # read once, find last newPayloadV3
-        lines = src.read_text().splitlines(keepends=True)
-        payload_idxs = [
-            i for i, L in enumerate(lines)
-            if json.loads(L).get("method")=="engine_newPayloadV3"
-        ]
-        last_idx = payload_idxs[-1] if payload_idxs else None
- 
-        with out.open("w") as fout:
-            with src.open() as fin, out.open("w") as fout:
-                for idx, line in enumerate(lines):
-                    if idx == last_idx:
-                        # only tweak the very last newPayload
-                        out_obj = json.loads(line)
-                        out_line = process_line(json.dumps(out_obj)+"\n",
-                                                counters)
-                        fout.write(out_line)
-                    else:
-                        # copy everything else untouched
-                        fout.write(line)
+        with src.open() as fin, out.open("w") as fout:
+            for line in fin:
+                nl = process_line(line, counters, file_block)
+                if nl:
+                    fout.write(nl)
                      
     print(
         f"Processed {counters['total']} payloads, "
@@ -204,11 +188,7 @@ def main():
         f"dropped {counters['dropped']} into '{dst_root}'"
     )    
 
-    # 2) re-chain parentHash so each payload points to the prior blockHash
-    chained = chain_parenthashes(dst_root, GENESIS_PARENT)
-    print(f"🔗 Re-chained parentHash in {chained} file(s).")
-
-    # 3) spin up node & send invalid payloads
+    # 2) spin up node & send invalid payloads
     subprocess.run(
         ["python3", "setup_node.py", "--client", "geth", "--imageBulk", IMAGES],
         check=True
@@ -222,7 +202,7 @@ def main():
         "--run", "1"
     ], check=True)
 
-    # 4) collect mismatches & patch only blockHash fields
+    # 3) collect mismatches & patch only blockHash fields
     mapping = collect_mismatches("gas-execution-client")
     if not mapping:
         print("⚠️  No blockhash mismatches found; nothing to fix.")
@@ -233,7 +213,7 @@ def main():
     fixed = fix_blockhashes(dst_root, mapping)
     print(f"✅ Replaced blockHash in {fixed} test file(s).")
 
-    # 5) cleanup docker & data
+    # 4) cleanup docker & data
     teardown("geth")
 
 if __name__ == "__main__":
