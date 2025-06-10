@@ -144,7 +144,7 @@ def main():
             output_folder, f"warmup_{client}_response_{run}.txt"
         )
         warmup_response = run_command(
-            warmup_file, jwt_path, warmup_response_file, execution_url, kute_arguments
+            client, warmup_file, jwt_path, warmup_response_file, execution_url, kute_arguments
         )
         save_to(output_folder, f"warmup_{client}_results_{run}.txt", warmup_response)
 
