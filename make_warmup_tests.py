@@ -187,16 +187,16 @@ def main():
  
         with out.open("w") as fout:
             with src.open() as fin, out.open("w") as fout:
-            for idx, line in enumerate(lines):
-                if idx == last_idx:
-                    # only tweak the very last newPayload
-                    out_obj = json.loads(line)
-                    out_line = process_line(json.dumps(out_obj)+"\n",
-                                            counters)
-                    fout.write(out_line)
-                else:
-                    # copy everything else untouched
-                    fout.write(line)
+                for idx, line in enumerate(lines):
+                    if idx == last_idx:
+                        # only tweak the very last newPayload
+                        out_obj = json.loads(line)
+                        out_line = process_line(json.dumps(out_obj)+"\n",
+                                                counters)
+                        fout.write(out_line)
+                    else:
+                        # copy everything else untouched
+                        fout.write(line)
                      
     print(
         f"Processed {counters['total']} payloads, "
