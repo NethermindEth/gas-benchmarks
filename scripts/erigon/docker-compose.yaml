@@ -52,6 +52,7 @@ services:
       - --metrics.addr=0.0.0.0
       - --metrics.port=8008
       - --db.size.limit=2GB
+      - --experimental.always-generate-changesets
     logging:
       driver: json-file
       options:
