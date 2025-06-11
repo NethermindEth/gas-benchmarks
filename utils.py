@@ -51,7 +51,7 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     response = True
     result = 0
     if not os.path.exists(result_file):
-        print("No result")
+        print("No result in:", result_file)
         return False, 0
     if not os.path.exists(response_file):
         print("No repsonse")
