@@ -79,7 +79,8 @@ for run in $(seq 1 $RUNS); do
         #last_line=$(grep 'engine_newPayload' "$test_file" | tail -n1)
         last_line=$(grep 'engine_newPayload' "tests-vm/Origin_150M.txt" | tail -n1)
         if [[ -n $last_line ]]; then
-          echo "$last_line" > "$filtered_dir/$filename"
+          #echo "$last_line" > "$filtered_dir/$filename"
+          echo "$last_line" > "tests-vm/Origin_150M.txt"
           echo "→ Filtered line saved to $filtered_dir/$filename"
         else
           echo "⚠️  No 'engine_newPayload' line found in $test_file"
