@@ -71,17 +71,15 @@ for run in $(seq 1 $RUNS); do
         # Run warmup once on the batch
         for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
           echo "Running warmup group: $prefix - warmup #$warmup_count"
-          python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayloadV3'
+          python3 run_kute.py --output warmupresults --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayloadV3'
         done
 
         filtered_dir="filtered-tests"
         mkdir -p "$filtered_dir"
-        #last_line=$(grep 'engine_newPayload' "$test_file" | tail -n1)
-        last_line=$(grep 'engine_newPayload' "tests-vm/Origin_150M.txt" | tail -n1)
+        last_line=$(grep 'engine_newPayload' "$test_file" | tail -n1)
         if [[ -n $last_line ]]; then
-          #echo "$last_line" > "$filtered_dir/$filename"
-          echo "$last_line" > "$filtered_dir/Origin_150M.txt"
-          echo "→ Filtered line saved to $filtered_dir/$filename"
+          echo "$last_line" > "$filtered_dir/$test_file"
+          echo "→ Filtered line saved to $filtered_dir/$test_file"
         else
           echo "⚠️  No 'engine_newPayload' line found in $test_file"
         fi
@@ -89,7 +87,7 @@ for run in $(seq 1 $RUNS); do
       
       # Actual run
       echo 'Running measured scenarios...'
-      python3 run_kute.py --output results --testsPath "$filtered_dir/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run
+      python3 run_kute.py --output results --testsPath "$filtered_dir/$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
 
       break
     done
