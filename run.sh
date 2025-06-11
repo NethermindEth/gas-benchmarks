@@ -95,6 +95,7 @@ for run in $(seq 1 $RUNS); do
     docker compose down
     sudo rm -rf execution-data
     cd ../..
+    break
   done
 done
 
