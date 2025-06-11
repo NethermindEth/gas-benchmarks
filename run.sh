@@ -88,6 +88,8 @@ for run in $(seq 1 $RUNS); do
       # Actual run
       echo 'Running measured scenarios...'
       python3 run_kute.py --output results --testsPath "$filtered_dir/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run
+
+      break
     done
 
     cl_name=$(echo "$client" | cut -d '_' -f 1)
@@ -95,7 +97,6 @@ for run in $(seq 1 $RUNS); do
     docker compose down
     sudo rm -rf execution-data
     cd ../..
-    break
   done
 done
 
