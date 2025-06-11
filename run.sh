@@ -40,7 +40,7 @@ for file in $(find "$TEST_PATH" -type f -name '*.txt'); do
 done
 
 # regenerate warmup scenarios in case of new tests added
-python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
+# python3 make_warmup_tests.py --source "$TEST_PATH" --dest "$WARMUP_OPCODES_PATH"
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
   for client in "${CLIENT_ARRAY[@]}"; do
@@ -66,16 +66,28 @@ for run in $(seq 1 $RUNS); do
       
       warmup_filename="$(echo "$filename" | sed -E 's/_[0-9]+M/_150M/')"
       warmup_path="$WARMUP_OPCODES_PATH/$warmup_filename"
-      
-      # Run warmup once on the batch
-      for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-        echo "Running warmup group: $prefix - warmup #$warmup_count"
-        python3 run_kute.py --output warmupresults --testsPath "$warmup_path/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f /.*(engine_newPayloadV3)/'
-      done
+
+      if (( OPCODES_WARMUP_COUNT > 0 )); then
+        # Run warmup once on the batch
+        for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
+          echo "Running warmup group: $prefix - warmup #$warmup_count"
+          python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f /.*(engine_newPayloadV3)/'
+        done
+
+        filtered_dir="${TEST_PATH}-filtered"
+        mkdir -p "$filtered_dir"
+        last_line=$(grep 'engine_newPayload' "$test_file" | tail -n1)
+        if [[ -n $last_line ]]; then
+          echo "$last_line" > "$filtered_dir/$filename"
+          echo "→ Filtered line saved to $filtered_dir/$filename"
+        else
+          echo "⚠️  No 'engine_newPayload' line found in $test_file"
+        fi
+      fi
       
       # Actual run
       echo 'Running measured scenarios...'
-      python3 run_kute.py --output results --testsPath "$test_file/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run
+      python3 run_kute.py --output results --testsPath "$filtered_dir/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run
     done
 
     cl_name=$(echo "$client" | cut -d '_' -f 1)
