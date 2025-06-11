@@ -74,7 +74,7 @@ for run in $(seq 1 $RUNS); do
           python3 run_kute.py --output warmupresults --testsPath "$WARMUP_OPCODES_PATH/Origin_150M.txt" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayloadV3'
         done
 
-        filtered_dir="${TEST_PATH}-filtered"
+        filtered_dir="filtered-tests"
         mkdir -p "$filtered_dir"
         last_line=$(grep 'engine_newPayload' "$test_file" | tail -n1)
         if [[ -n $last_line ]]; then
