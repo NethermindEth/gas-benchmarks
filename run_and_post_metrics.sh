@@ -69,6 +69,8 @@ fi
 # Run commands in an infinite loop
 while true; do
   git pull
+  # Update performance images
+  python update_performance_images.py
   # Run the benchmark testing using specified warmup file
   PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
     bash run.sh -t "tests-vm/" -w "$WARMUP_FILE" -r1
@@ -78,4 +80,7 @@ while true; do
 
   # Clean up the reports directory
   rm -rf reports/
+
+  # Revert images.yml to original state
+  python update_performance_images.py --revert
 done
