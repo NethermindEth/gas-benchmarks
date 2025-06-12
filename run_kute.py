@@ -174,6 +174,7 @@ def main():
                 execution_url,
                 kute_arguments,
             )
+            save_to(output_folder, f"{client}_results_{run}_{name}.txt", response)
         return
     else:
         response_file = os.path.join(output_folder, f"{client}_response_{run}.txt")
