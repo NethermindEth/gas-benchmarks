@@ -44,6 +44,17 @@ services:
       options:
         max-size: 10m
         max-file: "10"
+    labels:
+      metrics_enabled: "true"
+      metrics_port: "8008"
+      logs_enabled: "false"
+      instance: "${GA_METRICS_LABELS_INSTANCE}"
+  alloy:
+    environment:
+      METRICS_LABELS_EXECUTION_CLIENT: "besu"
+    extends:
+      file: ../addons/alloy/compose.yaml
+      service: alloy
 networks:
   gas:
     name: gas-network
