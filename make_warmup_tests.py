@@ -4,7 +4,6 @@ from pathlib import Path
 
 # your real genesis roots
 GENESIS_ROOT   = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
-GENESIS_PARENT = "0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc"
 
 # your image‐bulk JSON
 IMAGES = '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
@@ -104,16 +103,14 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
     print(f"[debug] total files changed: {replaced_files}")
     return replaced_files
 
-def chain_parenthashes(tests_root: Path, genesis_parent: str) -> int:
+def chain_parenthashes(tests_root: Path) -> int:
     """
     In-place: for every .txt under tests_root, parse each engine_newPayloadV3,
-    and set its parentHash to the previous payload's blockHash (or genesis_parent for the first).
     Returns the number of files modified.
     """
     changed_files = 0
 
     for txt in tests_root.rglob("*.txt"):
-        prev = genesis_parent
         new_lines = []
         file_changed = False
 
@@ -131,9 +128,6 @@ def chain_parenthashes(tests_root: Path, genesis_parent: str) -> int:
                 if old_parent != prev:
                     payload["parentHash"] = prev
                     file_changed = True
-                # now bump prev to this payload's blockHash
-                if prev == genesis_parent:
-                    prev = payload.get("blockHash", prev)
 
                 new_lines.append(json.dumps(obj) + "\n")
             else:
