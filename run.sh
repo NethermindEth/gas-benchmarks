@@ -73,6 +73,7 @@ for run in $(seq 1 $RUNS); do
           echo "Running warmup group: $prefix - warmup #$warmup_count"
           python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayloadV3'
         done
+      fi
 
       # Actual run
       echo 'Running measured scenarios...'
