@@ -5,7 +5,6 @@ import subprocess
 
 from utils import print_computer_specs
 
-
 LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
 PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
 PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
@@ -14,7 +13,6 @@ PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
 executables = {
     "kute": "./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute"
 }
-
 
 def get_command_env(
     client: str,
@@ -65,12 +63,10 @@ def run_command(
     print(results.stderr)
     return results.stdout
 
-
 def save_to(output_folder, file_name, content):
     output_path = os.path.join(output_folder, file_name)
     with open(output_path, "w") as file:
         file.write(content)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark script")
@@ -178,10 +174,6 @@ def main():
                 execution_url,
                 kute_arguments,
             )
-            # Print docker compose logs for debugging
-            # command = f'docker compose -f scripts/{client}/docker-compose.yaml logs > {output_folder}/docker_logs_{client}_{run}_{name}.txt'
-            # subprocess.run(command, shell=True, capture_output=True, text=True)
-            save_to(output_folder, f"{client}_results_{run}_{name}.txt", response)
         return
     else:
         response_file = os.path.join(output_folder, f"{client}_response_{run}.txt")
@@ -200,7 +192,6 @@ def main():
             f"{client}_results_{run}_{test_case_without_extension}.txt",
             response,
         )
-
 
 if __name__ == "__main__":
     main()
