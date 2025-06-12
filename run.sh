@@ -23,7 +23,9 @@ done
 IFS=',' read -ra CLIENT_ARRAY <<< "$CLIENTS"
 
 # Set up environment
+rm -rf results
 mkdir -p results
+mkdir -p logs
 
 # Install dependencies
 pip install -r requirements.txt
@@ -35,6 +37,8 @@ LEAF_DIRS=$(find "$TEST_PATH" -type d | while read -r dir; do
     echo "$dir"
   fi
 done)
+
+ts=$(date +%s)
 
 # Run benchmarks
 for run in $(seq 1 $RUNS); do
@@ -55,6 +59,8 @@ for run in $(seq 1 $RUNS); do
         python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath "$WARMUP_FILE" --client $client --run $run
       fi
 
+      docker logs gas-execution-client 2> logs/docker_$client_$ts.log
+
       cl_name=$(echo "$client" | cut -d '_' -f 1)
       cd "scripts/$cl_name"
       docker compose down
@@ -74,6 +80,4 @@ else
 fi
 
 # Prepare and zip the results
-mkdir -p reports/docker
-cp -r results/docker_* reports/docker
 zip -r reports.zip reports
