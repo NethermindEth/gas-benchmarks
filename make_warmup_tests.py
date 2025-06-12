@@ -19,7 +19,7 @@ def bump_last_nibble(h: str) -> str:
     return h[:-1] + format((last + 1) % 16, "x")
 
 
-def process_line(line: str, counters: dict) -> str:
+def process_line(line: str, counters: dict, bump_only_if_last: bool = False) -> str:
     line = line.rstrip("\n")
     if not line.strip():
         return "\n"
@@ -28,21 +28,16 @@ def process_line(line: str, counters: dict) -> str:
     except json.JSONDecodeError:
         return line + "\n"
 
-    if obj.get("method") == "engine_newPayloadV3":
-        payload = obj["params"][0]
+    payload = obj["params"][0]
 
-        # 1) skip payload that already uses the real genesis root
-        if not payload["blockNumber"] == "0x3":
-            counters["dropped"] += 1
-            return json.dumps(obj) + "\n"
-
-        # 2) otherwise bump stateRoot
-        payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
-        counters["bumped"] += 1
-    else:
-        # drop every non-newPayloadV3
+    # 1) skip payload that already uses the real genesis root
+    if not bump_only_if_last:
         counters["dropped"] += 1
-        return ""
+        return json.dumps(obj) + "\n"
+
+    # 2) otherwise bump stateRoot
+    payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
+    counters["bumped"] += 1
 
     counters["total"] += 1
     return json.dumps(obj) + "\n"
@@ -178,8 +173,15 @@ def main():
         out = dst_root / rel
         out.parent.mkdir(parents=True, exist_ok=True)
         with src.open() as fin, out.open("w") as fout:
+            total_payloads = sum(1 for line in fin if "engine_newPayload" in line)
+            fin.seek(0)
+            seen_payloads = 0
             for line in fin:
-                nl = process_line(line, counters)
+                if "engine_newPayload" not in line:
+                    continue
+                seen_payloads += 1
+                is_last_payload = (seen_payloads == total_payloads)
+                nl = process_line(line, counters, bump_only_if_last=is_last_payload)
                 if nl:
                     fout.write(nl)
 
