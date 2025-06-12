@@ -74,20 +74,9 @@ for run in $(seq 1 $RUNS); do
           python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayloadV3'
         done
 
-        filtered_dir="filtered-tests"
-        mkdir -p "$filtered_dir"
-        last_line=$(grep 'engine_newPayload' "$test_file" | tail -n1)
-        if [[ -n $last_line ]]; then
-          echo "$last_line" > "$filtered_dir/$filename"
-          echo "→ Filtered line saved to $filtered_dir/$filename"
-        else
-          echo "⚠️  No 'engine_newPayload' line found in $test_file"
-        fi
-      fi
-      
       # Actual run
       echo 'Running measured scenarios...'
-      python3 run_kute.py --output results --testsPath "$filtered_dir/$filename" --jwtPath /tmp/jwtsecret --client $client --run $run
+      python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
     done
 
     cl_name=$(echo "$client" | cut -d '_' -f 1)
