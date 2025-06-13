@@ -59,8 +59,7 @@ def main():
         "--imageBulk",
         type=str,
         help="Docker image of the client we are going to use.",
-        default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default"}, '
-        '"erigon": "default", "nimbus": "default"}',
+        default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default", "erigon": "default", "nimbus": "default"}'
     )
 
     # Parse command-line arguments
