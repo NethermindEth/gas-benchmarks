@@ -6,6 +6,11 @@
 # Default results folder
 /results/
 /reports/
+/zkevm_result/
+/warmupresults/
+/warmup/
+/venv/
+/generationresults/
 
 # Others
 .idea/
@@ -15,3 +20,5 @@
 scripts/**/.env
 
 .history/
+
+nohup.out
