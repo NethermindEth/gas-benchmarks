@@ -8,7 +8,7 @@ import platform
 import numpy as np
 import psutil
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+import datetime
 
 def read_results(text):
     sections = {}
@@ -321,13 +321,10 @@ def merge_html(first_data, second_data):
     return first_soup.prettify()
 
 def convert_dotnet_ticks_to_utc(ticks):
-    # .NET ticks are from 0001-01-01
-    dotnet_epoch = datetime(1, 1, 1)
-
-    # One tick = 100 nanoseconds = 0.0000001 seconds
+    # .NET ticks start at 0001-01-01
+    dotnet_epoch = datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc)
+    # 1 tick = 100 nanoseconds = 0.0000001 seconds
     seconds = ticks / 10_000_000
-
-    # Convert to datetime
-    utc_datetime = dotnet_epoch + timedelta(seconds=seconds)
-
-    return utc_datetime
+    dt = dotnet_epoch + datetime.timedelta(seconds=seconds)
+    # Format as 'YYYY-MM-DD HH:MI:SS.FFFFFF+00'
+    return dt.strftime('%Y-%m-%d %H:%M:%S.%f+00')
