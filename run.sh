@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Default inputs
-TEST_PATH="tests/"
+TEST_PATH="zkevm-tests/"
 WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
-CLIENTS="nethermind,geth,reth,besu,erigon"
+CLIENTS="geth"
 RUNS=8
 IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default"}'
 
