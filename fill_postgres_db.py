@@ -6,7 +6,7 @@ import sys
 import glob
 import re
 from bs4 import BeautifulSoup, Tag # For parsing HTML if computer_specs.txt is not found
-import logging 
+import logging
 from typing import Any, Dict, List, Optional, Tuple # Added for type hinting
 
 # --- Constants ---
@@ -70,10 +70,13 @@ def insert_benchmark_record(cursor: psycopg2.extensions.cursor, table_name: str,
         cursor.execute(sql, list(record_data.values()))
     except (psycopg2.DataError, psycopg2.IntegrityError) as error:
         logging.error(f"Data error inserting record: {error}\nSQL: {sql}\nRecord data: {record_data}")
+        raise
     except psycopg2.Error as error:
         logging.error(f"Database error inserting record: {error}\nSQL: {sql}\nRecord data: {record_data}")
+        raise
     except Exception as error:
         logging.error(f"Unexpected error inserting record: {error}\nSQL: {sql}\nRecord data: {record_data}")
+        raise
 
 
 # --- Computer Specs Parsing ---
@@ -101,7 +104,7 @@ def parse_specs_from_text(spec_text_content: str) -> Dict[str, Any]:
     """
     logging.debug("--- spec_text_content received by parse_specs_from_text: ---\n%s\n--- End of spec_text_content ---", spec_text_content)
     specs: Dict[str, Any] = {}
-    
+
     if not spec_text_content or not spec_text_content.strip():
         logging.debug("spec_text_content is empty or whitespace only.")
         return specs
@@ -141,10 +144,10 @@ def parse_specs_from_text(spec_text_content: str) -> Dict[str, Any]:
                         logging.debug(f"Assigned '{value}' to {db_field}.")
                 else:
                     logging.debug(f"Line '{line}' started with prefix '{key_prefix}' but split on ':' did not yield 2 parts. Parts: {parts}")
-                break 
+                break
         if not matched_key_for_line:
             logging.debug(f"No matching prefix found for line: '{line}'.")
-            
+
     logging.debug("--- specs dictionary before returning from parse_specs_from_text: ---\n%s\n--- End of parse_specs_from_text debug ---", specs)
     return specs
 
@@ -172,7 +175,7 @@ def get_computer_specs(reports_dir: str) -> Dict[str, Any]:
         elif os.path.exists(html_index_path):
             logging.info(f"Reading computer specs from HTML: {html_index_path}")
             with open(html_index_path, 'r', encoding='utf-8') as f: # Added encoding
-                soup = BeautifulSoup(f, 'lxml') 
+                soup = BeautifulSoup(f, 'lxml')
                 pre_tag = soup.find('pre')
                 if pre_tag:
                     specs_data = parse_specs_from_text(pre_tag.get_text())
@@ -184,11 +187,11 @@ def get_computer_specs(reports_dir: str) -> Dict[str, Any]:
         logging.error(f"Specs file not found during parsing: {e}")
     except Exception as e:
         logging.error(f"Error parsing computer specs: {e}", exc_info=True) # Added exc_info for stack trace
-    
+
     # Ensure all spec keys are present, defaulting to None if not parsed
     for key in ALL_SPEC_KEYS:
         specs_data.setdefault(key, None) # Use setdefault for cleaner way to add if missing
-            
+
     return specs_data
 
 # --- CSV Processing & Data Population ---
@@ -207,7 +210,7 @@ def load_aggregated_stats(output_csv_path: str) -> Dict[str, Dict[str, Any]]:
         if not os.path.exists(output_csv_path):
             logging.warning(f"Aggregated stats file not found: {output_csv_path}")
             return aggregated_map
-        
+
         with open(output_csv_path, 'r', newline='', encoding='utf-8') as csvfile: # Added encoding
             reader = csv.DictReader(csvfile)
             for row in reader:
@@ -221,6 +224,8 @@ def load_aggregated_stats(output_csv_path: str) -> Dict[str, Dict[str, Any]]:
                             'p99_mgas_s': float(row['p99 (MGas/s)']) if row.get('p99 (MGas/s)') and row['p99 (MGas/s)'].strip() else None,
                             'min_mgas_s': float(row['Min (MGas/s)']) if row.get('Min (MGas/s)') and row['Min (MGas/s)'].strip() else None,
                             'n_samples': int(row['N']) if row.get('N') and row['N'].strip() else None,
+                            # Add timestamp fields if they exist
+                            'start_time': row.get('Start Time') if row.get('Start Time') else None,
                             'test_description': row.get('Description')
                         }
                     except ValueError as ve:
@@ -279,7 +284,7 @@ def extract_client_version_from_text_content(html_text_content: Optional[str], c
         # This is a preliminary filter before applying the more complex regex.
         if cleaned_line.lower().startswith(client_name.lower()):
             logging.debug(f"Potential match for '{client_name}' on line {i} (cleaned): '{cleaned_line}'")
-            
+
             match = version_extraction_pattern.match(cleaned_line) # Use .match() because of ^ anchor
             if match:
                 version = match.group("version")
@@ -304,17 +309,17 @@ def extract_client_version_from_text_content(html_text_content: Optional[str], c
                     return version
                 else:
                     logging.warning(f"Line started with '{client_name}' but no version pattern (strict or lenient) matched: '{cleaned_line}'")
-                    
+
     logging.warning(f"No line found containing client '{client_name}' and a parsable version string.")
     return None
 
 def populate_data_for_client(
-    cursor: psycopg2.extensions.cursor, 
-    table_name: str, 
-    client_name: str, 
+    cursor: psycopg2.extensions.cursor,
+    table_name: str,
+    client_name: str,
     client_version: Optional[str],
-    reports_dir: str, 
-    aggregated_stats_map: Dict[str, Dict[str, Any]], 
+    reports_dir: str,
+    aggregated_stats_map: Dict[str, Dict[str, Any]],
     computer_specs: Dict[str, Any]
 ) -> int:
     """
@@ -333,22 +338,22 @@ def populate_data_for_client(
         The number of records inserted for this client.
     """
     raw_csv_path = os.path.join(reports_dir, f"raw_results_{client_name}.csv")
-    
+
     try:
         if not os.path.exists(raw_csv_path):
             logging.warning(f"Raw results file not found for client {client_name}: {raw_csv_path}")
-            return 0 
+            return 0
 
         inserted_count = 0
         logging.info(f"Processing raw results for client: {client_name} from {raw_csv_path}")
-        
+
         with open(raw_csv_path, 'r', newline='', encoding='utf-8') as csvfile: # Added encoding
             reader = csv.reader(csvfile)
-            header = next(reader, None) 
+            header = next(reader, None)
             if not header:
                 logging.warning(f"Raw results file is empty or has no header: {raw_csv_path}")
                 return 0
-            
+
             if len(header) < 3: # Expecting at least 'Test Case', 'Gas', 'Description' and one run column
                 logging.warning(f"Raw results file {raw_csv_path} has unexpected header format (less than 3 columns): {header}")
                 return 0
@@ -357,7 +362,7 @@ def populate_data_for_client(
                 if len(row) != len(header):
                     logging.warning(f"Skipping malformed row {i+2} in {raw_csv_path}. Expected {len(header)} columns, got {len(row)}. Row: {row}")
                     continue
-                
+
                 test_case_name_raw = row[0]
                 raw_gas_value = row[1]
                 # raw_run_description is the last column if header > 2, otherwise it might be missing
@@ -379,8 +384,11 @@ def populate_data_for_client(
                             continue
                     except ValueError:
                         logging.warning(f"Could not convert run value '{run_value_str}' to float for {test_case_name_raw}. Skipping this run.")
-                        continue 
+                        continue
 
+                    start_time = agg_stats.get('start_time')
+                    if start_time in (0, "0", "", None):
+                        start_time = None
                     record: Dict[str, Any] = {
                         'client_name': client_name,
                         'client_version': client_version,
@@ -395,7 +403,8 @@ def populate_data_for_client(
                         'raw_gas_value': raw_gas_value,
                         'raw_run_mgas_s': raw_run_mgas_s,
                         'raw_run_description': raw_run_description, # This is from the raw data row
-                        **computer_specs 
+                        'start_time': start_time,
+                        **computer_specs
                     }
                     insert_benchmark_record(cursor, table_name, record)
                     inserted_count += 1
@@ -414,7 +423,7 @@ def main() -> None:
     # Setup logging
     # For more advanced configuration, consider a config file or more CLI args for log level, file output etc.
     logging.basicConfig(
-        level=logging.INFO, 
+        level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(module)s - %(funcName)s - %(message)s',
         handlers=[logging.StreamHandler(sys.stdout)] # Ensures logs go to stdout
     )
@@ -432,12 +441,12 @@ def main() -> None:
     parser.add_argument("--db-name", required=True, help="PostgreSQL database name.")
     parser.add_argument("--table-name", default="benchmark_data", help="Name of the target table in the database.")
     parser.add_argument(
-        "--log-level", 
-        default="INFO", 
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], 
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Set the logging level."
     )
-    
+
     args = parser.parse_args()
 
     # Update logging level based on CLI argument
@@ -456,7 +465,7 @@ def main() -> None:
     if not conn:
         logging.critical("Failed to establish database connection. Exiting.")
         sys.exit(1)
-    
+
     total_records_inserted = 0
     main_page_text_content: Optional[str] = None
 
@@ -487,7 +496,7 @@ def main() -> None:
 
             output_csv_pattern = os.path.join(args.reports_dir, "output_*.csv")
             client_files = glob.glob(output_csv_pattern)
-            
+
             if not client_files:
                 logging.warning(f"No 'output_*.csv' files found in {args.reports_dir}. Cannot determine clients.")
                 # No sys.exit here, connection will be closed in finally
@@ -510,24 +519,24 @@ def main() -> None:
 
             for client_name in clients:
                 logging.info(f"--- Processing client: {client_name} ---")
-                
+
                 # Extract client version for the current client from the HTML text content
                 client_version: Optional[str] = None
                 if main_page_text_content:
                     client_version = extract_client_version_from_text_content(main_page_text_content, client_name)
-                
+
                 if not client_version:
                     logging.warning(f"Could not determine version for client '{client_name}' from the content of {html_index_path}.")
 
                 output_csv_path = os.path.join(args.reports_dir, f"output_{client_name}.csv")
                 aggregated_stats_map = load_aggregated_stats(output_csv_path)
-                
+
                 if not aggregated_stats_map:
                     logging.warning(f"No aggregated stats loaded for client {client_name}, skipping raw data processing for this client.")
                     continue
 
                 inserted_for_client = populate_data_for_client(
-                    cursor, args.table_name, client_name, client_version, # Added client_version 
+                    cursor, args.table_name, client_name, client_version, # Added client_version
                     args.reports_dir, aggregated_stats_map, computer_specs
                 )
                 total_records_inserted += inserted_for_client
@@ -536,7 +545,7 @@ def main() -> None:
         # Commit once after all clients are processed
         conn.commit()
         logging.info(f"\nSuccessfully committed all changes. Total records inserted: {total_records_inserted}.")
-    
+
     except (psycopg2.Error, Exception) as e: # Catch DB errors or other exceptions during processing
         logging.error(f"An error occurred during database operations or processing: {e}", exc_info=True)
         if conn: # conn might be None if initial connection failed and was handled by get_db_connection returning None
@@ -551,4 +560,4 @@ def main() -> None:
             logging.info("PostgreSQL connection closed.")
 
 if __name__ == "__main__":
-    main() 
+    main()
