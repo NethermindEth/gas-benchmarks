@@ -70,17 +70,17 @@ fi
 while true; do
   git pull
   # Update performance images
-  python update_performance_images.py
+  python3 update_performance_images.py
   # Run the benchmark testing using specified warmup file
   PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
     bash run.sh -t "tests-vm/" -w "$WARMUP_FILE" -r1
 
   # Populate the Postgres DB with the metrics data
-  python fill_postgres_db.py --db-host "$DB_HOST" --db-port 5432 --db-user "$DB_USER" --db-name monitoring --table-name "$TABLE_NAME" --db-password "$DB_PASSWORD" --reports-dir 'reports'
+  python3 fill_postgres_db.py --db-host "$DB_HOST" --db-port 5432 --db-user "$DB_USER" --db-name monitoring --table-name "$TABLE_NAME" --db-password "$DB_PASSWORD" --reports-dir 'reports'
 
   # Clean up the reports directory
   rm -rf reports/
 
   # Revert images.yml to original state
-  python update_performance_images.py --revert
+  python3 update_performance_images.py --revert
 done
