@@ -62,7 +62,7 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     with open(response_file, 'r') as file:
         text = file.read()
         if len(text) == 0:
-            Print("text len 0")
+            print("text len 0")
             return False, 0, 0
         # Get latest line
         for line in text.split('\n'):
@@ -75,10 +75,12 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     with open(result_file, 'r') as file:
         sections = read_results(file.read())
         if method not in sections:
-            print("no method")
-            return False, 0, sections[method].timestamp
+            print(f"Method '{method}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
+            # Get timestamp from first available section, or 0 if no sections exist
+            timestamp = next(iter(sections.values())).get('timestamp', 0) if sections else 0
+            return False, 0, timestamp
         result = sections[method].fields[field]
-    return response, float(result), sections[method].timestamp
+    return response, float(result), sections[method].get('timestamp', 0)
 
 
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
