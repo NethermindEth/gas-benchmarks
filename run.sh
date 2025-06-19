@@ -3,7 +3,7 @@
 # Default inputs
 TEST_PATH="tests/"
 WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
-CLIENTS="nethermind,nethermind-modexp,geth,reth,besu,erigon"
+CLIENTS="nethermind,nethermind-modexp,geth,reth,besu,erigon,nimbus"
 RUNS=8
 IMAGES='{"nethermind":"default","nethermind-modexp":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default"}'
 EXECUTIONS_FILE="executions.json"
