@@ -77,10 +77,11 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
         if method not in sections:
             print(f"Method '{method}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
             # Get timestamp from first available section, or 0 if no sections exist
-            timestamp = next(iter(sections.values())).get('timestamp', 0) if sections else 0
+            timestamp = getattr(next(iter(sections.values())), 'timestamp', 0) if sections else 0
             return False, 0, timestamp
         result = sections[method].fields[field]
-    return response, float(result), sections[method].get('timestamp', 0)
+        timestamp = getattr(sections[method], 'timestamp', 0)
+    return response, float(result), timestamp
 
 
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
