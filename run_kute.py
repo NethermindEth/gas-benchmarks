@@ -3,8 +3,6 @@ import argparse
 import os
 import subprocess
 
-from utils import print_computer_specs
-
 LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
 PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
 PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
@@ -143,10 +141,6 @@ def main():
             client, warmup_file, jwt_path, warmup_response_file, execution_url, kute_arguments
         )
         save_to(output_folder, f"warmup_{client}_results_{run}.txt", warmup_response)
-
-    # Print Computer specs
-    computer_specs = print_computer_specs()
-    save_to(output_folder, "computer_specs.txt", computer_specs)
 
     # if test case path is a folder, run all the test cases in the folder
     if os.path.isdir(tests_paths):
