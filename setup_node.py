@@ -23,9 +23,9 @@ def set_env(
     el_images,
     run_path,
 ):
-    if client == "nethermind":
+    if "nethermind" in client:
         specifics = "CHAINSPEC_PATH=/tmp/chainspec.json"
-    elif client == "besu":
+    elif "besu" in client:
         specifics = "CHAINSPEC_PATH=/tmp/besu.json"
         specifics += "\nEC_ENABLED_MODULES=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,EEA,TXPOOL,PRIV,WEB3\n"
     else:
