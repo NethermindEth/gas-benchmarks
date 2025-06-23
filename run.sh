@@ -135,13 +135,11 @@ for run in $(seq 1 $RUNS); do
       # Opcodes warmup groups
       if (( OPCODES_WARMUP_COUNT > 0 )); then
         for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-          echo "Running opcodes warmup for $filename - warmup #$warmup_count"
           python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayloadV3'
         done
       fi
 
       # Actual measured run
-      echo "Running measured scenario: $filename"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
     done
 
