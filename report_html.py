@@ -73,6 +73,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              f'<th onclick="sortTable(5, \'table_{client}\', true)" style="cursor: pointer;">Min (MGas/s) &uarr; &darr;</th>\n'
                              '<th>N</th>\n'
                              '<th class=\"title\">Description</th>\n'
+                             '<th>Start Time</th>\n'
                              '</tr>\n'
                              '</thread>\n'
                              '<tbody>\n')
@@ -86,7 +87,8 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                                  f'<td>{data[5]}</td>\n'
                                  f'<td>{data[1]}</td>\n'
                                  f'<td>{data[6]}</td>\n'
-                                 f'<td style="text-align:left;" >{data[7]}</td>\n</tr>\n')
+                                 f'<td style="text-align:left;" >{data[7]}</td>\n'
+                                 f'<td>{data[8]}</td>\n</tr>\n')
         results_to_print += '\n'
         results_to_print += ('</table>\n'
                              '</tbody>\n')
@@ -160,9 +162,9 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(
                 ['Title', 'Max (MGas/s)', 'p50 (MGas/s)', 'p95 (MGas/s)', 'p99 (MGas/s)', 'Min (MGas/s)', 'N',
-                 'Description'])
+                 'Description', "Start Time"])
             for test_case, data in gas_table.items():
-                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7]])
+                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8]])
 
 
 def main():
@@ -171,10 +173,10 @@ def main():
     parser.add_argument('--testsPath', type=str, help='results', default='tests/')
     parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
                                                     'split them by comma, ex: nethermind,geth',
-                        default='nethermind,geth,reth,erigon,besu')
+                        default='nethermind,geth,reth,erigon,besu,nimbus')
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
-                        default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}')
+                        default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default"}')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -211,10 +213,16 @@ def main():
                     client_results[client][test_case_name][gas][method] = []
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
-                        responses, results = utils.extract_response_and_result(results_paths, client, test_case_name,
+                        responses, results, timestamp = utils.extract_response_and_result(results_paths, client, test_case_name,
                                                                                gas, run, method, fields)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
+                        # print(test_case_name + " : " + str(timestamp))
+                        if str(timestamp) != "0":
+                            client_results[client][test_case_name]["timestamp"] = utils.convert_dotnet_ticks_to_utc(timestamp)
+                        else:
+                            if "timestamp" not in str(client_results[client][test_case_name]):
+                                client_results[client][test_case_name]["timestamp"] = 0
 
     gas_set = set()
     for test_case_name, test_case_gas in test_cases.items():
