@@ -117,16 +117,20 @@ for run in $(seq 1 $RUNS); do
     for test_file in "${TEST_FILES[@]}"; do
       filename="${test_file##*/}"
 
-      # Apply exclude filter
-      skip=false
-      for pat in "${FILTERS[@]}"; do
-        if [[ -n "$pat" && "$filename" == *"$pat"* ]]; then
-          echo "Skipping $filename (matches filter '$pat')"
-          skip=true
-          break
+      # Apply include-only filter if specified
+      if [ -n "$FILTER" ]; then
+        match=false
+        for pat in "${FILTERS[@]}"; do
+          if [[ -n "$pat" && "$filename" == *"$pat"* ]]; then
+            match=true
+            break
+          fi
+        done
+        if ! $match; then
+          echo "Skipping $filename (does not match include filter)"
+          continue
         fi
-      done
-      $skip && continue
+      fi
 
       # Determine warmup path for this file
       warmup_filename="$(echo "$filename" | sed -E 's/_[0-9]+M/_150M/')"
