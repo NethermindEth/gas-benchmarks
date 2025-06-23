@@ -38,7 +38,7 @@ services:
       - --Network.DiscoveryPort=30304
       - --HealthChecks.Enabled=true
       - --Metrics.Enabled=true
-      - --Metrics.ExposePort=8009
+      - --Metrics.ExposePort=8008
       - --Init.GenesisHash=0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc
       - --Sync.MaxAttemptsToUpdatePivot=0
       - --Init.AutoDump=None
@@ -47,6 +47,17 @@ services:
       options:
         max-size: 10m
         max-file: "10"
+    labels:
+      metrics_enabled: "true"
+      metrics_port: "8008"
+      logs_enabled: "false"
+      instance: "${GA_METRICS_LABELS_INSTANCE}"
+  alloy:
+    environment:
+      METRICS_LABELS_EXECUTION_CLIENT: "nethermind"
+    extends:
+      file: ../addons/alloy/compose.yaml
+      service: alloy
 networks:
   gas:
     name: gas-network

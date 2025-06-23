@@ -8,11 +8,12 @@ import platform
 import numpy as np
 import psutil
 from bs4 import BeautifulSoup
-
+import datetime
 
 def read_results(text):
     sections = {}
-    for sections_text in text.split('--------------------------------------------------------------'):
+    for i, sections_text in enumerate(text.split('--------------------------------------------------------------')):
+        # print("Processing section: " + str(i))
         timestamp = None
         measurement = None
         tags = {}
@@ -51,32 +52,36 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     response = True
     result = 0
     if not os.path.exists(result_file):
-        print("No result in:", result_file)
-        return False, 0
+        # print("No result: " + result_file)
+        print("No result")
+        return False, 0, 0
     if not os.path.exists(response_file):
         print("No repsonse")
-        return False, 0
+        return False, 0, 0
     # Get the responses from the files
     with open(response_file, 'r') as file:
         text = file.read()
         if len(text) == 0:
-            Print("text len 0")
-            return False, 0
+            print("text len 0")
+            return False, 0, 0
         # Get latest line
         for line in text.split('\n'):
             if len(line) < 1:
                 continue
             if not check_sync_status(line):
                 print("Invalid sync status")
-                return False, 0
+                return False, 0, 0
     # Get the results from the files
     with open(result_file, 'r') as file:
         sections = read_results(file.read())
         if method not in sections:
-            print("no method")
-            return False, 0
+            print(f"Method '{method}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
+            # Get timestamp from first available section, or 0 if no sections exist
+            timestamp = getattr(next(iter(sections.values())), 'timestamp', 0) if sections else 0
+            return False, 0, timestamp
         result = sections[method].fields[field]
-    return response, float(result)
+        timestamp = getattr(sections[method], 'timestamp', 0)
+    return response, float(result), timestamp
 
 
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
@@ -96,15 +101,17 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
 
     for test_case, _ in test_cases.items():
         results_norm = results_per_test_case[test_case]
-        gas_table_norm[test_case] = ['' for _ in range(8)]
+        gas_table_norm[test_case] = ['' for _ in range(9)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
         # (norm) title, description, N , max, min, p50, p95, p99
         if test_case in metadata:
             gas_table_norm[test_case][0] = metadata[test_case]['Title']
             gas_table_norm[test_case][7] = metadata[test_case]['Description']
+            gas_table_norm[test_case][8] = client_results[client][test_case]["timestamp"]
         else:
             gas_table_norm[test_case][0] = test_case
             gas_table_norm[test_case][7] = 'Description not found on metadata file'
+            gas_table_norm[test_case][8] = client_results[client][test_case]["timestamp"]
         if len(results_norm) == 0:
             gas_table_norm[test_case][1] = f'0'
             gas_table_norm[test_case][2] = f'0'
@@ -120,7 +127,6 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
         gas_table_norm[test_case][4] = f'{np.percentile(percentiles[5], 5):.2f}'
         gas_table_norm[test_case][5] = f'{np.percentile(percentiles[1], 1):.2f}'
         gas_table_norm[test_case][6] = f'{len(results_norm)}'
-
     return gas_table_norm
 
 
@@ -316,3 +322,12 @@ def merge_html(first_data, second_data):
 
 
     return first_soup.prettify()
+
+def convert_dotnet_ticks_to_utc(ticks):
+    # .NET ticks start at 0001-01-01
+    dotnet_epoch = datetime.datetime(1, 1, 1, tzinfo=datetime.timezone.utc)
+    # 1 tick = 100 nanoseconds = 0.0000001 seconds
+    seconds = ticks / 10_000_000
+    dt = dotnet_epoch + datetime.timedelta(seconds=seconds)
+    # Format as 'YYYY-MM-DD HH:MI:SS.FFFFFF+00'
+    return dt.strftime('%Y-%m-%d %H:%M:%S.%f+00')
