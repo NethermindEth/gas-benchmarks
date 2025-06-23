@@ -140,6 +140,7 @@ for run in $(seq 1 $RUNS); do
 
       # Actual measured run
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
+      echo "" # Line break after each test for logs clarity
     done
 
     # Collect logs & teardown
