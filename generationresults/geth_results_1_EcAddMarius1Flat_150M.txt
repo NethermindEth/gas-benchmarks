@@ -1,0 +1,80 @@
+# TIMESTAMP: 638862731189274997
+# MEASUREMENT: [Application] Failed
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 1
+--------------------------------------------------------------
+# TIMESTAMP: 638862731189274997
+# MEASUREMENT: [Application] Messages
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 3
+--------------------------------------------------------------
+# TIMESTAMP: 638862731189274997
+# MEASUREMENT: [Application] Succeeded
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 2
+--------------------------------------------------------------
+# TIMESTAMP: 638862731189274997
+# MEASUREMENT: [Application] Total Running Time
+# TAGS:
+                  mtype = timer
+                   unit = none
+               unit_dur = ms
+              unit_rate = min
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 322.6086132467129
+                samples = 1
+                   last = 154.749329
+             count.hist = 1
+                    sum = 154.749329
+                    min = 154.749329
+                    max = 154.749329
+                   mean = 154.749329
+                 median = 154.749329
+                 stddev = 0
+                   p999 = 154.749329
+                    p99 = 154.749329
+                    p98 = 154.749329
+                    p95 = 154.749329
+                    p75 = 154.749329
+--------------------------------------------------------------
+# TIMESTAMP: 638862731189274997
+# MEASUREMENT: [Application] engine_newPayloadV3
+# TAGS:
+                  mtype = timer
+                   unit = req
+               unit_dur = ms
+              unit_rate = ms
+# FIELDS:
+            count.meter = 3
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 0.027840459024579454
+                samples = 3
+                   last = 0.6392709999999999
+             count.hist = 3
+                    sum = 37.418707
+                    min = 0.6392709999999999
+                    max = 28.999115
+                   mean = 12.472902333333334
+                 median = 7.780321
+                 stddev = 14.75077718642463
+                   p999 = 28.999115
+                    p99 = 28.999115
+                    p98 = 28.999115
+                    p95 = 28.999115
+                    p75 = 28.999115
+--------------------------------------------------------------
