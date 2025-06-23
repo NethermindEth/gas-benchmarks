@@ -57,7 +57,7 @@ def run_command(
     results = subprocess.run(
         command, shell=True, capture_output=True, text=True, env=command_env
     )
-    print(results.stderr)
+    print(results.stderr.rstrip())
     return results.stdout
 
 def save_to(output_folder, file_name, content):
