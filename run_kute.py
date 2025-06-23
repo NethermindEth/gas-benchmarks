@@ -49,7 +49,6 @@ def run_command(
         f"{executables['kute']} -i {test_case_file} -s {jwt_secret} -r {response} -a {ec_url} "
         f"{kute_extra_arguments} "
     )
-    print(command)
     # Prepare env variables
     command_env = get_command_env(
         client,
