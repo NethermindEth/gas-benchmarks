@@ -27,7 +27,7 @@ def set_env(
         specifics = "CHAINSPEC_PATH=/tmp/chainspec.json"
     elif "besu" in client:
         specifics = "CHAINSPEC_PATH=/tmp/besu.json"
-        specifics += "\nEC_ENABLED_MODULES=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,EEA,TXPOOL,PRIV,WEB3\n"
+        specifics += "\nEC_ENABLED_MODULES=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,TXPOOL,WEB3\n"
     else:
         specifics = "GENESIS_PATH=/tmp/genesis.json"
     env = (
