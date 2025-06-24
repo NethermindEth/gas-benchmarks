@@ -107,11 +107,12 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
         if test_case in metadata:
             gas_table_norm[test_case][0] = metadata[test_case]['Title']
             gas_table_norm[test_case][7] = metadata[test_case]['Description']
-            gas_table_norm[test_case][8] = client_results[client][test_case]["timestamp"]
+            timestamp = getattr(client_results[client][test_case], 'timestamp', 0) if client_results[client][test_case] else 0
+            gas_table_norm[test_case][8] = timestamp
         else:
             gas_table_norm[test_case][0] = test_case
             gas_table_norm[test_case][7] = 'Description not found on metadata file'
-            gas_table_norm[test_case][8] = client_results[client][test_case]["timestamp"]
+            gas_table_norm[test_case][8] = 0
         if len(results_norm) == 0:
             gas_table_norm[test_case][1] = f'0'
             gas_table_norm[test_case][2] = f'0'
