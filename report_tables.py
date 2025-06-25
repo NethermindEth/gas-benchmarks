@@ -133,6 +133,7 @@ def main():
             metadata[item['Name']] = item
 
     get_table_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
+    get_table_report(failed_tests, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
 
     print('Done!')
 
