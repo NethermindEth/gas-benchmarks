@@ -17,21 +17,21 @@ def save_images_yaml(data, path):
 def get_latest_performance_tag(image):
     """
     Query Docker Hub API for the latest 'performance-<commit>' tag for the given image.
-    Only tags matching 'performance-[a-f0-9]+' are considered valid.
+    Only tags matching 'performance-modexp-[a-f0-9]+' are considered valid.
     """
     if "/" not in image:
         # Not a valid Docker Hub image
         return None
     namespace, repo = image.split("/", 1)
-    url = f"https://hub.docker.com/v2/repositories/{namespace}/{repo}/tags?page_size=10&name=performance"
+    url = f"https://hub.docker.com/v2/repositories/{namespace}/{repo}/tags?page_size=10&name=performance-modexp"
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         results = resp.json().get("results", [])
-        # Only allow tags like performance-<commit> (commit is hex)
+        # Only allow tags like performance-modexp-<commit> (commit is hex)
         valid_tags = [
             r for r in results
-            if re.match(r"^performance-[a-f0-9]+$", r["name"])
+            if re.match(r"^performance-modexp-[a-f0-9]+$", r["name"])
         ]
         if not valid_tags:
             return None
@@ -49,9 +49,9 @@ def revert_performance_tags():
 
     for key, value in images.items():
         # Replace :performance-<commit> (commit is hex) with :performance
-        m = re.match(r"^(.*:)(performance-[a-f0-9]+)$", value)
+        m = re.match(r"^(.*:)(performance-modexp-[a-f0-9]+)$", value)
         if m:
-            new_value = m.group(1) + "performance"
+            new_value = m.group(1) + "performance-modexp"
             if new_value != value:
                 print(f"Reverting {key}: {value} -> {new_value}")
                 images[key] = new_value
@@ -59,9 +59,9 @@ def revert_performance_tags():
 
     if updated:
         save_images_yaml(images_yaml, IMAGES_YAML_PATH)
-        print("images.yaml reverted to :performance tags.")
+        print("images.yaml reverted to :performance-modexp tags.")
     else:
-        print("No performance-* tags to revert.")
+        print("No performance-modexp-* tags to revert.")
 
 def main():
     if "--revert" in sys.argv:
@@ -73,7 +73,7 @@ def main():
     updated = False
 
     for key, value in images.items():
-        if value.endswith(":performance"):
+        if value.endswith(":performance-modexp"):
             image_ref = value.rsplit(":", 1)[0]
             latest_tag = get_latest_performance_tag(image_ref)
             if latest_tag:
@@ -83,7 +83,7 @@ def main():
                     images[key] = new_value
                     updated = True
             else:
-                print(f"No performance-* tag found for {image_ref}, skipping.")
+                print(f"No performance-modexp* tag found for {image_ref}, skipping.")
 
     if updated:
         save_images_yaml(images_yaml, IMAGES_YAML_PATH)
