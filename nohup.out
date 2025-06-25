@@ -20411,3 +20411,1379 @@ Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (l
 --- End of stack trace from previous location ---
    at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
 
+Running geth for the 1 time with test case warmup-tests/EcPairing4PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcPairing4PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcPairing4PairsCACHABLE_30M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/GasPop_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/GasPop_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/GasPop_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/CallerPop_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/CallerPop_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/CallerPop_60M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/Transfers_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/Transfers_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/Transfers_100M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcAddMarius1Flat_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcAddMarius1Flat_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcAddMarius1Flat_80M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcPairing2SetsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcPairing2SetsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcPairing2SetsCACHABLE_60M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/Modexp208GasBalancedUNCACHABLE2_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/Modexp208GasBalancedUNCACHABLE2_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/Modexp208GasBalancedUNCACHABLE2_80M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/ModexpGuido4EvenWithIncrementingBaseUNCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/ModexpGuido4EvenWithIncrementingBaseUNCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/ModexpGuido4EvenWithIncrementingBaseUNCACHABLE_60M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcMul32ByteCoordinates32ByteScalarUNCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcMul32ByteCoordinates32ByteScalarUNCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcMul32ByteCoordinates32ByteScalarUNCACHABLE_80M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/Keccak256From8Bytes_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/Keccak256From8Bytes_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/Keccak256From8Bytes_30M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcPairing2PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcPairing2PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcPairing2PairsCACHABLE_30M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/CoinBase_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/CoinBase_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/CoinBase_100M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/Modexp298GasExpHeavyUNCACHABLE2_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/Modexp298GasExpHeavyUNCACHABLE2_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/Modexp298GasExpHeavyUNCACHABLE2_30M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/BaseFee_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/BaseFee_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/BaseFee_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/ModexpGuido4EvenWithBaseffffffffffffffffCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/ModexpGuido4EvenWithBaseffffffffffffffffCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/ModexpGuido4EvenWithBaseffffffffffffffffCACHABLE_60M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcRecoverUNCACHABLE2_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcRecoverUNCACHABLE2_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcRecoverUNCACHABLE2_80M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcPairing5PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcPairing5PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcPairing5PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcRecoverUNCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcRecoverUNCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcRecoverUNCACHABLE_80M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcPairing3PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcPairing3PairsCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case tests-vm/EcPairing3PairsCACHABLE_100M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+
+Running geth for the 1 time with test case warmup-tests/EcAdd32ByteCoordinatesUNCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)
+Running geth for the 1 time with test case warmup-tests/EcAdd32ByteCoordinatesUNCACHABLE_150M.txt
+Unhandled exception: System.Net.Http.HttpRequestException: Connection refused (localhost:8551)
+ ---> System.Net.Sockets.SocketException (111): Connection refused
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource.GetResult(Int16 token)
+   at System.Net.Sockets.Socket.<ConnectAsync>g__WaitForConnectWithCancellation|285_0(AwaitableSocketAsyncEventArgs saea, ValueTask connectTask, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpConnectionPool.ConnectToTcpHostAsync(String host, Int32 port, HttpRequestMessage initialRequest, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.ConnectAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.CreateHttp11ConnectionAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.InjectNewHttp11ConnectionAsync(QueueItem queueItem)
+   at System.Threading.Tasks.TaskCompletionSourceWithCancellation`1.WaitWithCancellationAsync(CancellationToken cancellationToken)
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)
+   at System.Net.Http.RedirectHandler.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   at System.Net.Http.HttpClient.<SendAsync>g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)
+   at Nethermind.Tools.Kute.JsonRpcSubmitter.HttpJsonRpcSubmitter.Submit(JsonRpc rpc) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/JsonRpcSubmitter/HttpJsonRpcSubmitter.cs:line 34
+   at Nethermind.Tools.Kute.Application.AnalyzeRequest(ValueTuple`2 task) in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 174
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 94
+   at Nethermind.Tools.Kute.Application.Run() in /root/gas-benchmarks/nethermind/tools/Nethermind.Tools.Kute/Application.cs:line 68
+   at System.CommandLine.Command.<>c__DisplayClass32_0.<<SetAction>b__0>d.MoveNext()
+--- End of stack trace from previous location ---
+   at System.CommandLine.Invocation.InvocationPipeline.InvokeAsync(ParseResult parseResult, CancellationToken cancellationToken)

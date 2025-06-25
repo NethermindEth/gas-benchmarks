@@ -7,7 +7,7 @@ WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon,nimbus"
 RUNS=8
 OPCODES_WARMUP_COUNT=2
-FILTER=""
+FILTER="Modexp"
 IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default"}'
 EXECUTIONS_FILE="executions.json"
 
