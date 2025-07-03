@@ -23,13 +23,13 @@ init_executions_file() {
 was_executed_today() {
   local client=$1
   local today=$(date +%Y-%m-%d)
-  
+
   if [ ! -f "$EXECUTIONS_FILE" ]; then
     return 1
   fi
-  
+
   local last_execution=$(jq -r --arg client "$client" '.[$client] // empty' "$EXECUTIONS_FILE" 2>/dev/null | cut -d'T' -f1)
-  
+
   if [ "$last_execution" = "$today" ]; then
     return 0
   else
@@ -41,10 +41,10 @@ was_executed_today() {
 update_execution_time() {
   local client=$1
   local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  
+
   local temp_file=$(mktemp)
   jq --arg client "$client" --arg timestamp "$timestamp" '.[$client] = $timestamp' "$EXECUTIONS_FILE" > "$temp_file" && mv "$temp_file" "$EXECUTIONS_FILE"
-  
+
   echo "Updated execution time for $client: $timestamp"
 }
 
