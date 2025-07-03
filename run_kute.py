@@ -3,8 +3,6 @@ import argparse
 import os
 import subprocess
 
-from utils import print_computer_specs
-
 LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
 PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
 PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
@@ -51,7 +49,6 @@ def run_command(
         f"{executables['kute']} -i {test_case_file} -s {jwt_secret} -r {response} -a {ec_url} "
         f"{kute_extra_arguments} "
     )
-    print(command)
     # Prepare env variables
     command_env = get_command_env(
         client,
@@ -60,7 +57,7 @@ def run_command(
     results = subprocess.run(
         command, shell=True, capture_output=True, text=True, env=command_env
     )
-    print(results.stderr)
+    print(results.stderr, end="")
     return results.stdout
 
 def save_to(output_folder, file_name, content):
@@ -144,10 +141,6 @@ def main():
         )
         save_to(output_folder, f"warmup_{client}_results_{run}.txt", warmup_response)
 
-    # Print Computer specs
-    computer_specs = print_computer_specs()
-    save_to(output_folder, "computer_specs.txt", computer_specs)
-
     # if test case path is a folder, run all the test cases in the folder
     if os.path.isdir(tests_paths):
         tests_cases = []
@@ -176,23 +169,14 @@ def main():
             )
             save_to(output_folder, f"{client}_results_{run}_{name}.txt", response)
         return
-    else:
-        response_file = os.path.join(output_folder, f"{client}_response_{run}.txt")
+    else:        
+        test_case_without_extension = os.path.splitext(tests_paths.split('/')[-1])[0]
+        response_file = os.path.join(output_folder, f'{client}_response_{run}_{test_case_without_extension}.txt')
         print(f"Running {client} for the {run} time with test case {tests_paths}")
-        response = run_command(
-            client,
-            tests_paths,
-            jwt_path,
-            response_file,
-            execution_url,
-            kute_arguments,
-        )
-        test_case_without_extension = os.path.splitext(tests_paths.split("/")[-1])[0]
-        save_to(
-            output_folder,
-            f"{client}_results_{run}_{test_case_without_extension}.txt",
-            response,
-        )
+        response = run_command(client, tests_paths, jwt_path, response_file, execution_url, kute_arguments)
+        save_to(output_folder, f'{client}_results_{run}_{test_case_without_extension}.txt',
+                response)
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

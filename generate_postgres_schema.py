@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS {table_name} (
     raw_run_mgas_s REAL NULL,        -- The MGas/s for this specific individual run
     raw_run_description TEXT NULL,   -- Description from the raw_*.csv row, potentially more specific
 
+    -- Test execution timestamps
+    start_time TIMESTAMP WITH TIME ZONE NULL,  -- Test start timestamp
+
     -- Computer Specifications (parsed from system info, repeated per row, all nullable)
     spec_processor_type TEXT NULL,
     spec_system_os TEXT NULL,
@@ -53,7 +56,7 @@ CREATE TABLE IF NOT EXISTS {table_name} (
 
 def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
     """
-    Connects to the PostgreSQL database. 
+    Connects to the PostgreSQL database.
     If the specified table does not exist, it creates it.
     If the table exists, it checks for predefined columns and adds them if they are missing.
 
@@ -66,7 +69,7 @@ def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
         logging.info(f"Connecting to PostgreSQL database '{db_params['dbname']}' on {db_params['host']}:{db_params['port']}...")
         conn = psycopg2.connect(**db_params)
         logging.info("Database connection successful.")
-        
+
         with conn.cursor() as cur:
             # 1. Check if table exists
             cur.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s);", (table_name,))
@@ -79,11 +82,12 @@ def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
                 logging.info(f"Table '{table_name}' created successfully.")
             else:
                 logging.info(f"Table '{table_name}' already exists. Checking for missing columns...")
-                
+
                 # Migration: columns to check and add if they don't exist
                 # Format: (column_name, column_definition_for_add_column)
                 columns_to_ensure: List[Tuple[str, str]] = [
                     ("client_version", "TEXT NULL"),
+                    ("start_time", "TIMESTAMP WITH TIME ZONE NULL"),
                     # Add other columns here in the future for schema evolution
                     # e.g., ("new_feature_flag", "BOOLEAN DEFAULT FALSE")
                 ]
@@ -91,7 +95,7 @@ def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
                 for col_name, col_definition in columns_to_ensure:
                     cur.execute("""
                         SELECT EXISTS (
-                            SELECT FROM information_schema.columns 
+                            SELECT FROM information_schema.columns
                             WHERE table_schema = 'public' AND table_name = %s AND column_name = %s
                         );
                     """, (table_name, col_name))
@@ -131,7 +135,7 @@ def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
 if __name__ == "__main__":
     # Setup logging
     logging.basicConfig(
-        level=logging.INFO, 
+        level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(module)s - %(funcName)s - %(message)s',
         handlers=[logging.StreamHandler(sys.stdout)]
     )
@@ -146,12 +150,12 @@ if __name__ == "__main__":
     parser.add_argument("--db-name", required=True, help="PostgreSQL database name.")
     parser.add_argument("--table-name", default="benchmark_data", help="Name for the table to be created (default: benchmark_data).")
     parser.add_argument(
-        "--log-level", 
-        default="INFO", 
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], 
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Set the logging level."
     )
-    
+
     args = parser.parse_args()
 
     # Update logging level based on CLI argument
@@ -181,5 +185,5 @@ if __name__ == "__main__":
     }
     if db_password: # Only add password to params if it was actually provided
         db_params["password"] = db_password
-    
-    execute_sql_on_db(db_params, args.table_name) 
+
+    execute_sql_on_db(db_params, args.table_name)

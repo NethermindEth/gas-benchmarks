@@ -16,23 +16,28 @@ def save_images_yaml(data, path):
 
 def get_latest_performance_tag(image):
     """
-    Query Docker Hub API for the latest 'performance-*' tag for the given image.
+    Query Docker Hub API for the latest 'performance-<commit>' tag for the given image.
+    Only tags matching 'performance-[a-f0-9]+' are considered valid.
     """
     if "/" not in image:
         # Not a valid Docker Hub image
         return None
     namespace, repo = image.split("/", 1)
-    url = f"https://hub.docker.com/v2/repositories/{namespace}/{repo}/tags?page_size=2&name=performance"
+    url = f"https://hub.docker.com/v2/repositories/{namespace}/{repo}/tags?page_size=10&name=performance"
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         results = resp.json().get("results", [])
-        perf_tags = [r["name"] for r in results if r["name"].startswith("performance-")]
-        if not perf_tags:
+        # Only allow tags like performance-<commit> (commit is hex)
+        valid_tags = [
+            r for r in results
+            if re.match(r"^performance-[a-f0-9]+$", r["name"])
+        ]
+        if not valid_tags:
             return None
-        # Sort tags by name descending (assuming lexicographical order is sufficient)
-        perf_tags.sort(reverse=True)
-        return perf_tags[0]
+        # Sort tags by last_updated descending
+        valid_tags.sort(key=lambda x: x.get("last_updated", ""), reverse=True)
+        return valid_tags[0]["name"]
     except Exception as e:
         print(f"Error fetching tags for {image}: {e}")
         return None
@@ -43,8 +48,8 @@ def revert_performance_tags():
     updated = False
 
     for key, value in images.items():
-        # Replace :performance-xxxxxxx with :performance
-        m = re.match(r"^(.*:)(performance-[a-zA-Z0-9]+)$", value)
+        # Replace :performance-<commit> (commit is hex) with :performance
+        m = re.match(r"^(.*:)(performance-[a-f0-9]+)$", value)
         if m:
             new_value = m.group(1) + "performance"
             if new_value != value:
