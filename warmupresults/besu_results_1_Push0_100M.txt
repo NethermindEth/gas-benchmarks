@@ -1,0 +1,72 @@
+# TIMESTAMP: 638841985557949843
+# MEASUREMENT: [Application] Failed
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 2
+--------------------------------------------------------------
+# TIMESTAMP: 638841985557949843
+# MEASUREMENT: [Application] Messages
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 2
+--------------------------------------------------------------
+# TIMESTAMP: 638841985557949843
+# MEASUREMENT: [Application] Total Running Time
+# TAGS:
+                  mtype = timer
+                   unit = none
+               unit_dur = ms
+              unit_rate = min
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 843.0422883922055
+                samples = 1
+                   last = 55.171305999999994
+             count.hist = 1
+                    sum = 55.171305999999994
+                    min = 55.171305999999994
+                    max = 55.171305999999994
+                   mean = 55.171305999999994
+                 median = 55.171305999999994
+                 stddev = 0
+                   p999 = 55.171305999999994
+                    p99 = 55.171305999999994
+                    p98 = 55.171305999999994
+                    p95 = 55.171305999999994
+                    p75 = 55.171305999999994
+--------------------------------------------------------------
+# TIMESTAMP: 638841985557949843
+# MEASUREMENT: [Application] engine_newPayloadV3
+# TAGS:
+                  mtype = timer
+                   unit = req
+               unit_dur = ms
+              unit_rate = ms
+# FIELDS:
+            count.meter = 2
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 0.039312744043686836
+                samples = 2
+                   last = 1.8147019999999998
+             count.hist = 2
+                    sum = 16.267667
+                    min = 1.8147019999999998
+                    max = 14.452964999999999
+                   mean = 8.1338335
+                 median = 8.1338335
+                 stddev = 8.936601469719038
+                   p999 = 14.452964999999999
+                    p99 = 14.452964999999999
+                    p98 = 14.452964999999999
+                    p95 = 14.452964999999999
+                    p75 = 14.452964999999999
+--------------------------------------------------------------
