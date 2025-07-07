@@ -94,9 +94,8 @@ for run in $(seq 1 $RUNS); do
       continue
     fi
 
-    python3 -c "from utils import print_computer_specs; print(print_computer_specs())" \
+    python3 -c "from utils import print_computer_specs; print_computer_specs()" \
     > results/computer_specs.txt
-    cat results/computer_specs.txt
 
     # Setup node (with optional image override)
     if [ -z "$IMAGES" ]; then
