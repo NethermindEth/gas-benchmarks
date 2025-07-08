@@ -20,7 +20,7 @@ on:
         default: 'nethermind,geth,reth,besu,erigon'
       runs:
         description: 'Number of runs for the application'
-        default: 1
+        default: 15
       images:
         description: 'JSON map of images for the clients'
         default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
@@ -41,4 +41,136 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # split() returns an array of strings, which becomes your m
+        # split() returns an array of strings, which becomes your matrix
+        client: ${{ split(github.event.inputs.client, ',') }}
+
+    env:
+      DOTNET_INSTALL_DIR: "~/.dotnet"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python & .NET
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Make run.sh executable
+        run: chmod +x ./run.sh
+
+      - name: Run benchmarks for ${{ matrix.client }}
+        run: |
+          ./run.sh \
+            -t "${{ github.event.inputs.test }}" \
+            -w "${{ github.event.inputs.warmup }}" \
+            -c "${{ matrix.client }}" \
+            -r "${{ github.event.inputs.runs }}" \
+            -i '${{ github.event.inputs.images }}' \
+            -o "${{ github.event.inputs.opcodes_warmup_count }}" \
+            -f "${{ github.event.inputs.filter }}"
+
+      - name: Zip everything up
+        run: |
+          zip -r results-${{ matrix.client }}.zip results warmupresults logs reports
+
+      - name: Upload artifact for ${{ matrix.client }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.client }}
+          path: results-${{ matrix.client }}.zip
+
+  combine-results:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Download all client artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: combined-results
+          merge-multiple: true
+
+      - name: Extract & merge client results
+        run: |
+          mkdir -p merged-results
+          for z in combined-results/*.zip; do
+            tmp=$(mktemp -d)
+            unzip -q "$z" -d "$tmp"
+            cp -r "$tmp/results/." merged-results/
+          done
+
+      - name: Generate reports
+        run: |
+          python3 report_tables.py \
+            --resultsPath merged-results \
+            --clients "${{ github.event.inputs.client }}" \
+            --testsPath "${{ github.event.inputs.test }}" \
+            --runs "${{ github.event.inputs.runs }}" \
+            --images '${{ github.event.inputs.images }}'
+
+          python3 report_html.py \
+            --resultsPath merged-results \
+            --clients "${{ github.event.inputs.client }}" \
+            --testsPath "${{ github.event.inputs.test }}" \
+            --runs "${{ github.event.inputs.runs }}" \
+            --images '${{ github.event.inputs.images }}'
+
+      - name: (Optional) TXT report
+        if: ${{ github.event.inputs.txt_report == 'true' }}
+        run: |
+          python3 report_txt.py \
+            --resultsPath merged-results \
+            --clients "${{ github.event.inputs.client }}" \
+            --testsPath "${{ github.event.inputs.test }}"
+
+      - name: Zip final reports
+        run: zip -r reports.zip reports
+
+      - name: Upload combined reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports.zip
+
+  populate-db:
+    needs: combine-results
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Download and extract combined reports
+        uses: actions/download-artifact@v4
+        with:
+          path: extracted
+          name: reports
+
+      - name: Populate Benchmark DB
+        run: |
+          python fill_postgres_db.py \
+            --db-host ${{ env.DB_HOST }} \
+            --db-port ${{ env.DB_PORT }} \
+            --db-user ${{ env.DB_USER }} \
+            --db-name monitoring \
+            --table-name gas_benchmarks_ci \
+            --db-password "${{ env.DB_PASSWORD }}" \
+            --log-level DEBUG \
+            --reports-dir 'extracted/reports/'
