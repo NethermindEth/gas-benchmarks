@@ -103,16 +103,19 @@ jobs:
             echo "No docker_*.log files found for client=${{ matrix.client }}"
           fi
 
-      - name: Zip results for ${{ matrix.client }}
+      - name: Zip the results folder
         run: |
-          zip -r results-${{ matrix.client }}.zip results warmupresults logs reports
+          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
+          CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
+          echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
+          echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
 
-      - name: Upload artifact for ${{ matrix.client }}
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ matrix.client }}
-          path: results-${{ matrix.client }}.zip
-
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
   combine-results:
     needs: build
     runs-on: ubuntu-latest
@@ -121,58 +124,51 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install python dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
 
-      - name: Download all client artifacts
-        uses: actions/download-artifact@v4
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
         with:
           path: combined-results
           merge-multiple: true
 
-      - name: Extract & merge client results
+      - name: Extract all result files
         run: |
-          mkdir -p merged-results
-          for Z in combined-results/*.zip; do
-            TMP=$(mktemp -d)
-            unzip -q "$Z" -d "$TMP"
-            cp -r "$TMP/results/." merged-results/
-          done
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
 
-      - name: Generate reports
+      - name: Process combined results
         run: |
-          python3 report_tables.py \
-            --resultsPath merged-results \
-            --clients "${{ github.event.inputs.client }}" \
-            --testsPath "${{ github.event.inputs.test }}" \
-            --runs "${{ github.event.inputs.runs }}" \
-            --images '${{ github.event.inputs.images }}'
+          runs=${{ github.event.inputs.runs }}
+          images="${{ github.event.inputs.images }}"
+          if [ -z "$image" ]; then
+            python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs 
+            python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs 
+          else
+            python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
+            python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
+          fi
 
-          python3 report_html.py \
-            --resultsPath merged-results \
-            --clients "${{ github.event.inputs.client }}" \
-            --testsPath "${{ github.event.inputs.test }}" \
-            --runs "${{ github.event.inputs.runs }}" \
-            --images '${{ github.event.inputs.images }}'
-
-      - name: (Optional) Generate TXT report
+      - name: Generate Report
         if: ${{ github.event.inputs.txt_report == 'true' }}
         run: |
-          python3 report_txt.py \
-            --resultsPath merged-results \
-            --clients "${{ github.event.inputs.client }}" \
-            --testsPath "${{ github.event.inputs.test }}"
+          python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} 
 
-      - name: Zip final reports
-        run: zip -r reports.zip reports
+      - name: Zip the results folder
+        run: |
+          zip -r reports.zip reports
 
-      - name: Upload combined reports
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: reports
@@ -188,20 +184,24 @@ jobs:
       DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Python dependencies
+      - name: Install python dependencies for submodule
         run: |
-          pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Download & extract final reports
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          path: extracted
-          name: reports
+          path: combined-results # Download artifacts from previous jobs
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
 
       - name: Populate Benchmark DB
         run: |
@@ -210,7 +210,7 @@ jobs:
             --db-port ${{ env.DB_PORT }} \
             --db-user ${{ env.DB_USER }} \
             --db-name monitoring \
-            --table-name gas_benchmarks_ci \
+            --table-name gas_limit_ci \
             --db-password "${{ env.DB_PASSWORD }}" \
             --log-level DEBUG \
-            --reports-dir 'extracted/reports/'
+            --reports-dir 'extracted-results/reports/'
