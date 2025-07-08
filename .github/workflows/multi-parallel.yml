@@ -91,6 +91,18 @@ jobs:
             -o "${{ github.event.inputs.opcodes_warmup_count }}" \
             -f "${{ github.event.inputs.filter }}"
 
+      - name: Dump latest Docker logs for ${{ matrix.client }}
+        if: always()
+        run: |
+          # Find the newest docker log file for this client
+          LATEST=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
+          if [[ -n "$LATEST" ]]; then
+            echo "=== Dumping $LATEST ==="
+            cat "$LATEST"
+          else
+            echo "No docker_*.log files found for client=${{ matrix.client }}"
+          fi
+
       - name: Zip results for ${{ matrix.client }}
         run: |
           zip -r results-${{ matrix.client }}.zip results warmupresults logs reports
