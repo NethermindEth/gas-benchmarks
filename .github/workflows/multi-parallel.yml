@@ -192,6 +192,11 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Install psycopg2 driver
+        run: |
+          pip install --upgrade pip
+          pip install psycopg2-binary
+
       - name: Download & extract final reports
         uses: actions/download-artifact@v4
         with:
