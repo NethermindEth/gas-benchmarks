@@ -16,19 +16,23 @@ on:
           - warmup/warmup-1000bl-16wi-24tx.txt
           - warmup/warmup-1000bl-16wi-1000tx.txt
       client:
-        description: 'Comma-separated list of client names (e.g., nethermind,reth,geth,erigon)'
+        description: 'Comma-separated list of client names'
         default: 'nethermind,geth,reth,besu,erigon'
         required: true
       runs:
         description: 'Number of runs for the application'
-        required: false
         default: 15
       images:
-        description: 'Comma-separated list of images for the clients (e.g., default,custom1,custom2)'
-        default: '"{\"nethermind\":\"default\",\"geth\":\"default\",\"reth\":\"default\",\"erigon\":\"default\",\"besu\":\"default\"}"'
+        description: 'JSON map of images for the clients'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+      opcodes_warmup_count:
+        description: 'Number of opcode‐warmup iterations'
+        default: 2
+      filter:
+        description: 'Comma-separated include-only filename patterns'
+        default: ''
       txt_report:
         description: 'Mark as true to generate txt report'
-        required: false
         default: 'false'
 
 jobs:
@@ -37,128 +41,65 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
       - name: Set up Python
         uses: actions/setup-python@v2
-        with:
-          python-version: 3.x
+        with: { python-version: 3.x }
 
-      - name: Set matrix dynamically
+      - name: Build a client-only matrix
         id: set-matrix
         run: |
-          runs=${{ github.event.inputs.runs }}
           clients="${{ github.event.inputs.client }}"
           IFS=',' read -ra client_array <<< "$clients"
-          matrix_elements=()
-          
-          for ((i=1; i<=runs; i++)); do
-            for client in "${client_array[@]}"; do
-              element="{'run': '$i', 'client': '$client'}"
-              matrix_elements+=("$element")
-            done
+          matrix_items=()
+          for client in "${client_array[@]}"; do
+            matrix_items+=("{\"client\":\"$client\"}")
           done
-          
-          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
-          
+          matrix="{\"include\":[${matrix_items[*]}]}"
           echo "::set-output name=matrix::$matrix"
 
   build:
     needs: set-matrix
     runs-on: ubuntu-latest
-    env:
-      DOTNET_INSTALL_DIR: "~/.dotnet"
-
     strategy:
       matrix: ${{ fromJSON(needs.set-matrix.outputs.matrix) }}
+
+    env:
+      DOTNET_INSTALL_DIR: "~/.dotnet"
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "9.0.x"
+        with: { python-version: '3.10' }
 
-      - name: Install python dependencies
-        run: pip install -r requirements.txt
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '9.0.x' }
 
-      - name: Prepare kute dependencies
-        run: make prepare_tools
+      - name: Make run.sh executable
+        run: chmod +x ./run.sh
 
-      - name: Create results directory
+      - name: Run benchmarks for ${{ matrix.client }}
         run: |
-          mkdir results
+          ./run.sh \
+            -t "${{ github.event.inputs.test }}" \
+            -w "${{ github.event.inputs.warmup }}" \
+            -c "${{ matrix.client }}" \
+            -r "${{ github.event.inputs.runs }}" \
+            -i '${{ github.event.inputs.images }}' \
+            -o "${{ github.event.inputs.opcodes_warmup_count }}" \
+            -f "${{ github.event.inputs.filter }}"
 
-
-      - name: List leaf directories
+      - name: Zip everything up
         run: |
-          # Define the directory to search
-          PARENT_DIR=${{ github.event.inputs.test }}
-          
-          # Find directories that do not contain subdirectories
-          LEAF_DIRS=$(find "$PARENT_DIR" -type d | while read -r dir; do
-            if [ -z "$(find "$dir" -mindepth 1 -maxdepth 1 -type d)" ]; then
-              echo "$dir"
-            fi
-          done)
-          
-          # Join directories with a delimiter (newline)
-          LEAF_DIRS=$(printf "%s\n" "$LEAF_DIRS")
-          
-          # Export the variable for the next steps
-          echo "LEAF_DIRS<<EOF" >> $GITHUB_ENV
-          echo "$LEAF_DIRS" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-      - name: Run Node and run benchmarks
-        run: |
-          IFS=',' read -ra clients <<< "${{ github.event.inputs.client }}"
-          IFS=',' read -ra images <<< "${{ github.event.inputs.images }}"
-          run="${{ matrix.run }}"
-          client="${{ matrix.client }}"
-          test_path="${{ github.event.inputs.test }}"
-          
-          images="${{ github.event.inputs.images }}"
-          for test_dir in $LEAF_DIRS; do
-            if [ -z "$images" ]; then
-              python3 setup_node.py --client $client
-            else
-              echo "Using provided image: $images for $client"
-              python3 setup_node.py --client $client --imageBulk $images
-            fi
-            if [ -z "${{ github.event.inputs.warmup }}" ]; then
-              echo "Running script without warm up."
-              python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --client $client --run $run
-            else
-              echo "Using provided warm up file: ${{ github.event.inputs.warmup }}"
-              python3 run_kute.py --output results --testsPath "$test_dir" --jwtPath /tmp/jwtsecret --warmupPath ${{ github.event.inputs.warmup }} --client $client --run $run
-            fi
-            python3 -c "from utils import print_computer_specs; print_computer_specs()" > results/computer_specs.txt
-            cl_name=$(echo "$client" | cut -d '_' -f 1)
-            cd "scripts/$cl_name"
-            docker compose down
-            sudo rm -rf execution-data
-            cd ../..
-          done
-
-      - name: Zip the results folder
-        run: |
-          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
-          CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
-          echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
-          echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
-          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
+          zip -r results-${{ matrix.client }}.zip results warmupresults logs reports
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
-          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+          name: results-${{ matrix.client }}
+          path: results-${{ matrix.client }}.zip
           
   combine-results:
     needs: build
