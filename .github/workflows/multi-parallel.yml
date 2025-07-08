@@ -38,21 +38,34 @@ jobs:
   set-matrix:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.build-matrix.outputs.matrix }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Build client-only matrix
-        id: build-matrix
-        run: |
-          # Split on commas, build a JSON array of {"client":"..."} entries
-          IFS=',' read -ra ARR <<< "${{ github.event.inputs.client }}"
-          JSON_ITEMS=$(printf ',{"client":"%s"}' "${ARR[@]}")
-          JSON_ITEMS="[${JSON_ITEMS:1}]"
-          MATRIX="{\"include\":${JSON_ITEMS}}"
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-          # Write to the GITHUB_OUTPUT so it becomes an output
-          echo "matrix<<EOF" >> $GITHUB_OUTPUT
-          echo "$MATRIX"       >> $GITHUB_OUTPUT
-          echo "EOF"           >> $GITHUB_OUTPUT
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+
+      - name: Set matrix dynamically
+        id: set-matrix
+        run: |
+          runs=${{ github.event.inputs.runs }}
+          clients="${{ github.event.inputs.client }}"
+          IFS=',' read -ra client_array <<< "$clients"
+          matrix_elements=()
+          
+          for ((i=1; i<=runs; i++)); do
+            for client in "${client_array[@]}"; do
+              element="{'run': '$i', 'client': '$client'}"
+              matrix_elements+=("$element")
+            done
+          done
+          
+          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
+          
+          echo "::set-output name=matrix::$matrix"
 
   build:
     needs: set-matrix
@@ -86,7 +99,7 @@ jobs:
             -t "${{ github.event.inputs.test }}" \
             -w "${{ github.event.inputs.warmup }}" \
             -c "${{ matrix.client }}" \
-            -r "${{ github.event.inputs.runs }}" \
+            -r 1 \
             -i '${{ github.event.inputs.images }}' \
             -o "${{ github.event.inputs.opcodes_warmup_count }}" \
             -f "${{ github.event.inputs.filter }}"
