@@ -159,57 +159,67 @@ jobs:
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+          
   combine-results:
     needs: build
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-
-      - name: Install python dependencies
-        run: pip install -r requirements.txt
+        with: { python-version: '3.10' }
 
       - uses: actions/download-artifact@v4
         with:
           path: combined-results
           merge-multiple: true
 
-      - name: Extract all result files
+      - name: Extract each client ZIP into its own folder
         run: |
-          mkdir -p extracted-results
-          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+          mkdir -p extracted
+          for zip in combined-results/*.zip; do
+            client=$(basename "$zip" .zip)
+            mkdir -p "extracted/$client"
+            unzip -q "$zip" -d "extracted/$client"
+          done
 
-      - name: Process combined results
+      - name: Consolidate all client-results into merged-results
         run: |
-          runs=${{ github.event.inputs.runs }}
-          images="${{ github.event.inputs.images }}"
-          if [ -z "$image" ]; then
-            python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs 
-            python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs 
-          else
-            python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
-            python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
-          fi
+          mkdir -p merged-results
+          # Copy every client’s results/ into merged-results/
+          for d in extracted/*; do
+            if [ -d "$d/results" ]; then
+              cp -r "$d/results/." merged-results/
+            fi
+          done
 
-      - name: Generate Report
+      - name: Run table & HTML reports over merged-results
+        run: |
+          python3 report_tables.py \
+            --resultsPath merged-results \
+            --clients "${{ github.event.inputs.client }}" \
+            --testsPath "${{ github.event.inputs.test }}" \
+            --runs "${{ github.event.inputs.runs }}" \
+            --images '${{ github.event.inputs.images }}'
+
+          python3 report_html.py \
+            --resultsPath merged-results \
+            --clients "${{ github.event.inputs.client }}" \
+            --testsPath "${{ github.event.inputs.test }}" \
+            --runs "${{ github.event.inputs.runs }}" \
+            --images '${{ github.event.inputs.images }}'
+
+      - name: Optionally generate TXT report
         if: ${{ github.event.inputs.txt_report == 'true' }}
         run: |
-          python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} 
+          python3 report_txt.py \
+            --resultsPath merged-results \
+            --clients "${{ github.event.inputs.client }}" \
+            --testsPath "${{ github.event.inputs.test }}"
 
-      - name: Zip the results folder
-        run: |
-          zip -r reports.zip reports
+      - name: Zip final reports
+        run: zip -r reports.zip reports
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -253,7 +263,7 @@ jobs:
             --db-port ${{ env.DB_PORT }} \
             --db-user ${{ env.DB_USER }} \
             --db-name monitoring \
-            --table-name gas_limit_benchmarks \
+            --table-name gas_benchmarks_ci \
             --db-password "${{ env.DB_PASSWORD }}" \
             --log-level DEBUG \
             --reports-dir 'extracted-results/reports/'
