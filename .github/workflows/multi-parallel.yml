@@ -8,19 +8,19 @@ on:
         default: 'tests/'
       warmup:
         description: 'Name of the warm up file'
-        default: 'warmup/warmup-1000bl-16wi-24tx.txt'
         type: choice
         options:
           - ''
           - warmup/warmup-100bl-16wi-32tx.txt
           - warmup/warmup-1000bl-16wi-24tx.txt
           - warmup/warmup-1000bl-16wi-1000tx.txt
+        default: 'warmup/warmup-1000bl-16wi-24tx.txt'
       client:
         description: 'Comma-separated list of client names'
         default: 'nethermind,geth,reth,besu,erigon'
       runs:
         description: 'Number of runs for the application'
-        default: 15
+        default: 1
       images:
         description: 'JSON map of images for the clients'
         default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
@@ -35,14 +35,32 @@ on:
         default: 'false'
 
 jobs:
+  set-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+    steps:
+      - name: Build client-only matrix
+        id: build-matrix
+        run: |
+          # Split on commas, build a JSON array of {"client":"..."} entries
+          IFS=',' read -ra ARR <<< "${{ github.event.inputs.client }}"
+          JSON_ITEMS=$(printf ',{"client":"%s"}' "${ARR[@]}")
+          JSON_ITEMS="[${JSON_ITEMS:1}]"
+          MATRIX="{\"include\":${JSON_ITEMS}}"
+
+          # Write to the GITHUB_OUTPUT so it becomes an output
+          echo "matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$MATRIX"       >> $GITHUB_OUTPUT
+          echo "EOF"           >> $GITHUB_OUTPUT
+
   build:
+    needs: set-matrix
     runs-on: ubuntu-latest
 
     strategy:
-      fail-fast: false
-      matrix:
-        # split() returns an array of strings, which becomes your matrix
-        client: ${{ split(github.event.inputs.client, ',') }}
+      # Consume the JSON matrix we just emitted
+      matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
 
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
@@ -62,7 +80,7 @@ jobs:
       - name: Make run.sh executable
         run: chmod +x ./run.sh
 
-      - name: Run benchmarks for ${{ matrix.client }}
+      - name: Run benchmarks for client=${{ matrix.client }}
         run: |
           ./run.sh \
             -t "${{ github.event.inputs.test }}" \
@@ -73,7 +91,7 @@ jobs:
             -o "${{ github.event.inputs.opcodes_warmup_count }}" \
             -f "${{ github.event.inputs.filter }}"
 
-      - name: Zip everything up
+      - name: Zip results for ${{ matrix.client }}
         run: |
           zip -r results-${{ matrix.client }}.zip results warmupresults logs reports
 
@@ -104,10 +122,10 @@ jobs:
       - name: Extract & merge client results
         run: |
           mkdir -p merged-results
-          for z in combined-results/*.zip; do
-            tmp=$(mktemp -d)
-            unzip -q "$z" -d "$tmp"
-            cp -r "$tmp/results/." merged-results/
+          for Z in combined-results/*.zip; do
+            TMP=$(mktemp -d)
+            unzip -q "$Z" -d "$TMP"
+            cp -r "$TMP/results/." merged-results/
           done
 
       - name: Generate reports
@@ -126,7 +144,7 @@ jobs:
             --runs "${{ github.event.inputs.runs }}" \
             --images '${{ github.event.inputs.images }}'
 
-      - name: (Optional) TXT report
+      - name: (Optional) Generate TXT report
         if: ${{ github.event.inputs.txt_report == 'true' }}
         run: |
           python3 report_txt.py \
@@ -157,7 +175,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Download and extract combined reports
+      - name: Download & extract final reports
         uses: actions/download-artifact@v4
         with:
           path: extracted
