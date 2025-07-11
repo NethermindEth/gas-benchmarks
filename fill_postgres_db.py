@@ -8,6 +8,7 @@ import re
 from bs4 import BeautifulSoup, Tag # For parsing HTML if computer_specs.txt is not found
 import logging
 from typing import Any, Dict, List, Optional, Tuple # Added for type hinting
+from io import StringIO # Add this for bulk copy operations
 
 # --- Constants ---
 SPEC_MAPPING: Dict[str, str] = {
@@ -54,9 +55,66 @@ def get_db_connection(db_params: Dict[str, Any]) -> Optional[psycopg2.extensions
         return None
     return conn
 
+def bulk_insert_records(cursor: psycopg2.extensions.cursor, table_name: str, records: List[Dict[str, Any]]) -> None:
+    """
+    Bulk inserts records using PostgreSQL COPY command for much faster performance.
+    
+    Args:
+        cursor: The database cursor object.
+        table_name: The name of the table to insert data into.
+        records: List of dictionaries where keys are column names and values are the data to insert.
+    """
+    if not records:
+        return
+        
+    # Get column names from the first record
+    columns = list(records[0].keys())
+    
+    # Create StringIO buffer for CSV data
+    csv_buffer = StringIO()
+    csv_writer = csv.writer(csv_buffer, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    
+    # Write records to CSV buffer
+    for record in records:
+        row = []
+        for col in columns:
+            value = record.get(col)
+            if value is None:
+                row.append('')  # Empty string for NULL values
+            else:
+                row.append(str(value))
+        csv_writer.writerow(row)
+    
+    # Reset buffer position to beginning
+    csv_buffer.seek(0)
+    
+    try:
+        # Use COPY FROM with the CSV buffer
+        cursor.copy_from(
+            csv_buffer,
+            table_name,
+            columns=columns,
+            sep='\t',
+            null=''
+        )
+        logging.info(f"Bulk inserted {len(records)} records into {table_name}")
+    except (psycopg2.DataError, psycopg2.IntegrityError) as error:
+        logging.error(f"Data error during bulk insert: {error}")
+        raise
+    except psycopg2.Error as error:
+        logging.error(f"Database error during bulk insert: {error}")
+        raise
+    except Exception as error:
+        logging.error(f"Unexpected error during bulk insert: {error}")
+        raise
+    finally:
+        csv_buffer.close()
+
 def insert_benchmark_record(cursor: psycopg2.extensions.cursor, table_name: str, record_data: Dict[str, Any]) -> None:
     """
     Inserts a single record into the specified table.
+    
+    DEPRECATED: Use bulk_insert_records for better performance.
 
     Args:
         cursor: The database cursor object.
@@ -323,7 +381,7 @@ def populate_data_for_client(
     computer_specs: Dict[str, Any]
 ) -> int:
     """
-    Populates the database with raw benchmark data for a specific client.
+    Populates the database with raw benchmark data for a specific client using bulk insert.
 
     Args:
         cursor: Database cursor.
@@ -344,7 +402,7 @@ def populate_data_for_client(
             logging.warning(f"Raw results file not found for client {client_name}: {raw_csv_path}")
             return 0
 
-        inserted_count = 0
+        records_to_insert: List[Dict[str, Any]] = []
         logging.info(f"Processing raw results for client: {client_name} from {raw_csv_path}")
 
         with open(raw_csv_path, 'r', newline='', encoding='utf-8') as csvfile: # Added encoding
@@ -406,13 +464,22 @@ def populate_data_for_client(
                         'start_time': start_time,
                         **computer_specs
                     }
-                    insert_benchmark_record(cursor, table_name, record)
-                    inserted_count += 1
+                    records_to_insert.append(record)
+
+        # Bulk insert all records for this client
+        if records_to_insert:
+            bulk_insert_records(cursor, table_name, records_to_insert)
+            inserted_count = len(records_to_insert)
+        else:
+            inserted_count = 0
+
     except FileNotFoundError:
         logging.warning(f"Raw results file not found for client {client_name}: {raw_csv_path}") # Already handled above, defensive.
         return 0
     except Exception as e:
         logging.error(f"Error processing raw results file {raw_csv_path}: {e}", exc_info=True)
+        return 0
+    
     return inserted_count
 
 # --- Main Execution ---
