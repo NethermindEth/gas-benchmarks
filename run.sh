@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Default inputs
-TEST_PATH="tests/"
 WARMUP_OPCODES_PATH="warmup-tests"
 WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
-CLIENTS="nethermind,geth,reth,besu,erigon,nimbus"
+TEST_PATH="zkevm-tests/"
+CLIENTS="geth"
 RUNS=8
 OPCODES_WARMUP_COUNT=2
 FILTER=""
