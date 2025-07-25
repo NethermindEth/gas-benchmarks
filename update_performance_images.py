@@ -23,7 +23,7 @@ def get_latest_performance_tag(image):
         # Not a valid Docker Hub image
         return None
     namespace, repo = image.split("/", 1)
-    url = f"https://hub.docker.com/v2/repositories/{namespace}/{repo}/tags?page_size=10&name=performance"
+    url = f"https://hub.docker.com/v2/repositories/{namespace}/{repo}/tags?page_size=30&name=performance"
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()

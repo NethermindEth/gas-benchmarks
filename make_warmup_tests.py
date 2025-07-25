@@ -84,7 +84,7 @@ def teardown(cl_name: str):
     subprocess.run(["docker", "compose", "down"], cwd=script_dir, check=True)
     data_dir = script_dir / "execution-data"
     if data_dir.exists():
-        subprocess.run(["sudo", "rm", "-rf", str(data_dir)], check=True)
+        subprocess.run(["rm", "-rf", str(data_dir)], check=True)
 
 
 def main():
