@@ -145,11 +145,7 @@ update_execution_time() {
 }
 
 # Parse command line arguments
-<<<<<<< HEAD
 while getopts "T:t:g:w:c:r:i:o:f:" opt; do
-=======
-while getopts "t:w:c:r:i:o:f:dD:p" opt; do
->>>>>>> main
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;

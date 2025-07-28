@@ -33,6 +33,9 @@ on:
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
+      genesis:
+        description: 'Genesis filename (used for all clients)'
+        default: 'genesis.json'
 
 jobs:
   set-matrix:
@@ -95,10 +98,15 @@ jobs:
 
       - name: Run benchmarks for client=${{ matrix.client }}
         run: |
+          GENESIS_FILENAME="${{ github.event.inputs.genesis }}"
+          TEST_PATH="${{ github.event.inputs.test }}"
+          CLIENT="${{ matrix.client }}"
+          TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
+      
           ./run.sh \
-            -t "${{ github.event.inputs.test }}" \
+            -T "$TEST_PATHS_JSON" \
             -w "${{ github.event.inputs.warmup }}" \
-            -c "${{ matrix.client }}" \
+            -c "$CLIENT" \
             -r 1 \
             -i '${{ github.event.inputs.images }}' \
             -o "${{ github.event.inputs.opcodes_warmup_count }}" \
