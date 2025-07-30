@@ -9,7 +9,7 @@ PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
 PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
 
 executables = {
-    "kute": "./nethermind/tools/artifacts/bin/Kute/release/Kute"
+    "kute": "./nethermind/tools/artifacts/bin/Kute/release/Nethermind.Tools.Kute"
 }
 
 def get_command_env(
