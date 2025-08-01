@@ -6,12 +6,18 @@
 # Default results folder
 /results/
 /reports/
+
+/zkevm_result/
 /warmupresults/
+/warmup/
+/venv/
 /generationresults/
+/tmp/
 
 # Others
 .idea/
 /__pycache__/
+*/execution-data/
 
 # Generated env files
 scripts/**/.env
@@ -20,3 +26,4 @@ scripts/**/.env
 
 logs/
 venv/
+nohup.out
