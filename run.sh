@@ -354,6 +354,7 @@ for run in $(seq 1 $RUNS); do
     start_timer "teardown_${client}"
     ts=$(date +%s)
     docker logs gas-execution-client &> logs/docker_${client}_${ts}.log
+    docker logs gas-execution-client-sync &> logs/docker_sync_${client}_${ts}.log
     cl_name=$(echo "$client" | cut -d '_' -f 1)
     cd "scripts/$cl_name"
     docker compose down

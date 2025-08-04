@@ -117,11 +117,19 @@ jobs:
         run: |
           # Find the newest docker log file for this client
           LATEST=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
+          LATEST_SYNC=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
           if [[ -n "$LATEST" ]]; then
             echo "=== Dumping $LATEST ==="
             cat "$LATEST"
           else
             echo "No docker_*.log files found for client=${{ matrix.client }}"
+          fi
+
+          if [[ -n "$LATEST_SYNC" ]]; then
+            echo "=== Dumping $LATEST_SYNC ==="
+            cat "$LATEST_SYNC"
+          else
+            echo "No docker_sync_*.log files found for client=${{ matrix.client }}"
           fi
 
       - name: Zip the results folder
