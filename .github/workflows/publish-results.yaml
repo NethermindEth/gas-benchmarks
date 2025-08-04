@@ -1,0 +1,173 @@
+name: Publish results from previous run
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Path to test file'
+        default: 'tests/'
+      client:
+        description: 'Comma-separated list of client names'
+        default: 'nethermind,geth,reth,besu,erigon'
+      runs:
+        description: 'Number of runs for the application'
+        default: 1
+      images:
+        description: 'JSON map of images for the clients'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+      source_run_id:
+        description: 'GitHub run Id from which to fetch artifacts'
+        required: true
+        default: ''
+      txt_report:
+        description: 'Mark as true to generate txt report'
+        default: 'false'
+
+jobs:
+  combine-results:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      reports-path: reports.zip
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies for artifact fetching
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq unzip
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download reports artifact from external run
+        env:
+          RUN_ID: ${{ github.event.inputs.source_run_id }}
+          REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$RUN_ID" ]; then
+            echo "source_run_id is required but not provided."
+            exit 1
+          fi
+
+          # Get the list of artifacts for that run
+          echo "Fetching artifacts list for run $RUN_ID"
+          ARTIFACTS_JSON=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID/artifacts")
+
+          # Extract download URL for artifact named "reports"
+          DOWNLOAD_URL=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[] | select(.name=="reports") | .archive_download_url')
+
+          if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then
+            echo "Could not find artifact named 'reports' in run $RUN_ID"
+            echo "Available artifacts:"
+            echo "$ARTIFACTS_JSON" | jq -r '.artifacts[] | "\(.name) (id:\(.id))"'
+            exit 1
+          fi
+
+          # Download the artifact ZIP
+          echo "Downloading 'reports' artifact from run $RUN_ID"
+          curl -L -H "Authorization: Bearer $GITHUB_TOKEN" -o reports_from_other_run.zip "$DOWNLOAD_URL"
+
+          # Extract into combined-results to reuse existing logic
+          mkdir -p combined-results
+          unzip -o reports_from_other_run.zip -d combined-results
+
+      - name: Extract all result files (if nested zips)
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \; || true
+          # In case the reports directory is directly there, copy it
+          if [ -d "combined-results/reports" ]; then
+            cp -r combined-results/reports extracted-results/reports
+          fi
+
+      - name: Process combined results
+        run: |
+          runs=${{ github.event.inputs.runs }}
+          images="${{ github.event.inputs.images }}"
+          clients="${{ github.event.inputs.client }}"
+          test_path="${{ github.event.inputs.test }}"
+
+          if [ -z "$images" ] || [ "$images" = '{}' ]; then
+            python3 report_tables.py --resultsPath extracted-results/results/ --clients "$clients" --testsPath "$test_path" --runs "$runs"
+            python3 report_html.py --resultsPath extracted-results/results/ --clients "$clients" --testsPath "$test_path" --runs "$runs"
+          else
+            python3 report_tables.py --resultsPath extracted-results/results/ --clients "$clients" --testsPath "$test_path" --runs "$runs" --images "$images"
+            python3 report_html.py --resultsPath extracted-results/results/ --clients "$clients" --testsPath "$test_path" --runs "$runs" --images "$images"
+          fi
+
+      - name: Generate txt report if requested
+        if: ${{ github.event.inputs.txt_report == 'true' }}
+        run: |
+          python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath "${{ github.event.inputs.test }}"
+
+      - name: Prepare reports directory
+        run: |
+          mkdir -p reports
+          # Copy whatever report outputs exist into reports/
+          cp -r extracted-results/results/ reports/ || true
+
+      - name: Zip the results folder
+        run: |
+          zip -r reports.zip reports
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports.zip
+
+  populate-db:
+    needs: combine-results
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install python dependencies for submodule
+        run: |
+          pip install -r requirements.txt
+
+      - name: Download combined reports artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: reports
+          path: combined-results
+
+      - name: Extract reports
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Populate Benchmark DB
+        run: |
+          python fill_postgres_db.py \
+            --db-host ${{ env.DB_HOST }} \
+            --db-port ${{ env.DB_PORT }} \
+            --db-user ${{ env.DB_USER }} \
+            --db-name monitoring \
+            --table-name gas_benchmarks_ci \
+            --db-password "${{ env.DB_PASSWORD }}" \
+            --log-level DEBUG \
+            --reports-dir 'extracted-results/reports/'
