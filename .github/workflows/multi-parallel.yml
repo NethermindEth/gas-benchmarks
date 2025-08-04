@@ -117,7 +117,7 @@ jobs:
         run: |
           # Find the newest docker log file for this client
           LATEST=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
-          LATEST_SYNC=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
+          LATEST_SYNC=$(ls -1t logs/docker_sync_${{ matrix.client }}_*.log | head -n1 || true)
           if [[ -n "$LATEST" ]]; then
             echo "=== Dumping $LATEST ==="
             cat "$LATEST"
