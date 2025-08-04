@@ -1,6 +1,8 @@
 import json
 import math
 import os
+import re
+from collections import defaultdict
 
 import cpuinfo
 import platform
@@ -194,26 +196,22 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
 
 
 def get_test_cases(tests_path):
-    test_cases = {
-        # 'test_case_name': ['gas_used']
-    }
+    test_cases = defaultdict(set)
+    pattern = re.compile(r'(?P<base>.+?)_(?P<gas>[0-9]+)M\.txt$')
 
-    tests_cases_list = []
     for root, _, files in os.walk(tests_path):
-        if len(files) == 0:
-            continue
         for file in files:
-            tests_cases_list.append(os.path.join(root, file))
-    for test_case in tests_cases_list:
-        if test_case.endswith('.txt'):
-            test_case_parsed = test_case.split('/')[-1].split('_')
-            test_case_name = test_case_parsed[0]
-            test_case_gas = test_case_parsed[1].split('M')[0]
-            if test_case_name not in test_cases:
-                test_cases[test_case_name] = [test_case_gas]
-            else:
-                test_cases[test_case_name].append(test_case_gas)
-    return test_cases
+            if not file.endswith('.txt'):
+                continue
+            m = pattern.match(file)
+            if not m:
+                print(f"[Warning] skipping unexpected file name: {file}")
+                continue
+            test_case_name = m.group('base')
+            gas_value = int(m.group('gas'))  # e.g., "100" from "100M"
+            test_cases[test_case_name].add(gas_value)
+
+    return {tc: sorted(list(gases)) for tc, gases in test_cases.items()}
 
 class SectionData:
     def __init__(self, timestamp, measurement, tags, fields):
