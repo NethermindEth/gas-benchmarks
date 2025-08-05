@@ -99,7 +99,7 @@ def process_fixture_dir(root: Path, outdir: Path, jq_filter: Path, excludes: lis
 
             base, suffix = normalize_name(raw)
             fname = f"{base}{suffix}.txt"
-            safe = re.sub(r'[<>:\"/\\|?*]', '_', fname)
+            safe = re.sub(r'[<>:\\"/\\|?*]', '_', fname)
             outpath = outdir / safe
             outdir.mkdir(parents=True, exist_ok=True)
             with open(outpath, 'w', encoding='utf-8') as f:
@@ -124,9 +124,22 @@ def main():
     p.add_argument('-t', '--temp-dir', type=Path, default=Path.cwd() / 'tmp')
     p.add_argument('--utils-dir', type=Path, default=Path(__file__).parent / 'utils',
                    help='Where to find make_rpc.jq')
-    p.add_argument('-x', '--exclude', action='append', default=[],
-                   help='Substring or regex of test names to exclude (can repeat)')
+    p.add_argument(
+        '-x', '--exclude',
+        action='append',
+        default=[],
+        help='Comma-separated substrings or regexes to exclude (can repeat)')
     args = p.parse_args()
+
+    # —— flatten & strip —— #
+    flat = []
+    for chunk in args.exclude:
+        for pat in chunk.split(','):
+            pat = pat.strip()
+            if pat:
+                flat.append(pat)
+    args.exclude = flat
+    print(f"ℹ️ excluding patterns: {args.exclude}")
 
     args.temp_dir.mkdir(exist_ok=True)
     args.output_dir.mkdir(exist_ok=True)
@@ -154,6 +167,7 @@ def main():
     if not bench_path.exists():
         raise RuntimeError(f"Cannot find fixtures at {bench_path}")
     process_fixture_dir(bench_path, args.output_dir, jq_filter, args.exclude)
+
 
 if __name__ == '__main__':
     main()
