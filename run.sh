@@ -344,7 +344,7 @@ for run in $(seq 1 $RUNS); do
       # Actual measured run
       start_test_timer "test_run_${client}_${filename}"
       test_debug_log "Running test: $filename"
-      python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run
+      python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
       end_test_timer "test_run_${client}_${filename}"
       echo "" # Line break after each test for logs clarity
     done
