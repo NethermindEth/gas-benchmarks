@@ -54,8 +54,7 @@ def run_command(
         client,
         test_case_file,
     )
-    print(command)
-    print(command_env)
+
     results = subprocess.run(
         command, shell=True, capture_output=True, text=True, env=command_env
     )
