@@ -2,18 +2,9 @@
 import argparse, json, shutil, subprocess, re, sys
 from pathlib import Path
 
+# Default genesis state root; can be overridden via --genesisFile flag
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
 IMAGES = '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
-
-
-#def bump_last_nibble(h: str) -> str:
-#    if not (h.startswith("0x") and len(h) > 2):
-#        return h
-#    try:
-#        last = int(h[-1], 16)
-#    except ValueError:
-#        return h
-#    return h[:-1] + format((last + 1) % 16, "x")
 
 
 def process_line(line: str, counters: dict, bump: bool) -> str:
@@ -31,7 +22,7 @@ def process_line(line: str, counters: dict, bump: bool) -> str:
         counters["dropped"] += 1
         return json.dumps(obj) + "\n"
 
-    payload["stateRoot"] = GENESIS_ROOT #bump_last_nibble(GENESIS_ROOT)
+    payload["stateRoot"] = GENESIS_ROOT
     counters["bumped"] += 1
     counters["total"] += 1
     return json.dumps(obj) + "\n"
@@ -88,13 +79,45 @@ def teardown(cl_name: str):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Make warmup-tests: drop real-genesis, bump others, fix parentHash + blockHash")
-    p.add_argument("-s", "--source", nargs="+", help="Legacy: Source root(s)")
-    p.add_argument("-g", "--genesisPath", help="Legacy: Genesis path (used with --source)")
-    p.add_argument("-j", "--sourceJson", help='New format: JSON [{"path": "tests-vm", "genesis": "...", "changeForAll": true}]')
-    p.add_argument("-d", "--dest", default="warmup-tests", help="Destination root")
-    p.add_argument("--changeForAll", action="store_true", help="Change stateRoot for all newPayloads (default: only last)")
+    p = argparse.ArgumentParser(
+        description="Make warmup-tests: drop real-genesis, bump others, fix parentHash + blockHash"
+    )
+    p.add_argument(
+        "-s", "--source", nargs="+", help="Legacy: Source root(s)"
+    )
+    p.add_argument(
+        "-g", "--genesisPath", help="Legacy: Genesis path (used with --source)"
+    )
+    p.add_argument(
+        "-j", "--sourceJson", help='New format: JSON [{"path": "tests-vm", "genesis": "...", "changeForAll": true}]'
+    )
+    p.add_argument(
+        "-f", "--genesisFile",
+        help="Path to a genesis JSON file; will read its top-level 'stateRoot' and override default GENESIS_ROOT"
+    )
+    p.add_argument(
+        "-d", "--dest", default="warmup-tests", help="Destination root"
+    )
+    p.add_argument(
+        "--changeForAll", action="store_true",
+        help="Change stateRoot for all newPayloads (default: only last)"
+    )
     args = p.parse_args()
+
+    # Override default GENESIS_ROOT if a genesis JSON file is provided
+    if args.genesisFile:
+        try:
+            with open(args.genesisFile, 'r') as gf:
+                gen_data = json.load(gf)
+            if 'stateRoot' not in gen_data:
+                print(f"❌ Genesis file '{args.genesisFile}' missing 'stateRoot' field.")
+                sys.exit(1)
+            # Update global state root
+            global GENESIS_ROOT
+            GENESIS_ROOT = gen_data['stateRoot']
+        except Exception as e:
+            print(f"❌ Error reading genesis file '{args.genesisFile}': {e}")
+            sys.exit(1)
 
     test_sources = []
 
@@ -162,14 +185,14 @@ def main():
         relative_subdir = src_root.name
         tests_path = str(dst_root / relative_subdir)
         genesis_path = entry.get("genesis", "")
-        
+
         setup_node_cmd = ["python3", "setup_node.py", "--client", "geth", "--imageBulk", IMAGES]
         if genesis_path:
             setup_node_cmd += ["--genesisPath", genesis_path]
-        
+
         print(f"🔧 Setting up node for {relative_subdir} with genesis: {genesis_path or 'default'}")
         subprocess.run(setup_node_cmd, check=True)
-    
+
         subprocess.run(
             [
                 "python3", "run_kute.py",
@@ -181,19 +204,19 @@ def main():
             ],
             check=True,
         )
-    
+
         mapping = collect_mismatches("gas-execution-client")
         if not mapping:
             print(f"⚠️  No blockhash mismatches found in {relative_subdir}; skipping fix.")
             teardown("geth")
             continue
-    
+
         print(f"🔍 Found blockHash mismatches in {relative_subdir}:")
         print(json.dumps(mapping, indent=2))
-    
+
         fixed = fix_blockhashes(Path(tests_path), mapping)
         print(f"✅ Replaced blockHash in {fixed} file(s) for {relative_subdir}.")
-    
+
         teardown("geth")
 
     for sub in dst_root.iterdir():
