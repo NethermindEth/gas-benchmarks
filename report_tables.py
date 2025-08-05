@@ -88,7 +88,7 @@ def main():
 
     client_results = {}
     failed_tests = {}
-    methods = ['engine_newPayloadV3']
+    methods = ['engine_newPayloadV4']
     fields = 'max'
 
     test_cases = utils.get_test_cases(tests_path)
