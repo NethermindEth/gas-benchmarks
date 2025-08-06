@@ -309,6 +309,8 @@ for run in $(seq 1 $RUNS); do
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
       filename="${test_file##*/}"
+      parent_dir="$(dirname "$test_file")"
+      dir_name="$(basename "$parent_dir")"   
 
       if [ -n "$FILTER" ]; then
         match=false
@@ -329,8 +331,8 @@ for run in $(seq 1 $RUNS); do
         fi
       fi
 
-      warmup_filename="$(echo "$filename" | sed -E 's/_[0-9]+M/_150M/')"
-      warmup_path="$WARMUP_OPCODES_PATH/$warmup_filename"
+      warmup_path=( "$WARMUP_OPCODES_PATH"/"$dir_name"/"${filename%_*}"_* )
+      warmup_path="${warmup_path%% *}"
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
         start_test_timer "opcodes_warmup_${client}_${filename}"
