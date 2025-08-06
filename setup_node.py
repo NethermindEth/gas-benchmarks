@@ -70,7 +70,7 @@ def main():
     parser = argparse.ArgumentParser(description="Benchmark script")
     parser.add_argument("--client", type=str, default="nethermind", help="Client to spin up")
     parser.add_argument("--image", type=str, help="Docker image override")
-    parser.add_argument("--imageBulk", type=str, default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default", "erigon": "default", "nimbus": "default"}', help="Bulk image override")
+    parser.add_argument("--imageBulk", type=str, default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default", "erigon": "default", "nimbus": "default", "ethrex": "default"}', help="Bulk image override")
     parser.add_argument("--genesisPath", type=str, help="Custom genesis file path")
 
     args = parser.parse_args()
