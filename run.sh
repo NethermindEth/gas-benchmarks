@@ -339,7 +339,7 @@ for run in $(seq 1 $RUNS); do
         start_test_timer "opcodes_warmup_${client}_${filename}"
         current_count="${warmup_run_counts[$warmup_path]:-0}"
         if (( current_count >= OPCODES_WARMUP_COUNT )); then
-          print("")
+          echo ""
         else
           for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
             test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
