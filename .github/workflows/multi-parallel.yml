@@ -5,7 +5,7 @@ on:
     inputs:
       test:
         description: 'Path to test file'
-        default: 'tests/'
+        default: 'eest_tests'
       warmup:
         description: 'Name of the warm up file'
         type: choice
@@ -14,28 +14,28 @@ on:
           - warmup/warmup-100bl-16wi-32tx.txt
           - warmup/warmup-1000bl-16wi-24tx.txt
           - warmup/warmup-1000bl-16wi-1000tx.txt
-        default: 'warmup/warmup-1000bl-16wi-24tx.txt'
+        default: ''
       client:
         description: 'Comma-separated list of client names'
-        default: 'nethermind,geth,reth,besu,erigon'
+        default: 'geth,reth,besu,erigon,nimbus,ethrex'
       runs:
         description: 'Number of runs for the application'
         default: 1
       images:
         description: 'JSON map of images for the clients'
-        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
       opcodes_warmup_count:
         description: 'Number of opcode-warmup iterations'
-        default: 2
+        default: 1
       filter:
         description: 'Comma-separated include-only filename patterns'
-        default: ''
+        default: 'keccak'
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
       genesis:
         description: 'Genesis filename (used for all clients)'
-        default: 'genesis.json'
+        default: 'zkevmgenesis.json'
 
 jobs:
   set-matrix:
