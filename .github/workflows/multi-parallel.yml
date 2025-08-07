@@ -29,7 +29,7 @@ on:
         default: 1
       filter:
         description: 'Comma-separated include-only filename patterns'
-        default: 'keccak'
+        default: ''
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
