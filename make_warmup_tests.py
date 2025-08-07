@@ -2,7 +2,6 @@
 import argparse, json, shutil, subprocess, re, sys
 from pathlib import Path
 
-# Default genesis state root; can be overridden via --genesisFile flag
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
 IMAGES = '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
 
@@ -42,19 +41,19 @@ def collect_mismatches(container: str = "gas-execution-client") -> dict:
     return m
 
 
-def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
+def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
     replaced_files = 0
     print("[debug] blockHash mapping:")
-    for old, new in mapping.items():
-        print(f"  {old!r} → {new!r}")
+    for got, want in mapping.items():
+        print(f"  {got!r} → {want!r}")
 
-    for txt in tests_root.rglob("*150M*.txt"):
+    for txt in tests_root.rglob(pattern):
         text = txt.read_text()
         new_text = text
         file_changed = False
-        for new, old in mapping.items():
-            before = f'"blockHash": "{old}"'
-            after = f'"blockHash": "{new}"'
+        for want, got in mapping.items():  # Corrected order
+            before = f'"blockHash": "{got}"'
+            after = f'"blockHash": "{want}"'
             if before in new_text:
                 file_changed = True
                 print(f"[debug] {txt}: replacing {before} → {after}")
@@ -62,6 +61,8 @@ def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
         if file_changed:
             txt.write_text(new_text)
             replaced_files += 1
+        else:
+            print(f"[debug] No blockHash replaced in {txt}")
 
     print(f"[debug] total files changed: {replaced_files}")
     return replaced_files
@@ -82,22 +83,16 @@ def main():
     p = argparse.ArgumentParser(
         description="Make warmup-tests: drop real-genesis, bump others, fix parentHash + blockHash"
     )
+    p.add_argument("-s", "--source", nargs="+", help="Source root(s)")
     p.add_argument(
-        "-s", "--source", nargs="+", help="Legacy: Source root(s)"
+        "-g", "--genesisPath",
+        help="Path to a genesis JSON file; used to override default GENESIS_ROOT and passed to setup_node.py"
     )
     p.add_argument(
-        "-g", "--genesisPath", help="Legacy: Genesis path (used with --source)"
+        "-j", "--sourceJson",
+        help='JSON [{"path": "tests-vm", "genesis": "...", "changeForAll": true}]'
     )
-    p.add_argument(
-        "-j", "--sourceJson", help='New format: JSON [{"path": "tests-vm", "genesis": "...", "changeForAll": true}]'
-    )
-    p.add_argument(
-        "-f", "--genesisFile",
-        help="Path to a genesis JSON file; will read its top-level 'stateRoot' and override default GENESIS_ROOT"
-    )
-    p.add_argument(
-        "-d", "--dest", default="warmup-tests", help="Destination root"
-    )
+    p.add_argument("-d", "--dest", default="warmup-tests", help="Destination root")
     p.add_argument(
         "--changeForAll", action="store_true",
         help="Change stateRoot for all newPayloads (default: only last)"
@@ -108,19 +103,21 @@ def main():
     )
     args = p.parse_args()
 
-    # Override default GENESIS_ROOT if a genesis JSON file is provided
-    if args.genesisFile:
+    # Override GENESIS_ROOT from --genesisPath
+    print("[debug] Starting warmup test generation")
+    if args.genesisPath:
         try:
-            with open(args.genesisFile, 'r') as gf:
+            with open(args.genesisPath, 'r') as gf:
                 gen_data = json.load(gf)
             if 'stateRoot' not in gen_data:
-                print(f"❌ Genesis file '{args.genesisFile}' missing 'stateRoot' field.")
+                print(f"❌ Genesis file '{args.genesisPath}' missing 'stateRoot' field.")
                 sys.exit(1)
-            # Update global state root
             global GENESIS_ROOT
+            print(f"[debug] Overriding GENESIS_ROOT:\n  before: {GENESIS_ROOT}")
             GENESIS_ROOT = gen_data['stateRoot']
+            print(f"  after: {GENESIS_ROOT}")
         except Exception as e:
-            print(f"❌ Error reading genesis file '{args.genesisFile}': {e}")
+            print(f"❌ Error reading genesis file '{args.genesisPath}': {e}")
             sys.exit(1)
 
     test_sources = []
@@ -184,7 +181,6 @@ def main():
     )
 
     # Setup node with genesis if applicable
-    genesis_for_geth = None
     for entry in test_sources:
         src_root = Path(entry["path"])
         relative_subdir = src_root.name
@@ -219,11 +215,12 @@ def main():
         print(f"🔍 Found blockHash mismatches in {relative_subdir}:")
         print(json.dumps(mapping, indent=2))
 
-        fixed = fix_blockhashes(Path(tests_path), mapping)
+        fixed = fix_blockhashes(pattern, Path(tests_path), mapping)
         print(f"✅ Replaced blockHash in {fixed} file(s) for {relative_subdir}.")
 
         teardown("geth")
 
+    # Flatten warmup-tests output directory
     for sub in dst_root.iterdir():
         if sub.is_dir():
             for f in sub.glob("*.txt"):
