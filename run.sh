@@ -257,7 +257,7 @@ for i in "${!TEST_PATHS[@]}"; do
   while IFS= read -r -d '' file; do
     TEST_FILES+=("$file")
     TEST_TO_GENESIS+=("$genesis")
-  done < <(find "$path" -type f -name '*.txt' -print0)
+  done < <(find "$path" -type f -name '*.txt' -print0 | sort -z)
 done
 debug_log "Found ${#TEST_FILES[@]} test files"
 end_timer "test_discovery"
