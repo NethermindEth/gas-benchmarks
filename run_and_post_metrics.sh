@@ -20,8 +20,9 @@
 #
 # Default warmup file is set to "warmup/warmup-1000bl-16wi-24tx.txt"
 
-# Default value for warmup file
+# Default warmup file
 WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
+TEST_PATHS_JSON='[{"path": "tests-vm"}]'  # default test path
 DEBUG_FLAG=""
 DEBUG=false
 DEBUG_FILE=""
@@ -122,6 +123,10 @@ while [[ $# -gt 0 ]]; do
       PROMETHEUS_PASSWORD="$2"
       shift 2
       ;;
+    --test-paths-json)
+      TEST_PATHS_JSON="$2"
+      shift 2
+      ;;
     --debug)
       DEBUG=true
       if [ -z "$DEBUG_FLAG" ]; then
@@ -157,7 +162,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --debug --debug-file <debug_file> --profile-test]"
+  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json>]"
   exit 1
 fi
 
@@ -198,7 +203,6 @@ while true; do
   # Start timing for this loop iteration
   LOOP_START_TIME=$(date +%s.%N)
   debug_log "Starting new loop iteration"
-  
   start_timer "git_pull"
   git pull
   end_timer "git_pull"
@@ -211,7 +215,7 @@ while true; do
   start_timer "benchmark_testing"
   # Run the benchmark testing using specified warmup file
   PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
-    eval "bash run.sh -t \"tests-vm/\" -w \"$WARMUP_FILE\" -r1 $DEBUG_FLAG"
+    eval "bash run.sh -T \"$TEST_PATHS_JSON\" -w \"$WARMUP_FILE\" -r1 -r1 $DEBUG_FLAG"
   end_timer "benchmark_testing"
 
   start_timer "populate_postgres_db_background"

@@ -1,0 +1,39 @@
+services:
+  execution:
+    stop_grace_period: 30m
+    container_name: gas-execution-client
+    restart: unless-stopped
+    image: ${EC_IMAGE_VERSION}
+    networks:
+      - gas
+    volumes:
+      - ${EC_DATA_DIR}:/var/lib/ethrex/data
+      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+    user: root
+    ports:
+      - 30303:30303/tcp
+      - 30303:30303/udp
+      - 8008:8008/tcp
+      - 8545:8545
+      - 8551:8551
+    expose:
+      - 8545
+      - 8551
+    command:
+      - --network=/tmp/genesis/genesis.json
+      - --datadir=/var/lib/ethrex/data
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=8008
+      - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
+      - --http.addr=0.0.0.0
+      - --http.port=8545
+      - --authrpc.addr=0.0.0.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "10"
+networks:
+  gas:
+    name: gas-network
