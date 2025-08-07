@@ -306,6 +306,8 @@ for run in $(seq 1 $RUNS); do
       end_timer "warmup_${client}_run_${run}"
     fi
 
+    declare -A warmup_run_counts=()
+
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
       filename="${test_file##*/}"
@@ -329,16 +331,23 @@ for run in $(seq 1 $RUNS); do
         fi
       fi
 
-      warmup_path=( "$WARMUP_OPCODES_PATH"/"${filename%_*}"_* )
-      warmup_path="${warmup_path%% *}"
+      base_prefix="${filename%-gas-value_*}"
+      warmup_candidates=( "$WARMUP_OPCODES_PATH"/"$base_prefix"-gas-value_*.txt )
+      warmup_path="${warmup_candidates[0]}"
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
         start_test_timer "opcodes_warmup_${client}_${filename}"
-        for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-          test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
-          python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'
-        done
-        end_test_timer "opcodes_warmup_${client}_${filename}"
+        current_count="${warmup_run_counts[$warmup_path]:-0}"
+        if (( current_count >= OPCODES_WARMUP_COUNT )); then
+          # Skipping
+        else
+          for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
+            test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
+            python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'
+            warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
+          done
+          end_test_timer "opcodes_warmup_${client}_${filename}"
+        fi
       fi
 
       # Actual measured run
