@@ -43,6 +43,7 @@ services:
       - --Sync.MaxAttemptsToUpdatePivot=0
       - --Init.AutoDump=None
       - --Pruning.PruningBoundary=2000
+      - --Merge.TerminalTotalDifficulty=0
     logging:
       driver: json-file
       options:
