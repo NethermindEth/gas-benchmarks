@@ -17,7 +17,7 @@ on:
         default: ''
       client:
         description: 'Comma-separated list of client names'
-        default: 'geth,reth,besu,erigon,nimbus,ethrex'
+        default: 'nethermind,geth,reth,besu,erigon,nimbus,ethrex'
       runs:
         description: 'Number of runs for the application'
         default: 1
