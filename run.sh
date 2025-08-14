@@ -279,7 +279,11 @@ for run in $(seq 1 $RUNS); do
     cl_name=$(echo "$client" | cut -d '_' -f 1)
     
     if [ -n "$raw_genesis" ]; then
-      genesis_path="scripts/$cl_name/$raw_genesis"
+      # Use client name, but map non-besu/nethermind clients to geth
+      if [ "$cl_name" != "besu" ] && [ "$cl_name" != "nethermind" ]; then
+        cl_name="geth"
+      fi
+      genesis_path="scripts/genesisfiles/$cl_name/$raw_genesis"
     else
       genesis_path=""
     fi
