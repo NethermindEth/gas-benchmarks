@@ -24,6 +24,7 @@ def set_env(client, el_images, run_path):
         specifics = "CHAINSPEC_PATH=/tmp/besu.json"
         specifics += "\nEC_ENABLED_MODULES=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,TXPOOL,WEB3\n"
     else:
+        # geth, reth, erigon, ethrex, nimbus all use geth genesis files
         specifics = "GENESIS_PATH=/tmp/genesis.json"
 
     env = (
@@ -44,13 +45,14 @@ def copy_genesis_file(client, genesis_path):
     target = None
     if "nethermind" in client:
         target = "/tmp/chainspec.json"
-        default_source = f"scripts/{client}/chainspec.json"
+        default_source = "scripts/genesisfiles/nethermind/chainspec.json"
     elif "besu" in client:
         target = "/tmp/besu.json"
-        default_source = f"scripts/{client}/besu.json"
+        default_source = "scripts/genesisfiles/besu/besu.json"
     else:
+        # geth, reth, erigon, ethrex, nimbus all use geth genesis files
         target = "/tmp/genesis.json"
-        default_source = f"scripts/{client}/genesis.json"
+        default_source = "scripts/genesisfiles/geth/genesis.json"
 
     source = genesis_path if genesis_path else default_source
 
