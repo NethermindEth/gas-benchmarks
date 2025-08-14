@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 import argparse, json, shutil, subprocess, re, sys
 from pathlib import Path
 
@@ -187,7 +187,7 @@ def main():
         tests_path = str(dst_root / relative_subdir)
         genesis_path = entry.get("genesis", "")
 
-        setup_node_cmd = ["python3", "setup_node.py", "--client", "geth", "--imageBulk", IMAGES]
+        setup_node_cmd = [sys.executable, "setup_node.py", "--client", "geth", "--imageBulk", IMAGES]
         if genesis_path:
             setup_node_cmd += ["--genesisPath", genesis_path]
 
@@ -196,7 +196,7 @@ def main():
 
         subprocess.run(
             [
-                "python3", "run_kute.py",
+                sys.executable, "run_kute.py",
                 "--output", "generationresults",
                 "--testsPath", tests_path,
                 "--jwtPath", "/tmp/jwtsecret",
