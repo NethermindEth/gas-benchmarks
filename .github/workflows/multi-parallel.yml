@@ -77,6 +77,7 @@ jobs:
     strategy:
       # Consume the JSON matrix we just emitted
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+      fail-fast: false
 
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
