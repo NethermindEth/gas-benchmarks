@@ -12,6 +12,7 @@ import json
 import re
 import subprocess
 import tarfile
+import shutil
 from pathlib import Path
 
 import requests
@@ -142,6 +143,8 @@ def main():
     print(f"ℹ️ excluding patterns: {args.exclude}")
 
     args.temp_dir.mkdir(exist_ok=True)
+    if args.output_dir.exists():
+        shutil.rmtree(args.output_dir)
     args.output_dir.mkdir(exist_ok=True)
     jq_filter = locate_utils_jq(args.utils_dir)
 
