@@ -81,21 +81,21 @@ end_test_timer() {
 print_timing_summary() {
   if [ "$DEBUG" = true ]; then
     local output_lines=()
-    
+
     # Build the output lines
     output_lines+=("")
     output_lines+=("=== TIMING SUMMARY ===")
     local total_time=$(awk "BEGIN {printf \"%.2f\", $(date +%s.%N) - $SCRIPT_START_TIME}")
     output_lines+=("Total script time: ${total_time}s")
     output_lines+=("")
-    
+
     # Sort the timing entries for consistent output
     local sorted_keys=($(printf '%s\n' "${!STEP_TIMES[@]}" | grep '_duration$' | sort))
-    
+
     for key in "${sorted_keys[@]}"; do
       local step_name="${key%_duration}"
       local duration="${STEP_TIMES[$key]}"
-      
+
       # Show test-specific timings only if PROFILE_TEST is enabled
       if [[ "$step_name" == *"opcodes_warmup_"* || "$step_name" == *"test_run_"* ]]; then
         if [ "$PROFILE_TEST" = true ]; then
@@ -107,10 +107,10 @@ print_timing_summary() {
     done
     output_lines+=("=======================")
     output_lines+=("")
-    
+
     # Print to stdout
     printf '%s\n' "${output_lines[@]}"
-    
+
     # Save to file if specified
     if [ -n "$DEBUG_FILE" ]; then
       printf '%s\n' "${output_lines[@]}" >> "$DEBUG_FILE"
@@ -200,13 +200,13 @@ if [ -n "$DEBUG_FILE" ]; then
   # Find next available filename to avoid overwriting
   original_debug_file="$DEBUG_FILE"
   counter=0
-  
+
   while [ -f "$DEBUG_FILE" ]; do
     counter=$((counter + 1))
     # Extract filename and extension
     filename="${original_debug_file%.*}"
     extension="${original_debug_file##*.}"
-    
+
     # Handle files without extension
     if [ "$filename" = "$extension" ]; then
       DEBUG_FILE="${original_debug_file}.${counter}"
@@ -214,13 +214,13 @@ if [ -n "$DEBUG_FILE" ]; then
       DEBUG_FILE="${filename}.${counter}.${extension}"
     fi
   done
-  
+
   # Create debug file with timestamp header
   echo "=== DEBUG LOG STARTED: $(date) ===" > "$DEBUG_FILE"
   echo "Script: $0" >> "$DEBUG_FILE"
   echo "Args: $*" >> "$DEBUG_FILE"
   echo "=======================================" >> "$DEBUG_FILE"
-  
+
   # Notify user about the actual filename used
   if [ "$DEBUG_FILE" != "$original_debug_file" ]; then
     echo "Debug file '$original_debug_file' already exists, using '$DEBUG_FILE' instead"
@@ -268,7 +268,7 @@ for run in $(seq 1 $RUNS); do
   debug_log "Starting run $run/$RUNS"
   for client in "${CLIENT_ARRAY[@]}"; do
     debug_log "Processing client: $client"
-    
+
     # Skip nimbus if already run today
     if [ "$client" = "nimbus" ] && was_executed_today "$client"; then
       echo "Skipping $client - already executed today"
@@ -277,7 +277,7 @@ for run in $(seq 1 $RUNS); do
 
     raw_genesis="${TEST_TO_GENESIS[$i]}"
     cl_name=$(echo "$client" | cut -d '_' -f 1)
-    
+
     if [ -n "$raw_genesis" ]; then
       genesis_path="scripts/$cl_name/$raw_genesis"
     else
@@ -315,16 +315,16 @@ for run in $(seq 1 $RUNS); do
       if [ -n "$FILTER" ]; then
         match=false
         filename_lc="${filename,,}"  # Convert filename to lowercase once
-      
+
         for pat in "${FILTERS[@]}"; do
           pat_lc="${pat,,}"  # Convert filter pattern to lowercase
-      
+
           if [[ "$filename_lc" == *"$pat_lc"* ]]; then
             match=true
             break
           fi
         done
-      
+
         if [ "$match" != true ]; then
           echo "Skipping $filename (does not match case-insensitive filter)"
           continue
@@ -360,12 +360,9 @@ for run in $(seq 1 $RUNS); do
 
     # Collect logs & teardown
     start_timer "teardown_${client}"
-    ts=$(date +%s)
-    docker logs gas-execution-client &> logs/docker_${client}_${ts}.log
-    docker logs gas-execution-client-sync &> logs/docker_sync_${client}_${ts}.log
     cl_name=$(echo "$client" | cut -d '_' -f 1)
     cd "scripts/$cl_name"
-    docker compose down
+    pkill -INT ethrex
     rm -rf execution-data
     cd - >/dev/null
     end_timer "teardown_${client}"
