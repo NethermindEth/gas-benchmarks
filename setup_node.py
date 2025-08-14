@@ -1,8 +1,8 @@
-# Create argument parser
 import argparse
 import datetime
 import json
 import os
+import shutil
 import subprocess
 import yaml
 
@@ -10,7 +10,6 @@ from utils import print_computer_specs
 
 
 def run_command(client, run_path):
-    # Add logic here to run the appropriate command for each client
     command = f"{run_path}/run.sh"
     print(
         f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'"
@@ -18,18 +17,16 @@ def run_command(client, run_path):
     subprocess.run(command, shell=True, text=True)
 
 
-def set_env(
-    client,
-    el_images,
-    run_path,
-):
+def set_env(client, el_images, run_path):
     if "nethermind" in client:
         specifics = "CHAINSPEC_PATH=/tmp/chainspec.json"
     elif "besu" in client:
         specifics = "CHAINSPEC_PATH=/tmp/besu.json"
         specifics += "\nEC_ENABLED_MODULES=ETH,NET,CLIQUE,DEBUG,MINER,NET,PERM,ADMIN,TXPOOL,WEB3\n"
     else:
+        # geth, reth, erigon, ethrex, nimbus all use geth genesis files
         specifics = "GENESIS_PATH=/tmp/genesis.json"
+
     env = (
         f"EC_IMAGE_VERSION={el_images[client]}\n"
         "EC_DATA_DIR=./execution-data\n"
@@ -44,63 +41,75 @@ def set_env(
         file.write(env)
 
 
+def copy_genesis_file(client, genesis_path):
+    target = None
+    if "nethermind" in client:
+        target = "/tmp/chainspec.json"
+        default_source = "scripts/genesisfiles/nethermind/chainspec.json"
+    elif "besu" in client:
+        target = "/tmp/besu.json"
+        default_source = "scripts/genesisfiles/besu/besu.json"
+    else:
+        # geth, reth, erigon, ethrex, nimbus all use geth genesis files
+        target = "/tmp/genesis.json"
+        default_source = "scripts/genesisfiles/geth/genesis.json"
+
+    source = genesis_path if genesis_path else default_source
+
+    if not os.path.isfile(source):
+        print(f"⚠️  Genesis file not found at: {source}, skipping copy")
+        return
+
+    try:
+        shutil.copy(source, target)
+        print(f"✅ Copied genesis file: {source} → {target}")
+    except Exception as e:
+        print(f"❌ Failed to copy genesis file from {source} to {target}: {e}")
+        exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Benchmark script")
-    parser.add_argument(
-        "--client",
-        type=str,
-        help="Client that we want to spin up.",
-        default="nethermind",
-    )
-    parser.add_argument(
-        "--image", type=str, help="Docker image of the client we are going to use."
-    )
-    parser.add_argument(
-        "--imageBulk",
-        type=str,
-        help="Docker image of the client we are going to use.",
-        default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default", "erigon": "default", "nimbus": "default"}'
-    )
+    parser.add_argument("--client", type=str, default="nethermind", help="Client to spin up")
+    parser.add_argument("--image", type=str, help="Docker image override")
+    parser.add_argument("--imageBulk", type=str, default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default", "erigon": "default", "nimbus": "default", "ethrex": "default"}', help="Bulk image override")
+    parser.add_argument("--genesisPath", type=str, help="Custom genesis file path")
 
-    # Parse command-line arguments
     args = parser.parse_args()
 
-    # Get client name and test case folder from command-line arguments
     client = args.client
-
     client_without_tag = client.split("_")[0]
 
     image = args.image
     images_bulk = args.imageBulk
-
-    print(f"image Bulk: {images_bulk}")
+    genesis_path = args.genesisPath
 
     with open("images.yaml", "r") as f:
         el_images = yaml.safe_load(f)["images"]
 
     if client_without_tag not in el_images:
-        print("Client not supported")
+        print("❌ Client not supported:", client_without_tag)
         return
 
+    # Override image from bulk if needed
     images_json = json.loads(images_bulk)
-    if images_json is not None:
-        if client in images_json:
-            if images_json[client] != "default" and images_json[client] != "":
-                el_images[client_without_tag] = images_json[client]
+    if images_json and client in images_json:
+        img = images_json[client]
+        if img != "default" and img:
+            el_images[client_without_tag] = img
 
-    if image is not None and image != "default":
+    if image and image != "default":
         el_images[client_without_tag] = image
 
-    run_path = os.path.join(os.getcwd(), "scripts")
-    run_path = os.path.join(run_path, client_without_tag)
+    run_path = os.path.join(os.getcwd(), "scripts", client_without_tag)
 
-    set_env(
-        client_without_tag,
-        el_images,
-        run_path,
-    )
+    # Copy custom genesis if provided
+    copy_genesis_file(client_without_tag, genesis_path)
 
-    # Start the client
+    # Prepare .env file
+    set_env(client_without_tag, el_images, run_path)
+
+    # Start client
     run_command(client, run_path)
 
 

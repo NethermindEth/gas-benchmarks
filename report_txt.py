@@ -240,7 +240,7 @@ def main():
     print(computer_spec)
 
     client_results = {}
-    methods = ['engine_newPayloadV3']
+    methods = ['engine_newPayloadV4']
     fields = ['max', 'min', 'mean']
     for client in clients.split(','):
         processed_responses[client] = {}

@@ -1,25 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 import argparse, json, shutil, subprocess, re, sys
 from pathlib import Path
 
-# your real genesis roots
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
-
-# your image‐bulk JSON
 IMAGES = '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
 
 
-def bump_last_nibble(h: str) -> str:
-    if not (h.startswith("0x") and len(h) > 2):
-        return h
-    try:
-        last = int(h[-1], 16)
-    except ValueError:
-        return h
-    return h[:-1] + format((last + 1) % 16, "x")
-
-
-def process_line(line: str, counters: dict, bump_only_if_last: bool = False) -> str:
+def process_line(line: str, counters: dict, bump: bool) -> str:
     line = line.rstrip("\n")
     if not line.strip():
         return "\n"
@@ -30,29 +17,18 @@ def process_line(line: str, counters: dict, bump_only_if_last: bool = False) -> 
 
     payload = obj["params"][0]
 
-    # 1) skip payload that already uses the real genesis root
-    if not bump_only_if_last:
+    if not bump:
         counters["dropped"] += 1
         return json.dumps(obj) + "\n"
 
-    # 2) otherwise bump stateRoot
-    payload["stateRoot"] = bump_last_nibble(GENESIS_ROOT)
+    payload["stateRoot"] = GENESIS_ROOT
     counters["bumped"] += 1
-
     counters["total"] += 1
     return json.dumps(obj) + "\n"
 
 
 def collect_mismatches(container: str = "gas-execution-client") -> dict:
-    """
-    Parse `docker logs <container>` for blockhash mismatches and return
-    a dict mapping 'got' -> 'want'.
-    """
-    logs = subprocess.check_output(
-        ["docker", "logs", container],
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
+    logs = subprocess.check_output(["docker", "logs", container], stderr=subprocess.STDOUT, text=True)
     pat = re.compile(r"blockhash mismatch, want ([0-9a-f]{64}), got ([0-9a-f]{64})")
     m = {}
     for line in logs.splitlines():
@@ -65,79 +41,31 @@ def collect_mismatches(container: str = "gas-execution-client") -> dict:
     return m
 
 
-def fix_blockhashes(tests_root: Path, mapping: dict) -> int:
-    """
-    In-place: for every .txt under tests_root, replace
-      "blockHash": "<old>"
-    with
-      "blockHash": "<new>"
-    according to mapping {old: new}.
-    Returns number of files changed.
-    """
+def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
     replaced_files = 0
-
-    # Debug: print the mapping so you can confirm the exact keys
     print("[debug] blockHash mapping:")
-    for old, new in mapping.items():
-        print(f"  {old!r} → {new!r}")
+    for got, want in mapping.items():
+        print(f"  {got!r} → {want!r}")
 
-    for txt in tests_root.rglob("*150M*.txt"):
+    for txt in tests_root.rglob(pattern):
         text = txt.read_text()
         new_text = text
         file_changed = False
-
-        for new, old in mapping.items():
-            # build the exact phrase we want to swap
-            before = f'"blockHash": "{old}"'
-            after = f'"blockHash": "{new}"'
+        for want, got in mapping.items():  # Corrected order
+            before = f'"blockHash": "{got}"'
+            after = f'"blockHash": "{want}"'
             if before in new_text:
                 file_changed = True
                 print(f"[debug] {txt}: replacing {before} → {after}")
                 new_text = new_text.replace(before, after)
-
         if file_changed:
             txt.write_text(new_text)
             replaced_files += 1
+        else:
+            print(f"[debug] No blockHash replaced in {txt}")
 
     print(f"[debug] total files changed: {replaced_files}")
     return replaced_files
-
-
-def chain_parenthashes(tests_root: Path) -> int:
-    """
-    In-place: for every .txt under tests_root, parse each engine_newPayloadV3,
-    Returns the number of files modified.
-    """
-    changed_files = 0
-
-    for txt in tests_root.rglob("*.txt"):
-        new_lines = []
-        file_changed = False
-
-        for raw in txt.read_text().splitlines(keepends=True):
-            try:
-                obj = json.loads(raw)
-            except json.JSONDecodeError:
-                new_lines.append(raw)
-                continue
-
-            if obj.get("method") == "engine_newPayloadV3":
-                payload = obj["params"][0]
-                old_parent = payload.get("parentHash")
-                # if it's not already the correct prev, patch it
-                if old_parent != prev:
-                    payload["parentHash"] = prev
-                    file_changed = True
-
-                new_lines.append(json.dumps(obj) + "\n")
-            else:
-                new_lines.append(raw)
-
-        if file_changed:
-            txt.write_text("".join(new_lines))
-            changed_files += 1
-
-    return changed_files
 
 
 def teardown(cl_name: str):
@@ -155,35 +83,96 @@ def main():
     p = argparse.ArgumentParser(
         description="Make warmup-tests: drop real-genesis, bump others, fix parentHash + blockHash"
     )
-    p.add_argument("-s", "--source", default="tests-vm", help="Source root")
+    p.add_argument("-s", "--source", nargs="+", help="Source root(s)")
+    p.add_argument(
+        "-g", "--genesisPath",
+        help="Path to a genesis JSON file; used to override default GENESIS_ROOT and passed to setup_node.py"
+    )
+    p.add_argument(
+        "-j", "--sourceJson",
+        help='JSON [{"path": "tests-vm", "genesis": "...", "changeForAll": true}]'
+    )
     p.add_argument("-d", "--dest", default="warmup-tests", help="Destination root")
+    p.add_argument(
+        "--changeForAll", action="store_true",
+        help="Change stateRoot for all newPayloads (default: only last)"
+    )
+    p.add_argument(
+        "-p", "--pattern", default="*150M*.txt",
+        help="Glob pattern for test files (default '*150M*.txt')"
+    )
     args = p.parse_args()
 
-    src_root = Path(args.source)
+    # Override GENESIS_ROOT from --genesisPath
+    print("[debug] Starting warmup test generation")
+    if args.genesisPath:
+        try:
+            with open(args.genesisPath, 'r') as gf:
+                gen_data = json.load(gf)
+            if 'stateRoot' not in gen_data:
+                print(f"❌ Genesis file '{args.genesisPath}' missing 'stateRoot' field.")
+                sys.exit(1)
+            global GENESIS_ROOT
+            print(f"[debug] Overriding GENESIS_ROOT:\n  before: {GENESIS_ROOT}")
+            GENESIS_ROOT = gen_data['stateRoot']
+            print(f"  after: {GENESIS_ROOT}")
+        except Exception as e:
+            print(f"❌ Error reading genesis file '{args.genesisPath}': {e}")
+            sys.exit(1)
+
+    test_sources = []
+
+    if args.sourceJson:
+        try:
+            test_sources = json.loads(args.sourceJson)
+            if not isinstance(test_sources, list):
+                raise ValueError("sourceJson must be a list")
+        except Exception as e:
+            print(f"❌ Invalid JSON for --sourceJson: {e}")
+            sys.exit(1)
+    elif args.source:
+        for src in args.source:
+            test_sources.append({
+                "path": src,
+                "genesis": args.genesisPath or "",
+                "changeForAll": args.changeForAll
+            })
+    else:
+        print("❌ You must provide either --sourceJson or --source")
+        sys.exit(1)
+
     dst_root = Path(args.dest)
     if dst_root.exists():
         shutil.rmtree(dst_root)
     dst_root.mkdir(parents=True)
+    pattern = args.pattern
 
     counters = {"total": 0, "bumped": 0, "dropped": 0}
 
-    # 1) scan + bump + force parentHash
-    for src in src_root.rglob("*150M*.txt"):
-        rel = src.relative_to(src_root)
-        out = dst_root / rel
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with src.open() as fin, out.open("w") as fout:
-            total_payloads = sum(1 for line in fin if "engine_newPayload" in line)
-            fin.seek(0)
-            seen_payloads = 0
-            for line in fin:
-                if "engine_newPayload" not in line:
-                    continue
-                seen_payloads += 1
-                is_last_payload = (seen_payloads == total_payloads)
-                nl = process_line(line, counters, bump_only_if_last=is_last_payload)
-                if nl:
-                    fout.write(nl)
+    # Process each source path
+    for entry in test_sources:
+        src_root = Path(entry["path"])
+        change_all = entry.get("changeForAll", args.changeForAll)
+        prefix = src_root.name
+
+        for src in src_root.rglob(pattern):
+            rel = src.relative_to(src_root)
+            out = dst_root / prefix / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+
+            with src.open() as fin, out.open("w") as fout:
+                total_payloads = sum(1 for line in fin if "engine_newPayload" in line)
+                fin.seek(0)
+                seen_payloads = 0
+
+                for line in fin:
+                    if "engine_newPayload" not in line:
+                        continue
+                    seen_payloads += 1
+                    bump = change_all or (seen_payloads == total_payloads)
+                    nl = process_line(line, counters, bump)
+                    if nl:
+                        fout.write(nl)
 
     print(
         f"Processed {counters['total']} payloads, "
@@ -191,42 +180,56 @@ def main():
         f"dropped {counters['dropped']} into '{dst_root}'"
     )
 
-    # 2) spin up node & send invalid payloads
-    subprocess.run(
-        ["python3", "setup_node.py", "--client", "geth", "--imageBulk", IMAGES],
-        check=True,
-    )
-    subprocess.run(
-        [
-            "python3",
-            "run_kute.py",
-            "--output",
-            "generationresults",
-            "--testsPath",
-            str(dst_root),
-            "--jwtPath",
-            "/tmp/jwtsecret",
-            "--client",
-            "geth",
-            "--run",
-            "1",
-        ],
-        check=True,
-    )
+    # Setup node with genesis if applicable
+    for entry in test_sources:
+        src_root = Path(entry["path"])
+        relative_subdir = src_root.name
+        tests_path = str(dst_root / relative_subdir)
+        genesis_path = entry.get("genesis", "")
 
-    # 3) collect mismatches & patch only blockHash fields
-    mapping = collect_mismatches("gas-execution-client")
-    if not mapping:
-        print("⚠️  No blockhash mismatches found; nothing to fix.")
+        setup_node_cmd = [sys.executable, "setup_node.py", "--client", "geth", "--imageBulk", IMAGES]
+        if genesis_path:
+            setup_node_cmd += ["--genesisPath", genesis_path]
+
+        print(f"🔧 Setting up node for {relative_subdir} with genesis: {genesis_path or 'default'}")
+        subprocess.run(setup_node_cmd, check=True)
+
+        subprocess.run(
+            [
+                sys.executable, "run_kute.py",
+                "--output", "generationresults",
+                "--testsPath", tests_path,
+                "--jwtPath", "/tmp/jwtsecret",
+                "--client", "geth",
+                "--run", "1"
+            ],
+            check=True,
+        )
+
+        mapping = collect_mismatches("gas-execution-client")
+        if not mapping:
+            print(f"⚠️  No blockhash mismatches found in {relative_subdir}; skipping fix.")
+            teardown("geth")
+            continue
+
+        print(f"🔍 Found blockHash mismatches in {relative_subdir}:")
+        print(json.dumps(mapping, indent=2))
+
+        fixed = fix_blockhashes(pattern, Path(tests_path), mapping)
+        print(f"✅ Replaced blockHash in {fixed} file(s) for {relative_subdir}.")
+
         teardown("geth")
-        return
 
-    print("🔍 Found blockHash mismatches:", json.dumps(mapping, indent=2))
-    fixed = fix_blockhashes(dst_root, mapping)
-    print(f"✅ Replaced blockHash in {fixed} test file(s).")
-
-    # 4) cleanup docker & data
-    teardown("geth")
+    # Flatten warmup-tests output directory
+    for sub in dst_root.iterdir():
+        if sub.is_dir():
+            for f in sub.glob("*.txt"):
+                target = dst_root / f.name
+                if target.exists():
+                    print(f"⚠️ File already exists in root: {target}, skipping move.")
+                else:
+                    f.rename(target)
+            sub.rmdir()
 
 
 if __name__ == "__main__":
