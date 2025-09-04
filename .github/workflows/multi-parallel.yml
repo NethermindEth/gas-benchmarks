@@ -5,7 +5,7 @@ on:
     inputs:
       test:
         description: 'Path to test file'
-        default: 'tests/'
+        default: 'eest_tests'
       warmup:
         description: 'Name of the warm up file'
         type: choice
@@ -14,25 +14,28 @@ on:
           - warmup/warmup-100bl-16wi-32tx.txt
           - warmup/warmup-1000bl-16wi-24tx.txt
           - warmup/warmup-1000bl-16wi-1000tx.txt
-        default: 'warmup/warmup-1000bl-16wi-24tx.txt'
+        default: ''
       client:
         description: 'Comma-separated list of client names'
-        default: 'nethermind,geth,reth,besu,erigon'
+        default: 'nethermind,geth,reth,besu,erigon,nimbus,ethrex'
       runs:
         description: 'Number of runs for the application'
         default: 1
       images:
         description: 'JSON map of images for the clients'
-        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
       opcodes_warmup_count:
         description: 'Number of opcode-warmup iterations'
-        default: 2
+        default: 1
       filter:
         description: 'Comma-separated include-only filename patterns'
         default: ''
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
+      genesis:
+        description: 'Genesis filename (used for all clients)'
+        default: 'zkevmgenesis.json'
 
 jobs:
   set-matrix:
@@ -74,6 +77,7 @@ jobs:
     strategy:
       # Consume the JSON matrix we just emitted
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+      fail-fast: false
 
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
@@ -97,10 +101,15 @@ jobs:
 
       - name: Run benchmarks for client=${{ matrix.client }}
         run: |
+          GENESIS_FILENAME="${{ github.event.inputs.genesis }}"
+          TEST_PATH="${{ github.event.inputs.test }}"
+          CLIENT="${{ matrix.client }}"
+          TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
+      
           ./run.sh \
-            -t "${{ github.event.inputs.test }}" \
+            -T "$TEST_PATHS_JSON" \
             -w "${{ github.event.inputs.warmup }}" \
-            -c "${{ matrix.client }}" \
+            -c "$CLIENT" \
             -r 1 \
             -i '${{ github.event.inputs.images }}' \
             -o "${{ github.event.inputs.opcodes_warmup_count }}" \
@@ -111,11 +120,19 @@ jobs:
         run: |
           # Find the newest docker log file for this client
           LATEST=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
+          LATEST_SYNC=$(ls -1t logs/docker_sync_${{ matrix.client }}_*.log | head -n1 || true)
           if [[ -n "$LATEST" ]]; then
             echo "=== Dumping $LATEST ==="
             cat "$LATEST"
           else
             echo "No docker_*.log files found for client=${{ matrix.client }}"
+          fi
+
+          if [[ -n "$LATEST_SYNC" ]]; then
+            echo "=== Dumping $LATEST_SYNC ==="
+            cat "$LATEST_SYNC"
+          else
+            echo "No docker_sync_*.log files found for client=${{ matrix.client }}"
           fi
 
       - name: Zip the results folder
