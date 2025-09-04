@@ -2,16 +2,16 @@
 
 # Default inputs
 WARMUP_OPCODES_PATH="warmup-tests"
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
+WARMUP_FILE=""
 CLIENTS="nethermind,geth,reth,besu,erigon,nimbus,ethrex"
-RUNS=8
-OPCODES_WARMUP_COUNT=2
+RUNS=1
+OPCODES_WARMUP_COUNT=1
 FILTER=""
 IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
 EXECUTIONS_FILE="executions.json"
 TEST_PATHS_JSON=""
-LEGACY_TEST_PATH="tests-vm"
-LEGACY_GENESIS_PATH=""
+LEGACY_TEST_PATH=eest_tests"
+LEGACY_GENESIS_PATH="zkevm_genesis.json"
 DEBUG=false
 DEBUG_FILE=""
 PROFILE_TEST=false
