@@ -205,6 +205,7 @@ while true; do
   debug_log "Starting new loop iteration"
   start_timer "git_pull"
   git pull
+  git lfs pull
   end_timer "git_pull"
   
   start_timer "update_performance_images"
