@@ -25,6 +25,7 @@ services:
       - --genesis-file=/tmp/chainspec/chainspec.json
       - --bonsai-historical-block-limit=10000
       - --bonsai-limit-trie-logs-enabled=false
+      - --bonsai-parallel-tx-processing-enabled=false
       - --data-path=/var/lib/besu/data
       - --metrics-enabled=true
       - --metrics-host=0.0.0.0
@@ -39,7 +40,6 @@ services:
       - --rpc-http-api=${EC_ENABLED_MODULES}
       - --rpc-http-cors-origins=*
       - --host-allowlist=*
-      - --logging=DEBUG
     logging:
       driver: json-file
       options:
