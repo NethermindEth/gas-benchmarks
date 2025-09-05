@@ -39,6 +39,7 @@ services:
       - --rpc-http-api=${EC_ENABLED_MODULES}
       - --rpc-http-cors-origins=*
       - --host-allowlist=*
+      - --logging=DEBUG
     logging:
       driver: json-file
       options:
