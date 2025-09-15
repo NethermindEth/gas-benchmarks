@@ -41,8 +41,9 @@ def wait_for_port(host, port, timeout=180):
     return False
 
 def ensure_pip_pkg(pkg):
-    try: __import__(pkg)
-    except Exception: run([sys.executable, "-m", "pip", "install", "-U", pkg])
+    if pkg == "mitmproxy" and shutil.which(pkg): return
+    try: __import__(pkg)
+    except Exception: run([sys.executable, "-m", "pip", "install", "-U", pkg])
 
 def rpc_call(url, method, params=None, headers=None, timeout=10):
     import requests
