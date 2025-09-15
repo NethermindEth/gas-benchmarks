@@ -393,7 +393,16 @@ def main():
             "--",
             "-m", "benchmark", "-n", "1",
         ]
-        run(uv_cmd, cwd=str(repo_dir), check=True)
+
+        run_env = os.environ.copy()
+        src_path = str((repo_dir / "src").resolve())
+        existing_path = run_env.get("PYTHONPATH", "")
+        if existing_path:
+            run_env["PYTHONPATH"] = os.pathsep.join([src_path, existing_path])
+        else:
+            run_env["PYTHONPATH"] = src_path
+
+        run(uv_cmd, cwd=str(repo_dir), env=run_env, check=True)
     finally:
         if not args.keep:
             try: print_container_logs(container_name)
