@@ -280,6 +280,7 @@ def main():
     run(["uv", "python", "install", "3.11"])
     run(["uv", "python", "pin", "3.11"], cwd=str(repo_dir))
     run(["uv", "sync", "--all-extras"], cwd=str(repo_dir))
+    run(["uv", "pip", "install", "-e", "."], cwd=str(repo_dir))
 
     snapshot_dir = Path("execution-data")
     if not args.no_snapshot:
