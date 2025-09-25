@@ -183,20 +183,26 @@ nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user neth
 By default, gas-benchmarks use kute nethermind framework to generate and execute the tests.
 
 But you can also use [EEST framework](https://github.com/ethereum/execution-spec-tests/tree/main/tests/benchmark) to create the tests and then run the benchmark with Kute with following steps:
+
 1. Place genesis file inside scripts/genesisfiles/YOUR_CLIENT directory, for example:
     - scripts/genesisfiles/geth/chainspec.json
     - scripts/genesisfiles/geth/zkevmgenesis.json
 2. Generate warmup tests (usuing geth):
+
 ```sh
 python3 make_warmup_tests.py -s eest_tests/ -d warmup-tests -g scripts/genesisfiles/geth/zkevmgenesis.json
 ```
+
 3. Capture EEST tests:
+
 ```
 python3 capture_eest_tests.py -o eest_tests -x 1M,worst_bytecode
 ```
+
 4. Execute the tests: perform the step 4 from "Running the Benchmarks" section using `eest_tests/` as test path and warmup file generated in the step 2:
 
 ```
+
 bash run.sh -t "eest_tests/" -w "warmup-tests" -c "client1,client2" -r runNumber -i "image1,image2"
 ```
 
@@ -206,15 +212,20 @@ To create the new EEST tests, refer to its documentation.
 ### Execute the tests directly from EEST framework
 
 1. Clone the EEST repository:
+
 ```
 git clone https://github.com/ethereum/execution-spec-tests.git
 cd execution-spec-tests
 ```
+
 2. Create a virtual environment and install the dependencies:
+
 ```
 uv sync --all-extras
 ```
+
 3. Use [execute remote](https://github.com/ethereum/execution-spec-tests/blob/main/docs/running_tests/execute/remote.md) command to run the tests:
+
 ```
 uv run execute remote -v --fork=Prague --rpc-seed-key=ACCOUNT --rpc-chain-id=1 --rpc-endpoint=http://127.0.0.1:8545 tests -- -m benchmark -n 1
 ```
@@ -249,15 +260,19 @@ You need also to generate mitmproxy config and save it as `mitm_config.json`:
 ```
 
 **Key notes:**
+
 - The generator automatically handles node setup, health checks, JWT authentication, and cleanup.
 - It uses OverlayFS for ephemeral node state (no mutation of base snapshot, the snapshot can be downloaded once and reused)
 - Requires custom Nethermind image: `nethermindeth/nethermind:gp-hacked`
 - Produces deterministic engine payloads without triggering reorgs
 
 **Additional options:**
+
 - `--chain`: Target network (mainnet, sepolia, holesky, goerli or ethereum (perfnet))
 - `--no-snapshot`: Skip snapshot download
 - `--keep`: Preserve containers and logs after completion
 - `--refresh-snapshot`: Force re-download of snapshot
 
 Important: This feature is still in development (See [PR description](https://github.com/NethermindEth/gas-benchmarks/pull/57)).
+
+Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md)
