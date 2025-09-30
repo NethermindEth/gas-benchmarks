@@ -1,22 +1,3 @@
-"""
-mitm_addon.py — formatted and structured
-
-This mitmproxy addon intercepts JSON-RPC POST requests and buffers
-`eth_sendRawTransaction` calls into groups derived from test metadata.
-When a quiet period elapses (or groups switch), it requests a payload via
-`engine_getPayloadV4` and submits it via `engine_newPayloadV4`, also
-updating forkchoice. It logs activity to /root/mitm_addon.log and
-optionally anchors finalized/safe blocks from a dynamic global setup.
-
-Environment:
-  MITM_ADDON_CONFIG: path to JSON config (default: mitm_config.json)
-    {
-      "rpc_direct": "http://...",
-      "engine_url": "http://...",
-      "jwt_hex_path": "/path/to/jwt.hex",
-      "finalized_block": "0x..."     # optional
-    }
-"""
 from __future__ import annotations
 
 import base64
@@ -25,6 +6,7 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
 import threading
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -54,30 +36,48 @@ _ENGINE_PATH = _u.path or "/"
 _LOG_FILE = "/root/mitm_logs.log"
 
 # Quiet period before producing a block (seconds)
-QUIET_SECONDS: float = 0.5
+QUIET_SECONDS: float = 0.1
 
 # Synchronization / state
 _GROUP_LOCK = threading.Lock()
-_ACTIVE_GRP: Optional[Tuple[str, str, str]] = None
+_ACTIVE_GRP: Optional[Tuple[str, str, str]] = None  # (file_base, test_name, phase)
 _LAST_TS: float = 0.0
 _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
 _BUF: List[Tuple[str, Any]] = []  # list of (txrlp_hex, original_id)
 _STOP: bool = False
 
-# Track tests that already had their first (setup) getPayload reorged
-_TEST_REORGED: set[Tuple[str, str]] = set()  # {(file_base, test_name)}
-
 # Thread handle
 _MON_THR: Optional[threading.Thread] = None
 
+# Per-scenario bookkeeping
+_SEEN_SCENARIOS: set[str] = set()
+_TESTING_SEEN_COUNT: Dict[str, int] = {}
+
+# --- Test lifecycle + global no-phase bookkeeping ---
+_TESTS_STARTED: bool = False  # flipped True on first phased test sendraw (setup/testing/cleanup)
+
+# Base paths
+_PAYLOADS_DIR = pathlib.Path("payloads")
+_SETUP_DIR = _PAYLOADS_DIR / "setup"
+_TESTING_DIR = _PAYLOADS_DIR / "testing"
+_CLEANUP_DIR = _PAYLOADS_DIR / "cleanup"
+
+# Legacy/unknown helpers
+_GLOBAL_SETUP_FILE = _PAYLOADS_DIR / "global-setup.txt"   # only used for one-time migration on load
+_UNKNOWN_FILE = _PAYLOADS_DIR / "unknown.txt"
+
+# Global no-phase lifecycle files (root of payloads/)
+_SETUP_GLOBAL_FILE = _PAYLOADS_DIR / "setup-global-test.txt"
+_MIDDLE_GLOBAL_FILE = _PAYLOADS_DIR / "middle-global-tests.txt"
+_TEAR_GLOBAL_FILE = _PAYLOADS_DIR / "teardown-global-test.txt"
+_CURRENT_LAST_FILE = _PAYLOADS_DIR / "current-last-global-test.txt"
 
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------
 
 def _log(msg: str) -> None:
-    """Append a log line to the log file; swallow all errors."""
     try:
         with open(_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
@@ -86,21 +86,18 @@ def _log(msg: str) -> None:
 
 
 def _http_post_json(url: str, obj: Any, timeout: int = 90, headers: Optional[Dict[str, str]] = None) -> Any:
-    """POST JSON using requests if available, otherwise urllib."""
     try:
         import requests  # type: ignore
-
         r = requests.post(url, json=obj, timeout=timeout, headers=headers or {})
         r.raise_for_status()
         return r.json()
     except Exception:
         import urllib.request
-
         data = json.dumps(obj).encode("utf-8")
         req = urllib.request.Request(
             url, data=data, headers={"Content-Type": "application/json", **(headers or {})}
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (controlled URL)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             return json.loads(resp.read().decode("utf-8"))
 
 
@@ -141,6 +138,7 @@ def _engine(method: str, params: List[Any]) -> Any:
 
     if "error" in j:
         raise RuntimeError(str(j["error"]))
+
     return j["result"]
 
 
@@ -152,13 +150,16 @@ def _rpc(method: str, params: Optional[List[Any]] = None) -> Any:
             timeout=30,
         )
         return j.get("result")
-    except Exception as e:  # pragma: no cover - best effort
+    except Exception as e:
         _log(f"rpc {method} failed: {e}")
         return None
 
 
-def _sanitize(s: Any) -> str:
-    s = str(s).strip().strip("/\\").replace("/", "_").replace("\\", "_").replace("..", ".")
+def _sanitize_filename_component(s: str) -> str:
+    # Keep name readable; only neutralize path separators and control chars.
+    s = s.replace(os.sep, "_").replace("\\", "_").replace("/", "_")
+    s = s.replace("\x00", "").replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    s = s.strip()
     return s or "unknown"
 
 
@@ -191,27 +192,16 @@ def _derive_group_from_meta(meta: Optional[Dict[str, Any]]) -> Tuple[str, str, s
         file_path_str, test_name = test_id.split("::", 1)
     else:
         file_path_str, test_name = test_id, "unknown_test"
-
-    file_base = _sanitize(os.path.basename(file_path_str))
-    test_name = _sanitize(test_name)
-    phase = _sanitize((meta or {}).get("phase") or "unknown")
+    file_base = _sanitize_filename_component(os.path.basename(file_path_str))
+    test_name = _sanitize_filename_component(test_name)
+    phase = _sanitize_filename_component((meta or {}).get("phase") or "unknown")
     return (file_base, test_name, phase)
 
 
-def _save_newpayload(exec_payload: Dict[str, Any], parent_hash: str, out_path: pathlib.Path) -> None:
-    body = {
-        "jsonrpc": "2.0",
-        "id": int(time.time()),
-        "method": "engine_newPayloadV4",
-        "params": [exec_payload, [], parent_hash, []],
-    }
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(body, f, indent=2)
-        f.write("\n")
-    tmp.replace(out_path)
-    _log(f"saved {out_path}")
+def _scenario_name(file_base: str, test_name: str) -> str:
+    fb = _sanitize_filename_component(file_base)
+    tn = _sanitize_filename_component(test_name)
+    return f"{fb}__{tn}"
 
 
 def _collect_hashes_from_node(node: Any) -> List[str]:
@@ -225,9 +215,6 @@ def _collect_hashes_from_node(node: Any) -> List[str]:
         for v in node:
             hashes.extend(_collect_hashes_from_node(v))
     return hashes
-
-
-essential = ("pending", "queued")
 
 
 def _log_txpool_summary() -> None:
@@ -265,6 +252,156 @@ def _log_txpool_summary() -> None:
 
 
 # ---------------------------------------------------------------------------
+# File IO helpers for new layout
+# ---------------------------------------------------------------------------
+
+def _ensure_dirs_and_cleanup_old() -> None:
+    _PAYLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    _SETUP_DIR.mkdir(parents=True, exist_ok=True)
+    _TESTING_DIR.mkdir(parents=True, exist_ok=True)
+    _CLEANUP_DIR.mkdir(parents=True, exist_ok=True)
+    # Remove any old subdirectories inside payloads/ except the three canonical dirs
+    for p in _PAYLOADS_DIR.iterdir():
+        if p.is_dir() and p.name not in {"setup", "testing", "cleanup"}:
+            try:
+                shutil.rmtree(p)
+                _log(f"removed old payloads subdir: {p}")
+            except Exception as e:
+                _log(f"failed to remove old subdir {p}: {e}")
+
+
+def _minified_json_line(obj: Any) -> str:
+    return json.dumps(obj, separators=(",", ":"))
+
+
+def _append_line(path: pathlib.Path, line: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(line)
+        f.write("\n")
+
+
+def _overwrite_with_lines(path: pathlib.Path, lines: List[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        for ln in lines:
+            f.write(ln)
+            f.write("\n")
+    tmp.replace(path)
+
+
+def _truncate(path: pathlib.Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8"):
+        pass
+
+
+def _truncate_if_first_seen(scenario: str) -> None:
+    if scenario in _SEEN_SCENARIOS:
+        return
+    _SEEN_SCENARIOS.add(scenario)
+    for base in (_SETUP_DIR, _TESTING_DIR, _CLEANUP_DIR):
+        p = base / f"{scenario}.txt"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("w", encoding="utf-8"):
+            pass
+    _TESTING_SEEN_COUNT[scenario] = 0
+    _log(f"initialized scenario files for {scenario}")
+
+
+def _dump_pair_to_phase(phase: str, scenario: str, np_body: Dict[str, Any], fcu_body: Dict[str, Any]) -> None:
+    np_line = _minified_json_line(np_body)
+    fcu_line = _minified_json_line(fcu_body)
+
+    if phase == "setup":
+        _append_line(_SETUP_DIR / f"{scenario}.txt", np_line)
+        _append_line(_SETUP_DIR / f"{scenario}.txt", fcu_line)
+        _log(f"setup append → {_SETUP_DIR / (scenario + '.txt')}")
+        return
+
+    if phase == "cleanup":
+        _append_line(_CLEANUP_DIR / f"{scenario}.txt", np_line)
+        _append_line(_CLEANUP_DIR / f"{scenario}.txt", fcu_line)
+        _log(f"cleanup append → {_CLEANUP_DIR / (scenario + '.txt')}")
+        return
+
+    # testing
+    count = _TESTING_SEEN_COUNT.get(scenario, 0)
+    testing_path = _TESTING_DIR / f"{scenario}.txt"
+    setup_path = _SETUP_DIR / f"{scenario}.txt"
+
+    if count == 0:
+        _overwrite_with_lines(testing_path, [np_line, fcu_line])
+        _log(f"testing write (first) → {testing_path}")
+    else:
+        if testing_path.exists():
+            try:
+                with testing_path.open("r", encoding="utf-8") as f:
+                    prev_lines = [ln.rstrip("\n") for ln in f if ln.strip() != ""]
+                for ln in prev_lines:
+                    _append_line(setup_path, ln)
+                _log(f"testing migrate {len(prev_lines)} line(s) → {setup_path}")
+            except Exception as e:
+                _log(f"migrate testing→setup failed: {e}")
+        _overwrite_with_lines(testing_path, [np_line, fcu_line])
+        _log(f"testing overwrite (latest) → {testing_path}")
+
+    _TESTING_SEEN_COUNT[scenario] = count + 1
+
+
+# ---- helpers for global no-phase routing ----------------------------------
+
+def _append_pair(path: pathlib.Path, np_body: Dict[str, Any], fcu_body: Dict[str, Any]) -> None:
+    _append_line(path, _minified_json_line(np_body))
+    _append_line(path, _minified_json_line(fcu_body))
+
+def _file_has_content(path: pathlib.Path) -> bool:
+    try:
+        return path.exists() and path.stat().st_size > 0
+    except Exception:
+        return False
+
+def _migrate_current_last_to_middle() -> None:
+    if _file_has_content(_CURRENT_LAST_FILE):
+        try:
+            with _CURRENT_LAST_FILE.open("r", encoding="utf-8") as f:
+                lines = [ln.rstrip("\n") for ln in f if ln.strip()]
+            for ln in lines:
+                _append_line(_MIDDLE_GLOBAL_FILE, ln)
+            _truncate(_CURRENT_LAST_FILE)
+            _log(f"migrated {len(lines)} line(s) current-last → { _MIDDLE_GLOBAL_FILE }")
+        except Exception as e:
+            _log(f"migrate current-last→middle failed: {e}")
+
+def _finalize_current_last_to_teardown() -> None:
+    if _file_has_content(_CURRENT_LAST_FILE):
+        try:
+            tmp = _TEAR_GLOBAL_FILE.with_suffix(".tmp")
+            with _CURRENT_LAST_FILE.open("r", encoding="utf-8") as f_in, tmp.open("w", encoding="utf-8") as f_out:
+                for ln in f_in:
+                    if ln.strip():
+                        f_out.write(ln)
+            tmp.replace(_TEAR_GLOBAL_FILE)
+            _CURRENT_LAST_FILE.unlink(missing_ok=True)
+            _log(f"finalized current-last → { _TEAR_GLOBAL_FILE }")
+        except Exception as e:
+            _log(f"finalize current-last→teardown failed: {e}")
+
+def _cleanup_empty_txt_files() -> None:
+    try:
+        for p in _PAYLOADS_DIR.rglob("*.txt"):
+            try:
+                if p.exists() and p.stat().st_size == 0:
+                    p.unlink()
+                    _log(f"removed empty file: {p}")
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Flushing / Production
 # ---------------------------------------------------------------------------
 
@@ -274,25 +411,20 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         return
 
     try:
-        _log_txpool_summary()
         first = txrlps[0]
         last = txrlps[-1]
         preview_first = (first[:18] + "…" + first[-10:]) if isinstance(first, str) else str(first)[:32]
         preview_last = (last[:18] + "…" + last[-10:]) if isinstance(last, str) else str(last)[:32]
 
         file_base, test_name, phase = grp or ("unknown", "unknown", "unknown")
-
-        # Reorg completely disabled
-        reorg = False
+        scenario = _scenario_name(file_base, test_name)
 
         _log(
             f"GETPAYLOAD group={grp} count={len(txrlps)} first={preview_first} "
-            f"last={preview_last} reorg={str(reorg).lower()}"
+            f"last={preview_last} reorg=false"
         )
 
         params: List[Any] = [txrlps, "EMPTY"]
-        # reorg flag never appended
-
         payload: Dict[str, Any] = _engine("engine_getPayloadV4", params)
         exec_payload: Dict[str, Any] = payload.get("executionPayload", {})
         parent_hash: str = exec_payload.get("parentHash") or "0x" + ("00" * 32)
@@ -302,12 +434,17 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         _STAGE[grp] += 1
         idx = _STAGE[grp]
 
-        out_path = pathlib.Path("payloads") / file_base / test_name / phase / (str(idx) + ".json")
-        _save_newpayload(exec_payload, parent_hash, out_path)
+        np_body = {
+            "jsonrpc": "2.0",
+            "id": int(time.time()),
+            "method": "engine_newPayloadV4",
+            "params": [exec_payload, [], parent_hash, []],
+        }
 
         _engine("engine_newPayloadV4", [exec_payload, [], parent_hash, []])
 
         if file_base == "global-setup":
+            # keep anchor update logic for historical behavior
             old = _DYN_FINALIZED
             _globals = globals()
             _globals["_DYN_FINALIZED"] = exec_payload.get("blockHash") or old
@@ -320,10 +457,49 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             "safeBlockHash": dyn_final,
             "finalizedBlockHash": dyn_final,
         }
+        fcu_body = {
+            "jsonrpc": "2.0",
+            "id": int(time.time()),
+            "method": "engine_forkchoiceUpdatedV3",
+            "params": [fcs, None],
+        }
+
         _engine("engine_forkchoiceUpdatedV3", [fcs, None])
+
+        # Ensure base dirs exist
+        _ensure_dirs_and_cleanup_old()
+
+        # ---- GLOBAL NO-PHASE (both legacy 'global-setup' and explicit 'global-nophase') ----
+        if file_base in {"global-setup", "global-nophase"}:
+            if not _TESTS_STARTED:
+                # Before any phased test started → setup-global-test
+                _append_pair(_SETUP_GLOBAL_FILE, np_body, fcu_body)
+                _log(f"global-no-phase PRE-TEST → {_SETUP_GLOBAL_FILE}")
+            else:
+                # During/after tests: roll current-last
+                if _file_has_content(_CURRENT_LAST_FILE):
+                    _migrate_current_last_to_middle()
+                _overwrite_with_lines(_CURRENT_LAST_FILE, [
+                    _minified_json_line(np_body),
+                    _minified_json_line(fcu_body)
+                ])
+                _log(f"global-no-phase CURRENT-LAST updated → {_CURRENT_LAST_FILE}")
+            _log(f"produced block group={grp} stage={idx}")
+            return
+        # -------------------------------------------------------------------------------------
+
+        # Normal scenario flow
+        _truncate_if_first_seen(scenario)
+        ph = phase.lower()
+        if ph not in {"setup", "testing", "cleanup"}:
+            _log(f"unknown phase '{phase}' -> treating as 'setup' for dump")
+            ph = "setup"
+
+        _dump_pair_to_phase(ph, scenario, np_body, fcu_body)
         _log(f"produced block group={grp} stage={idx}")
-    except Exception as e:  # pragma: no cover - production safety
+    except Exception as e:  # pragma: no cover
         _log(f"produce error: {e}")
+
 
 def _produce_if_quiet(force: bool = False) -> None:
     global _PENDING, _BUF
@@ -355,17 +531,64 @@ def _monitor() -> None:
 # mitmproxy addon hooks
 # ---------------------------------------------------------------------------
 
-def load(loader) -> None:  # noqa: D401 - mitmproxy hook
-    """Start the background monitor thread when the addon loads."""
+def load(loader) -> None:
     global _MON_THR
+    _ensure_dirs_and_cleanup_old()
+
+    # Truncate global lifecycle files at start of run
+    for p in (_SETUP_GLOBAL_FILE, _MIDDLE_GLOBAL_FILE, _TEAR_GLOBAL_FILE, _CURRENT_LAST_FILE):
+        _truncate(p)
+
+    # One-time migration: move any legacy global-setup.txt NP/FCU pairs into lifecycle files
+    if _GLOBAL_SETUP_FILE.exists():
+        try:
+            lines = [ln.rstrip("\n") for ln in _GLOBAL_SETUP_FILE.read_text(encoding="utf-8").splitlines() if ln.strip()]
+            if lines:
+                if len(lines) % 2 != 0:
+                    _log(f"[warn] global-setup.txt has odd number of lines ({len(lines)}); expected NP+FCU pairs")
+                pairs = [lines[i:i+2] for i in range(0, len(lines) - len(lines) % 2, 2)]
+                if pairs:
+                    # first pair -> setup
+                    for ln in pairs[0]:
+                        _append_line(_SETUP_GLOBAL_FILE, ln)
+                    # middle pairs -> middle
+                    for pair in pairs[1:-1]:
+                        for ln in pair:
+                            _append_line(_MIDDLE_GLOBAL_FILE, ln)
+                    # last pair -> teardown
+                    for ln in pairs[-1]:
+                        _append_line(_TEAR_GLOBAL_FILE, ln)
+                    # backup the legacy file
+                    _GLOBAL_SETUP_FILE.rename(_GLOBAL_SETUP_FILE.with_suffix(".migrated.bak"))
+                    _log(f"migrated {len(pairs)} global-setup pair(s) → lifecycle files; backed up to global-setup.migrated.bak")
+        except Exception as e:
+            _log(f"migration of global-setup.txt failed: {e}")
+
+    # Historical stray: move setup/global-setup__global-setup.txt → global-setup.txt (then migration above will handle it next time)
+    stray = _SETUP_DIR / "global-setup__global-setup.txt"
+    if stray.exists():
+        try:
+            with stray.open("r", encoding="utf-8") as f_in:
+                content = f_in.read()
+            with _GLOBAL_SETUP_FILE.open("a", encoding="utf-8") as f_out:
+                f_out.write(content)
+            stray.unlink()
+            _log(f"moved stray {stray} → {_GLOBAL_SETUP_FILE}")
+        except Exception as e:
+            _log(f"migration of {stray} failed: {e}")
+
     _MON_THR = threading.Thread(target=_monitor, daemon=True)
     _MON_THR.start()
     _log("mitm_addon loaded")
 
 
-def done() -> None:  # noqa: D401 - mitmproxy hook
-    """Stop the background thread on shutdown."""
+def done() -> None:
     global _STOP
+    # Finalize the last no-phase global into teardown
+    _finalize_current_last_to_teardown()
+    # Remove any leftover empty .txt files (root and subdirs)
+    _cleanup_empty_txt_files()
+
     _STOP = True
     if _MON_THR and _MON_THR.is_alive():
         _MON_THR.join(timeout=1.0)
@@ -387,8 +610,15 @@ def _extract_meta(headers: Dict[str, str], item: Dict[str, Any]) -> Tuple[Option
     return None, "none"
 
 
+def _append_raw_request_line(path: pathlib.Path, obj: Any) -> None:
+    try:
+        _append_line(path, _minified_json_line(obj))
+    except Exception as e:
+        _log(f"append raw request failed ({path}): {e}")
+
+
 def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
-    global _ACTIVE_GRP, _LAST_TS, _PENDING, _BUF
+    global _ACTIVE_GRP, _LAST_TS, _PENDING, _BUF, _TESTS_STARTED
 
     params = item.get("params") or []
     raw = params[0] if params and isinstance(params[0], str) and params[0].startswith("0x") else None
@@ -397,21 +627,28 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         return
 
     meta, src = _extract_meta(headers, item)
-    if meta:
+
+    # Recognize global no-phase: metadata present but no 'phase'
+    if meta and not (meta.get("phase")):
+        grp = ("global-nophase", "global-nophase", "global-nophase")
+        _log(f"intercept sendraw id={item.get('id')} grp={grp} via={src} (no-phase)")
+    elif meta:
         grp = _derive_group_from_meta(meta)
         _log(f"intercept sendraw id={item.get('id')} grp={grp} via={src}")
+        # If phase is literally "unknown" → also append raw request to unknown.txt
+        if (meta.get("phase") or "").lower() == "unknown":
+            _ensure_dirs_and_cleanup_old()
+            _append_raw_request_line(_UNKNOWN_FILE, item)
+        # Mark tests started on first phased test
+        ph = (meta.get("phase") or "").lower()
+        if ph in {"setup", "testing", "cleanup"}:
+            if not _TESTS_STARTED:
+                _TESTS_STARTED = True
+                _log("tests lifecycle: STARTED")
     else:
-        txid = str(item.get("id", "noid"))
-        grp = ("global-setup", "global-setup", "global-setup")
-        out = pathlib.Path("payloads") / "global-setup" / f"{txid}.json"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with out.open("w", encoding="utf-8") as f:
-                json.dump(item, f, indent=2)
-                f.write("\n")
-        except Exception:
-            pass
-        _log(f"intercept sendraw fallback→global-setup id={txid}")
+        # Missing metadata → treat like global no-phase lifecycle (we'll route via setup/middle/teardown)
+        grp = ("global-nophase", "global-nophase", "global-nophase")
+        _log(f"intercept sendraw fallback→global-nophase id={item.get('id', 'noid')}")
 
     force_prev: Optional[Tuple[Tuple[str, str, str], List[Tuple[str, Any]]]] = None
     with _GROUP_LOCK:

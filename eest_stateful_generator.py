@@ -56,24 +56,27 @@ def rpc_call(url, method, params=None, headers=None, timeout=10):
     if "error" in data: raise RuntimeError(f"RPC error from {url}: {data['error']}")
     return data.get("result")
 
-def _atomic_write_json(path: Path, obj: dict):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=2); f.write("\n")
-    tmp.replace(path)
-    print(f"[SAVE] {path}")
+# ---------------------- new helpers for line-based outputs ----------------------
 
-def _next_indexed_path(base_dir: Path, prefix: str) -> Path:
-    base_dir.mkdir(parents=True, exist_ok=True)
-    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)\.json$")
-    max_n = 0
-    for p in base_dir.glob(f"{prefix}-*.json"):
-        m = pattern.match(p.name)
-        if m:
-            try: max_n = max(max_n, int(m.group(1)))
-            except ValueError: pass
-    return base_dir / f"{prefix}-{max_n + 1}.json"
+def _ensure_payloads_dir() -> Path:
+    p = Path("payloads")
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+def _minified_json_line(obj: dict) -> str:
+    return json.dumps(obj, separators=(",", ":"))
+
+def _append_line(path: Path, line: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+def _truncate_file(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8"):
+        pass
+
+# --------------------------------------------------------------------------------
 
 def is_mounted(mount_point: Path) -> bool:
     try:
@@ -149,6 +152,7 @@ def start_nethermind_container(chain: str, db_dir: Path, jwt_path: Path,
         "--Network.MaxActivePeers", "0",
         "--TxPool.Size", "10000",
         "--TxPool.MaxTxSize", "null",
+        "--Pruning.CacheMb", "1",
     ]
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
@@ -168,7 +172,7 @@ def print_container_logs(name: str):
         return
     try:
         out = subprocess.run(["docker", "logs", name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
-        Path("/root/nethermind.log").write_text(out.stdout, encoding="utf-8")
+        Path("nethermind.log").write_text(out.stdout, encoding="utf-8")
     except Exception:
         pass
 
@@ -195,23 +199,40 @@ def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: l
     if "error" in j: raise RuntimeError(f"Engine error: {j['error']}")
     return j["result"]
 
-def _save_newpayload_host(exec_payload: dict, parent_hash: str, out_path: Path):
-    obj = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_newPayloadV4","params":[exec_payload, [], parent_hash, []]}
-    _atomic_write_json(out_path, obj)
+# ----------------- changed: append NP and FCU to a single .txt file -----------------
 
 def preparation_getpayload(engine_url: str, jwt_hex_path: Path, rpc_address: str, save_path: Path | None = None):
+    """
+    Build a payload on the engine, POST engine_newPayloadV4, then engine_forkchoiceUpdatedV3.
+    If save_path is provided, append TWO minified JSON-RPC lines to that file:
+      1) the engine_newPayloadV4 request body
+      2) the engine_forkchoiceUpdatedV3 request body
+    """
     ZERO32 = "0x" + ("00" * 32)
     txrlp_empty = None
     payload = _engine_with_jwt(engine_url, jwt_hex_path, "engine_getPayloadV4", [txrlp_empty, rpc_address])
     exec_payload = payload.get("executionPayload")
     parent_hash = exec_payload.get("parentHash") or ZERO32
-    if save_path:
-        _save_newpayload_host(exec_payload, parent_hash, save_path)
+
+    # Send NP
     _ = _engine_with_jwt(engine_url, jwt_hex_path, "engine_newPayloadV4", [exec_payload, [], parent_hash, []])
     block_hash = exec_payload.get("blockHash")
+
+    # Build FCU params (safe/finalized=head)
     fcs = {"headBlockHash": block_hash, "safeBlockHash": block_hash, "finalizedBlockHash": block_hash}
+    # Send FCU
     _ = _engine_with_jwt(engine_url, jwt_hex_path, "engine_forkchoiceUpdatedV3", [fcs, None])
+
+    # Append NP + FCU requests as lines if requested
+    if save_path is not None:
+        np_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_newPayloadV4","params":[exec_payload, [], parent_hash, []]}
+        fcu_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_forkchoiceUpdatedV3","params":[fcs, None]}
+        _append_line(save_path, _minified_json_line(np_body))
+        _append_line(save_path, _minified_json_line(fcu_body))
+
     return block_hash
+
+# -----------------------------------------------------------------------------------
 
 def _cleanup():
     try:
@@ -337,6 +358,8 @@ def main():
         except Exception: pass
         sys.exit(1)
 
+    print_container_logs(container_name)
+
     chain_id = args.rpc_chain_id
     if chain_id is None:
         chain_id = CHAIN_TO_ID.get(args.chain.lower())
@@ -348,18 +371,26 @@ def main():
                 chain_id = 1
 
     ensure_pip_pkg("mitmproxy")
-    finalized_hash = ""
+
+    # -------- prepare combined line-based output files (truncate each run) --------
+    payloads_dir = _ensure_payloads_dir()
+    gas_bump_file = payloads_dir / "gas-bump.txt"
+    funding_file  = payloads_dir / "funding.txt"
+    _truncate_file(gas_bump_file)
+    _truncate_file(funding_file)
+    # ------------------------------------------------------------------------------
 
     try:
-        for i in range(100):
-            out_path = _next_indexed_path(Path("payloads"), "gas-bump")
-            preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=out_path)
+        for i in range(301):
+            # Append NP+FCU pairs as lines to gas-bump.txt
+            preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
     except Exception as e:
         print(f"[WARN] Gas bump failed: {e}")
 
+    finalized_hash = ""
     try:
-        funding_path = _next_indexed_path(Path("payloads"), "funding")
-        finalized_hash = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_path)
+        # Append NP+FCU pair(s) as lines to funding.txt
+        finalized_hash = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_file)
     except Exception as e:
         print(f"[WARN] Funding prep failed: {e}")
 
