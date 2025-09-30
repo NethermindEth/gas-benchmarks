@@ -15,9 +15,17 @@ LEGACY_GENESIS_PATH="zkevm_genesis.json"
 DEBUG=false
 DEBUG_FILE=""
 PROFILE_TEST=false
+NETWORK=""
+SNAPSHOT_ROOT="snapshots"
+OVERLAY_TMP_ROOT="overlay-runtime"
+USE_OVERLAY=false
 
 # Timing variables
 declare -A STEP_TIMES
+declare -A ACTIVE_OVERLAY_MOUNTS
+declare -A ACTIVE_OVERLAY_UPPERS
+declare -A ACTIVE_OVERLAY_WORKS
+declare -A ACTIVE_OVERLAY_CLIENTS
 SCRIPT_START_TIME=$(date +%s.%N)
 
 # Debug logging function
@@ -118,6 +126,190 @@ print_timing_summary() {
   fi
 }
 
+abspath() {
+  python3 - <<'PY' "$1"
+import os
+import sys
+print(os.path.abspath(sys.argv[1]))
+PY
+}
+
+is_stateful_directory() {
+  local dir="$1"
+  [ -d "$dir" ] || return 1
+  [ -d "$dir/testing" ] || return 1
+  return 0
+}
+
+collect_stateful_directory() {
+  local dir="$1"
+  local -a ordered=()
+  local -A seen=()
+  local file
+  local phase
+
+  for file in "$dir/gas-bump.txt" "$dir/funding.txt" "$dir/setup-global-test.txt"; do
+    if [ -f "$file" ] && [ -z "${seen[$file]}" ]; then
+      ordered+=("$file")
+      seen["$file"]=1
+    fi
+  done
+
+  for phase in setup testing cleanup; do
+    local phase_dir="$dir/$phase"
+    if [ -d "$phase_dir" ]; then
+      while IFS= read -r -d '' phase_file; do
+        if [ -z "${seen[$phase_file]}" ]; then
+          ordered+=("$phase_file")
+          seen["$phase_file"]=1
+        fi
+      done < <(find "$phase_dir" -type f -name '*.txt' -print0 | sort -z)
+    fi
+  done
+
+  local teardown="$dir/teardown-global-test.txt"
+  if [ -f "$teardown" ] && [ -z "${seen[$teardown]}" ]; then
+    ordered+=("$teardown")
+    seen["$teardown"]=1
+  fi
+
+  if [ -d "$dir" ]; then
+    while IFS= read -r -d '' root_file; do
+      if [ -z "${seen[$root_file]}" ]; then
+        ordered+=("$root_file")
+        seen["$root_file"]=1
+      fi
+    done < <(find "$dir" -maxdepth 1 -type f -name '*.txt' -print0 | sort -z)
+  fi
+
+  printf '%s\0' "${ordered[@]}"
+}
+
+append_tests_for_path() {
+  local base_path="$1"
+  local genesis="$2"
+
+  if [ -f "$base_path" ]; then
+    TEST_FILES+=("$base_path")
+    TEST_TO_GENESIS+=("$genesis")
+    return
+  fi
+
+  if [ -d "$base_path" ]; then
+    if is_stateful_directory "$base_path"; then
+      while IFS= read -r -d '' file; do
+        TEST_FILES+=("$file")
+        TEST_TO_GENESIS+=("$genesis")
+      done < <(collect_stateful_directory "$base_path")
+    else
+      while IFS= read -r -d '' file; do
+        TEST_FILES+=("$file")
+        TEST_TO_GENESIS+=("$genesis")
+      done < <(find "$base_path" -type f -name '*.txt' -print0 | sort -z)
+    fi
+    return
+  fi
+
+  echo "⚠️  Test path not found: $base_path" >&2
+}
+
+is_mounted() {
+  local mount_point="$1"
+  local abs_path
+  abs_path=$(abspath "$mount_point")
+  grep -q " $abs_path " /proc/mounts 2>/dev/null
+}
+
+prepare_overlay_for_client() {
+  local client="$1"
+  local network="$2"
+  local snapshot_root="$3"
+
+  local lower=""
+  if [ -n "$network" ] && [ -d "$snapshot_root/$network/$client" ]; then
+    lower="$snapshot_root/$network/$client"
+  elif [ -d "$snapshot_root/$client" ]; then
+    lower="$snapshot_root/$client"
+  else
+    echo "❌ Unable to locate snapshot directory for $client under $snapshot_root" >&2
+    return 1
+  fi
+
+  local overlay_root="$OVERLAY_TMP_ROOT/$client"
+  local merged="$overlay_root/merged"
+  local upper="$overlay_root/upper"
+  local work="$overlay_root/work"
+
+  mkdir -p "$overlay_root"
+
+  if is_mounted "$merged"; then
+    if ! umount "$merged" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo umount "$merged"
+      else
+        echo "❌ Failed to unmount previous overlay for $client" >&2
+        return 1
+      fi
+    fi
+  fi
+
+  rm -rf "$merged" "$upper" "$work"
+  mkdir -p "$merged" "$upper" "$work"
+
+  local abs_lower abs_upper abs_work
+  abs_lower=$(abspath "$lower")
+  abs_upper=$(abspath "$upper")
+  abs_work=$(abspath "$work")
+  local mount_opts="lowerdir=$abs_lower,upperdir=$abs_upper,workdir=$abs_work"
+
+  if ! mount -t overlay overlay -o "$mount_opts" "$merged" 2>/dev/null; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo mount -t overlay overlay -o "$mount_opts" "$merged"
+    else
+      echo "❌ Failed to mount overlay for $client (need elevated permissions)" >&2
+      return 1
+    fi
+  fi
+
+  ACTIVE_OVERLAY_MOUNTS["$client"]="$merged"
+  ACTIVE_OVERLAY_UPPERS["$client"]="$upper"
+  ACTIVE_OVERLAY_WORKS["$client"]="$work"
+  ACTIVE_OVERLAY_CLIENTS["$client"]=1
+
+  echo "$merged"
+}
+
+cleanup_overlay_for_client() {
+  local client="$1"
+  local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
+  local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
+  local work="${ACTIVE_OVERLAY_WORKS[$client]}"
+
+  if [ -n "$merged" ] && is_mounted "$merged"; then
+    if ! umount "$merged" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo umount "$merged"
+      fi
+    fi
+  fi
+
+  [ -n "$merged" ] && rm -rf "$merged"
+  [ -n "$upper" ] && rm -rf "$upper"
+  [ -n "$work" ] && rm -rf "$work"
+
+  unset ACTIVE_OVERLAY_MOUNTS["$client"]
+  unset ACTIVE_OVERLAY_UPPERS["$client"]
+  unset ACTIVE_OVERLAY_WORKS["$client"]
+  unset ACTIVE_OVERLAY_CLIENTS["$client"]
+}
+
+cleanup_all_overlays() {
+  local client
+  for client in "${!ACTIVE_OVERLAY_CLIENTS[@]}"; do
+    cleanup_overlay_for_client "$client"
+  done
+}
+
 # Function to initialize executions.json if it doesn't exist
 init_executions_file() {
   if [ ! -f "$EXECUTIONS_FILE" ]; then
@@ -145,7 +337,7 @@ update_execution_time() {
 }
 
 # Parse command line arguments
-while getopts "T:t:g:w:c:r:i:o:f:" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -159,7 +351,9 @@ while getopts "T:t:g:w:c:r:i:o:f:" opt; do
     d) DEBUG=true ;;
     D) DEBUG=true; DEBUG_FILE="$OPTARG" ;;
     p) PROFILE_TEST=true ;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test]" >&2
+    n) NETWORK="$OPTARG"; USE_OVERLAY=true ;;
+    B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root]" >&2
        exit 1 ;;
   esac
 done
@@ -227,6 +421,11 @@ if [ -n "$DEBUG_FILE" ]; then
   fi
 fi
 
+if [ "$USE_OVERLAY" = true ]; then
+  mkdir -p "$OVERLAY_TMP_ROOT"
+  trap cleanup_all_overlays EXIT
+fi
+
 # Set up environment
 start_timer "environment_setup"
 rm -rf results
@@ -254,13 +453,18 @@ TEST_TO_GENESIS=()
 for i in "${!TEST_PATHS[@]}"; do
   path="${TEST_PATHS[$i]}"
   genesis="${GENESIS_PATHS[$i]}"
-  while IFS= read -r -d '' file; do
-    TEST_FILES+=("$file")
-    TEST_TO_GENESIS+=("$genesis")
-  done < <(find "$path" -type f -name '*.txt' -print0 | sort -z)
+  append_tests_for_path "$path" "$genesis"
 done
 debug_log "Found ${#TEST_FILES[@]} test files"
 end_timer "test_discovery"
+
+DEFAULT_GENESIS=""
+for genesis_entry in "${TEST_TO_GENESIS[@]}"; do
+  if [ -n "$genesis_entry" ]; then
+    DEFAULT_GENESIS="$genesis_entry"
+    break
+  fi
+done
 
 # Run benchmarks
 start_timer "benchmarks_total"
@@ -275,27 +479,48 @@ for run in $(seq 1 $RUNS); do
       continue
     fi
 
-    raw_genesis="${TEST_TO_GENESIS[$i]}"
-    cl_name=$(echo "$client" | cut -d '_' -f 1)
-    
+    client_base=$(echo "$client" | cut -d '_' -f 1)
+    raw_genesis="$DEFAULT_GENESIS"
+    genesis_client="$client_base"
+
     if [ -n "$raw_genesis" ]; then
-      # Use client name, but map non-besu/nethermind clients to geth
-      if [ "$cl_name" != "besu" ] && [ "$cl_name" != "nethermind" ]; then
-        cl_name="geth"
+      if [ "$genesis_client" != "besu" ] && [ "$genesis_client" != "nethermind" ]; then
+        genesis_client="geth"
       fi
-      genesis_path="scripts/genesisfiles/$cl_name/$raw_genesis"
+      genesis_path="scripts/genesisfiles/$genesis_client/$raw_genesis"
     else
       genesis_path=""
     fi
+
+    data_dir=""
+    if [ "$USE_OVERLAY" = true ]; then
+      if [ ! -d "$SNAPSHOT_ROOT" ]; then
+        echo "❌ Snapshot root '$SNAPSHOT_ROOT' not found" >&2
+        cleanup_overlay_for_client "$client_base"
+        continue
+      fi
+      data_dir=$(prepare_overlay_for_client "$client_base" "$NETWORK" "$SNAPSHOT_ROOT") || {
+        echo "❌ Skipping $client - overlay setup failed" >&2
+        cleanup_overlay_for_client "$client_base"
+        continue
+      }
+    else
+      data_dir=$(abspath "scripts/$client_base/execution-data")
+      mkdir -p "$data_dir"
+    fi
+
     end_timer "setup_node_${client}"
 
-    # Setup node
+    setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
+    if [ -n "$NETWORK" ]; then
+      setup_cmd+=(--network "$NETWORK")
+    fi
     if [ -n "$genesis_path" ]; then
       echo "Using custom genesis for $client: $genesis_path"
-      python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --genesisPath "$genesis_path"
-    else
-      python3 setup_node.py --client "$client" --imageBulk "$IMAGES"
+      setup_cmd+=(--genesisPath "$genesis_path")
     fi
+
+    "${setup_cmd[@]}"
 
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
     cat results/computer_specs.txt
@@ -367,11 +592,19 @@ for run in $(seq 1 $RUNS); do
     ts=$(date +%s)
     docker logs gas-execution-client &> logs/docker_${client}_${ts}.log
     docker logs gas-execution-client-sync &> logs/docker_sync_${client}_${ts}.log
-    cl_name=$(echo "$client" | cut -d '_' -f 1)
-    cd "scripts/$cl_name"
-    docker compose down
-    rm -rf execution-data
-    cd - >/dev/null
+    if [ -f "scripts/$client_base/docker-compose.yaml" ]; then
+      docker compose -f "scripts/$client_base/docker-compose.yaml" down
+    elif [ -d "scripts/$client_base" ]; then
+      (
+        cd "scripts/$client_base" && docker compose down
+      )
+    fi
+
+    rm -rf "scripts/$client_base/execution-data"
+
+    if [ "$USE_OVERLAY" = true ]; then
+      cleanup_overlay_for_client "$client_base"
+    fi
     end_timer "teardown_${client}"
 
     update_execution_time "$client"

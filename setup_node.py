@@ -4,6 +4,8 @@ import json
 import os
 import shutil
 import subprocess
+from pathlib import Path
+
 import yaml
 
 from utils import print_computer_specs
@@ -17,7 +19,7 @@ def run_command(client, run_path):
     subprocess.run(command, shell=True, text=True)
 
 
-def set_env(client, el_images, run_path):
+def set_env(client, el_images, run_path, data_dir):
     if "nethermind" in client:
         specifics = "CHAINSPEC_PATH=/tmp/chainspec.json"
     elif "besu" in client:
@@ -27,9 +29,11 @@ def set_env(client, el_images, run_path):
         # geth, reth, erigon, ethrex, nimbus all use geth genesis files
         specifics = "GENESIS_PATH=/tmp/genesis.json"
 
+    resolved_data_dir = Path(data_dir or Path(run_path) / "execution-data").resolve()
+
     env = (
         f"EC_IMAGE_VERSION={el_images[client]}\n"
-        "EC_DATA_DIR=./execution-data\n"
+        f"EC_DATA_DIR={resolved_data_dir}\n"
         "EC_JWT_SECRET_PATH=/tmp/jwtsecret\n"
         f"{specifics}"
     )
@@ -41,7 +45,7 @@ def set_env(client, el_images, run_path):
         file.write(env)
 
 
-def copy_genesis_file(client, genesis_path):
+def copy_genesis_file(client, genesis_path, network):
     target = None
     if "nethermind" in client:
         target = "/tmp/chainspec.json"
@@ -54,9 +58,23 @@ def copy_genesis_file(client, genesis_path):
         target = "/tmp/genesis.json"
         default_source = "scripts/genesisfiles/geth/genesis.json"
 
-    source = genesis_path if genesis_path else default_source
+    source = Path(genesis_path) if genesis_path else Path(default_source)
 
-    if not os.path.isfile(source):
+    if not genesis_path and network:
+        base_dir = Path("scripts/genesisfiles") / client
+        network_lower = network.lower()
+        candidates = [
+            base_dir / f"{network_lower}.json",
+            base_dir / f"{network}.json",
+            base_dir / f"{network_lower}.chainspec.json",
+            base_dir / f"{network}.chainspec.json",
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                source = candidate
+                break
+
+    if not source.is_file():
         print(f"⚠️  Genesis file not found at: {source}, skipping copy")
         return
 
@@ -72,8 +90,19 @@ def main():
     parser = argparse.ArgumentParser(description="Benchmark script")
     parser.add_argument("--client", type=str, default="nethermind", help="Client to spin up")
     parser.add_argument("--image", type=str, help="Docker image override")
-    parser.add_argument("--imageBulk", type=str, default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default", "erigon": "default", "nimbus": "default", "ethrex": "default"}', help="Bulk image override")
+    parser.add_argument(
+        "--imageBulk",
+        type=str,
+        default='{"nethermind": "default", "besu": "default", "geth": "default", "reth": "default", "erigon": "default", "nimbus": "default", "ethrex": "default"}',
+        help="Bulk image override",
+    )
     parser.add_argument("--genesisPath", type=str, help="Custom genesis file path")
+    parser.add_argument("--network", type=str, help="Named network to resolve default genesis")
+    parser.add_argument(
+        "--dataDir",
+        type=str,
+        help="Host directory to bind into the client as data dir",
+    )
 
     args = parser.parse_args()
 
@@ -83,6 +112,8 @@ def main():
     image = args.image
     images_bulk = args.imageBulk
     genesis_path = args.genesisPath
+    network = args.network
+    data_dir = args.dataDir
 
     with open("images.yaml", "r") as f:
         el_images = yaml.safe_load(f)["images"]
@@ -104,10 +135,10 @@ def main():
     run_path = os.path.join(os.getcwd(), "scripts", client_without_tag)
 
     # Copy custom genesis if provided
-    copy_genesis_file(client_without_tag, genesis_path)
+    copy_genesis_file(client_without_tag, genesis_path, network)
 
     # Prepare .env file
-    set_env(client_without_tag, el_images, run_path)
+    set_env(client_without_tag, el_images, run_path, data_dir)
 
     # Start client
     run_command(client, run_path)
