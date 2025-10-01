@@ -19,6 +19,7 @@ NETWORK=""
 SNAPSHOT_ROOT="snapshots"
 OVERLAY_TMP_ROOT="overlay-runtime"
 USE_OVERLAY=false
+PREPARATION_RESULTS_DIR="prepresults"
 
 # Timing variables
 declare -A STEP_TIMES
@@ -189,6 +190,27 @@ dir_has_content() {
   local dir="$1"
   [ -d "$dir" ] || return 1
   find "$dir" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .
+}
+
+is_measured_file() {
+  local file_path="$1"
+  local normalized="${file_path//\\/\/}"
+  local filename="${file_path##*/}"
+
+  case "$filename" in
+    gas-bump.txt|funding.txt|setup-global-test.txt|teardown-global-test.txt)
+      return 1 ;;
+  esac
+
+  if [[ "$normalized" == */setup/* ]] || [[ "$normalized" == */cleanup/* ]]; then
+    return 1
+  fi
+
+  if [[ "$normalized" == */testing/* ]]; then
+    return 0
+  fi
+
+  return 0
 }
 
 append_tests_for_path() {
@@ -455,6 +477,8 @@ rm -rf results
 mkdir -p results
 mkdir -p warmupresults
 mkdir -p logs
+rm -rf "$PREPARATION_RESULTS_DIR"
+mkdir -p "$PREPARATION_RESULTS_DIR"
 end_timer "environment_setup"
 
 # Initialize executions tracking
@@ -563,24 +587,36 @@ for run in $(seq 1 $RUNS); do
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
       filename="${test_file##*/}"
+      if is_measured_file "$test_file"; then
+        measured=true
+      else
+        measured=false
+      fi
 
-      if [ -n "$FILTER" ]; then
+      if [ "$measured" = true ] && [ -n "$FILTER" ]; then
         match=false
         filename_lc="${filename,,}"  # Convert filename to lowercase once
-      
+
         for pat in "${FILTERS[@]}"; do
           pat_lc="${pat,,}"  # Convert filter pattern to lowercase
-      
+
           if [[ "$filename_lc" == *"$pat_lc"* ]]; then
             match=true
             break
           fi
         done
-      
+
         if [ "$match" != true ]; then
           echo "Skipping $filename (does not match case-insensitive filter)"
           continue
         fi
+      fi
+
+      if [ "$measured" = false ]; then
+        echo "Executing preparation script (not measured): $filename"
+        python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
+        echo ""
+        continue
       fi
 
       base_prefix="${filename%-gas-value_*}"
