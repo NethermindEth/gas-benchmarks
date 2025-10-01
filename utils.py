@@ -204,11 +204,12 @@ def get_test_cases(tests_path):
             if not file.endswith('.txt'):
                 continue
             m = pattern.match(file)
-            if not m:
-                print(f"[Warning] skipping unexpected file name: {file}")
-                continue
+            #if not m:
+            #    print(f"[Warning] skipping unexpected file name: {file}")
+            #    continue
             test_case_name = m.group('base')
-            gas_value = int(m.group('gas'))  # e.g., "100" from "100M"
+            #gas_value = int(m.group('gas'))  # e.g., "100" from "100M"
+            gas_value = "60"
             test_cases[test_case_name].add(gas_value)
 
     return {tc: sorted(list(gases)) for tc, gases in test_cases.items()}
