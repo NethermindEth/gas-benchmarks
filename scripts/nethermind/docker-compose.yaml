@@ -24,37 +24,26 @@ services:
     expose:
       - 8545
       - 8551
-    entrypoint:
-      - /bin/sh
-      - -c
-    command: |
-      set -e
-      ARGS=""
-      if [ -n "${NETHERMIND_CONFIG_FLAG}" ]; then
-        ARGS="$ARGS ${NETHERMIND_CONFIG_FLAG}"
-      fi
-      if [ -n "${NETHERMIND_GENESIS_FLAG}" ]; then
-        ARGS="$ARGS ${NETHERMIND_GENESIS_FLAG}"
-      fi
-      exec dotnet /nethermind/Nethermind.Runner.dll \
-        $ARGS \
-        --datadir=/nethermind/data \
-        --log=INFO \
-        --JsonRpc.Enabled=true \
-        --JsonRpc.Host=0.0.0.0 \
-        --JsonRpc.Port=8545 \
-        --JsonRpc.JwtSecretFile=/tmp/jwt/jwtsecret \
-        --JsonRpc.EngineHost=0.0.0.0 \
-        --JsonRpc.EnginePort=8551 \
-        --Network.DiscoveryPort=30304 \
-        --HealthChecks.Enabled=true \
-        --Metrics.Enabled=true \
-        --Metrics.ExposePort=8008 \
-        --Init.GenesisHash=0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc \
-        --Sync.MaxAttemptsToUpdatePivot=0 \
-        --Init.AutoDump=None \
-        --Pruning.PruningBoundary=2000 \
-        --Merge.TerminalTotalDifficulty=0
+    command:
+      - ${NETHERMIND_CONFIG_FLAG}
+      - --datadir=/nethermind/data
+      - --log=INFO
+      - --JsonRpc.Enabled=true
+      - --JsonRpc.Host=0.0.0.0
+      - --JsonRpc.Port=8545
+      - --JsonRpc.JwtSecretFile=/tmp/jwt/jwtsecret
+      - --JsonRpc.EngineHost=0.0.0.0
+      - --JsonRpc.EnginePort=8551
+      - --Network.DiscoveryPort=30304
+      - --HealthChecks.Enabled=true
+      - --Metrics.Enabled=true
+      - --Metrics.ExposePort=8008
+      - --Init.GenesisHash=0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc
+      - --Sync.MaxAttemptsToUpdatePivot=0
+      - --Init.AutoDump=None
+      - --Pruning.PruningBoundary=2000
+      - --Merge.TerminalTotalDifficulty=0
+      - ${NETHERMIND_GENESIS_FLAG:+${NETHERMIND_GENESIS_FLAG}}
     logging:
       driver: json-file
       options:
