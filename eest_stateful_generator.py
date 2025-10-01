@@ -59,7 +59,7 @@ def rpc_call(url, method, params=None, headers=None, timeout=10):
 # ---------------------- new helpers for line-based outputs ----------------------
 
 def _ensure_payloads_dir() -> Path:
-    p = Path("payloads")
+    p = Path("eest_stateful")
     p.mkdir(parents=True, exist_ok=True)
     return p
 

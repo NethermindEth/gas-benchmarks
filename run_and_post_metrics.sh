@@ -23,9 +23,11 @@
 # Default warmup file
 WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 TEST_PATHS_JSON='[{\"path\": \"eest_tests\", \"genesis\":\"zkevmgenesis.json\"}]'  # default test path
-DEBUG_FLAG=""
+DEBUG_ARGS=()
 DEBUG=false
 DEBUG_FILE=""
+NETWORK=""
+SNAPSHOT_ROOT=""
 
 # Timing variables
 declare -A STEP_TIMES
@@ -129,30 +131,27 @@ while [[ $# -gt 0 ]]; do
       ;;
     --debug)
       DEBUG=true
-      if [ -z "$DEBUG_FLAG" ]; then
-        DEBUG_FLAG="-d"
-      else
-        DEBUG_FLAG="$DEBUG_FLAG -d"
-      fi
+      DEBUG_ARGS+=(-d)
       shift
       ;;
     --debug-file)
       DEBUG=true
       DEBUG_FILE="$2"
-      if [ -z "$DEBUG_FLAG" ]; then
-        DEBUG_FLAG="-D \"$2\"_detailed"
-      else
-        DEBUG_FLAG="$DEBUG_FLAG -D \"$2\""
-      fi
+      DEBUG_ARGS+=(-D "$DEBUG_FILE")
       shift 2
       ;;
     --profile-test)
-      if [ -z "$DEBUG_FLAG" ]; then
-        DEBUG_FLAG="-d -p"
-      else
-        DEBUG_FLAG="$DEBUG_FLAG -p"
-      fi
+      DEBUG=true
+      DEBUG_ARGS+=(-p)
       shift
+      ;;
+    --network)
+      NETWORK="$2"
+      shift 2
+      ;;
+    --snapshot-root)
+      SNAPSHOT_ROOT="$2"
+      shift 2
       ;;
     *)
       echo "Unknown argument: $1"
@@ -162,7 +161,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path>]"
   exit 1
 fi
 
@@ -215,8 +214,21 @@ while true; do
   
   start_timer "benchmark_testing"
   # Run the benchmark testing using specified warmup file
-  PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
-    eval "bash run.sh -T \"$TEST_PATHS_JSON\" -w \"$WARMUP_FILE\" -r1 -r1 $DEBUG_FLAG"
+  RUN_CMD=(bash run.sh -T "$TEST_PATHS_JSON" -w "$WARMUP_FILE" -r 1)
+  if [ -n "$NETWORK" ]; then
+    RUN_CMD+=(-n "$NETWORK")
+  fi
+  if [ -n "$SNAPSHOT_ROOT" ]; then
+    RUN_CMD+=(-B "$SNAPSHOT_ROOT")
+  fi
+  if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then
+    RUN_CMD+=("${DEBUG_ARGS[@]}")
+  fi
+
+  PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" \
+  PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" \
+  PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
+    "${RUN_CMD[@]}"
   end_timer "benchmark_testing"
 
   start_timer "populate_postgres_db_background"

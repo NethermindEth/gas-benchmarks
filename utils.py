@@ -200,15 +200,22 @@ def get_test_cases(tests_path):
     pattern = re.compile(r'(?P<base>.+?)_(?P<gas>[0-9]+)M\.txt$')
 
     for root, _, files in os.walk(tests_path):
+        normalized_root = root.replace('\\', '/')
+        if '/testing/' not in normalized_root and not normalized_root.endswith('/testing'):
+            continue
+
         for file in files:
             if not file.endswith('.txt'):
                 continue
+
             m = pattern.match(file)
-            if not m:
-                print(f"[Warning] skipping unexpected file name: {file}")
-                continue
-            test_case_name = m.group('base')
-            gas_value = int(m.group('gas'))  # e.g., "100" from "100M"
+            if m:
+                test_case_name = m.group('base')
+                gas_value = int(m.group('gas'))  # e.g., "100" from "100M"
+            else:
+                test_case_name = os.path.splitext(file)[0]
+                gas_value = 60
+
             test_cases[test_case_name].add(gas_value)
 
     return {tc: sorted(list(gases)) for tc, gases in test_cases.items()}
