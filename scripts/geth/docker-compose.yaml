@@ -9,7 +9,10 @@ services:
       - ${EC_DATA_DIR}:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-    entrypoint: geth init --datadir=/var/lib/goethereum /tmp/genesis/genesis.json
+    entrypoint:
+      - /bin/sh
+      - -c
+      - ${GETH_INIT_COMMAND}
   execution:
     stop_grace_period: 30m
     container_name: gas-execution-client
@@ -45,7 +48,7 @@ services:
       - --datadir=/var/lib/goethereum
       - --port=30303
       - --http.port=8545
-      - --networkid=1337
+      - ${GETH_NETWORK_FLAG}
       - --ws
       - --ws.addr=0.0.0.0
       - --ws.port=8546

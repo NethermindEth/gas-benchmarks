@@ -22,7 +22,7 @@ services:
       - 8545
       - 8551
     command:
-      - --custom-network=/tmp/genesis/genesis.json
+      - ${NIMBUS_NETWORK_FLAG}
       - --data-dir=/var/lib/nimbus/data
       - --metrics=true
       - --metrics-address=0.0.0.0

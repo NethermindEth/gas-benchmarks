@@ -10,7 +10,10 @@ services:
       - ${EC_DATA_DIR}:/var/lib/erigon
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-    entrypoint: erigon init --datadir=/var/lib/erigon /tmp/genesis/genesis.json
+    entrypoint:
+      - /bin/sh
+      - -c
+      - ${ERIGON_INIT_COMMAND}
   execution:
     user: "root:root"
     stop_grace_period: 30m
@@ -32,6 +35,7 @@ services:
       - "8008:8008/tcp"
       - "8551:8551"
     command:
+      - ${ERIGON_CHAIN_FLAG}
       - --externalcl
       - --private.api.addr=0.0.0.0:9090
       - --nat=any

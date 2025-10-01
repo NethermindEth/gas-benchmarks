@@ -562,7 +562,7 @@ for run in $(seq 1 $RUNS); do
     if [ -n "$NETWORK" ]; then
       setup_cmd+=(--network "$NETWORK")
     fi
-    if [ -n "$genesis_path" ]; then
+    if [ -z "$NETWORK" ] && [ -n "$genesis_path" ]; then
       echo "Using custom genesis for $client: $genesis_path"
       setup_cmd+=(--genesisPath "$genesis_path")
     fi

@@ -8,7 +8,10 @@ services:
     volumes:
       - ${EC_DATA_DIR}:/var/lib/reth
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-    entrypoint: /usr/local/bin/reth init --datadir /var/lib/reth --chain /tmp/genesis/genesis.json
+    entrypoint:
+      - /bin/sh
+      - -c
+      - ${RETH_INIT_COMMAND}
   execution:
     stop_grace_period: 30m
     container_name: gas-execution-client
@@ -36,7 +39,7 @@ services:
     command:
       - node
       - --datadir=/var/lib/reth
-      - --chain=/tmp/genesis/genesis.json
+      - ${RETH_CHAIN_ARG}
       - --http
       - --http.addr=0.0.0.0
       - --http.api=web3,eth,net

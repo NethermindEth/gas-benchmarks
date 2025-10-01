@@ -21,7 +21,7 @@ services:
       - 8545
       - 8551
     command:
-      - --network=/tmp/genesis/genesis.json
+      - ${ETHREX_NETWORK_FLAG}
       - --datadir=/var/lib/ethrex/data
       - --metrics.addr=0.0.0.0
       - --metrics.port=8008
