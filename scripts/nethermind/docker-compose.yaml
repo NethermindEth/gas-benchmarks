@@ -27,7 +27,6 @@ services:
     command:
       - ${NETHERMIND_CONFIG_FLAG}
       - --datadir=/nethermind/data
-      - --log=INFO
       - --JsonRpc.Enabled=true
       - --JsonRpc.Host=0.0.0.0
       - --JsonRpc.Port=8545
@@ -43,7 +42,7 @@ services:
       - --Init.AutoDump=None
       - --Pruning.PruningBoundary=2000
       - --Merge.TerminalTotalDifficulty=0
-      - ${NETHERMIND_GENESIS_FLAG:+${NETHERMIND_GENESIS_FLAG}}
+      - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
     logging:
       driver: json-file
       options:
