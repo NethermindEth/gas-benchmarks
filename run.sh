@@ -185,6 +185,12 @@ collect_stateful_directory() {
   printf '%s\0' "${ordered[@]}"
 }
 
+dir_has_content() {
+  local dir="$1"
+  [ -d "$dir" ] || return 1
+  find "$dir" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .
+}
+
 append_tests_for_path() {
   local base_path="$1"
   local genesis="$2"
@@ -226,11 +232,28 @@ prepare_overlay_for_client() {
   local snapshot_root="$3"
 
   local lower=""
-  if [ -n "$network" ] && [ -d "$snapshot_root/$network/$client" ]; then
+
+  if dir_has_content "$snapshot_root"; then
+    if [ ! -d "$snapshot_root/$client" ]; then
+      if [ -z "$network" ] || [ ! -d "$snapshot_root/$network" ]; then
+        lower="$snapshot_root"
+      fi
+    fi
+  fi
+
+  if [ -z "$lower" ] && [ -n "$network" ] && dir_has_content "$snapshot_root/$network/$client"; then
     lower="$snapshot_root/$network/$client"
-  elif [ -d "$snapshot_root/$client" ]; then
+  fi
+
+  if [ -z "$lower" ] && [ -n "$network" ] && dir_has_content "$snapshot_root/$network" && [ ! -d "$snapshot_root/$network/$client" ]; then
+    lower="$snapshot_root/$network"
+  fi
+
+  if [ -z "$lower" ] && dir_has_content "$snapshot_root/$client"; then
     lower="$snapshot_root/$client"
-  else
+  fi
+
+  if [ -z "$lower" ]; then
     echo "❌ Unable to locate snapshot directory for $client under $snapshot_root" >&2
     return 1
   fi
