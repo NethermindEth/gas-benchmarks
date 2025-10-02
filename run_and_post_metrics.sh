@@ -166,6 +166,11 @@ while [[ $# -gt 0 ]]; do
       SNAPSHOT_TEMPLATE="$2"
       shift 2
       ;;
+    --clients)
+      CLIENTS="$2"
+      CLIENTS_LABEL=$(sanitize_label "$CLIENTS")
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1"
       exit 1
