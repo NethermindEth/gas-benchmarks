@@ -1,15 +1,21 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# Prepare nethermind image that we will use on the script
-cd scripts/nethermind
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-cp jwtsecret /tmp/jwtsecret
+cp "$SCRIPT_DIR/jwtsecret" /tmp/jwtsecret
 
-source ../common/wait_for_rpc.sh
+# shellcheck source=/dev/null
+source "$REPO_ROOT/scripts/common/wait_for_rpc.sh"
 
+pushd "$SCRIPT_DIR" >/dev/null
 docker compose up -d
+popd >/dev/null
 
+echo "Invoking wait_for_rpc for Nethermind RPC readiness..."
 wait_for_rpc "http://127.0.0.1:8545" 300
 
+pushd "$SCRIPT_DIR" >/dev/null
 docker compose logs
+popd >/dev/null
