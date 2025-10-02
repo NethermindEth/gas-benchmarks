@@ -27,7 +27,7 @@ services:
     volumes:
       - ${EC_DATA_DIR}:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
-   ports:
+    ports:
       - "8008:8008/tcp"
       - "8551:8551"
     expose:
