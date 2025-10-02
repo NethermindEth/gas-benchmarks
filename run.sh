@@ -445,28 +445,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-# Parse command line arguments
-POSITIONAL_ARGS=()
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --restart-before-testing)
-      RESTART_BEFORE_TESTING=true
-      shift
-      ;;
-    --)
-      shift
-      POSITIONAL_ARGS+=("$@")
-      break
-    *)
-      POSITIONAL_ARGS+=("$1")
-      shift
-      ;;
-  esac
-done
-
-set -- "${POSITIONAL_ARGS[@]}"
-
-while getopts "T:t:g:w:c:r:i:o:f:n:B:" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -482,6 +461,7 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:" opt; do
     p) PROFILE_TEST=true ;;
     n) NETWORK="$OPTARG"; USE_OVERLAY=true ;;
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
+    R) RESTART_BEFORE_TESTING=true;;
     *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root]" >&2
        exit 1 ;;
   esac
