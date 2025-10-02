@@ -16,6 +16,8 @@ wait_for_rpc() {
       "$url" | grep -q '"result"'; then
       echo "RPC at $url is ready (attempt $attempt/$max_attempts)"
       return 0
+    else
+      echo "Waiting for RPC at $url to be ready (attempt $attempt/$max_attempts)..."
     fi
     sleep 2
     attempt=$((attempt + 1))
