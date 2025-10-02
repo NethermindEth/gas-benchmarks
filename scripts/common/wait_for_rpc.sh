@@ -13,10 +13,13 @@ wait_for_rpc() {
   fi
 
   while [ "$attempt" -le "$max_attempts" ]; do
-    response=$(curl -s --max-time 2 -H "Content-Type: application/json" \
+    if response=$(curl -s --max-time 2 -H "Content-Type: application/json" \
       -d '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' \
-      "$url" 2>&1)
-    curl_status=$?
+      "$url" 2>&1); then
+      curl_status=0
+    else
+      curl_status=$?
+    fi
 
     if [ "$curl_status" -eq 0 ] && echo "$response" | grep -q '"result"'; then
       echo "RPC at $url is ready (attempt $attempt/$max_attempts)"
