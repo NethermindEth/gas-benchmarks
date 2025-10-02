@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hmac
 import hashlib
+import itertools
 import json
 import os
 import pathlib
@@ -54,6 +55,35 @@ _MON_THR: Optional[threading.Thread] = None
 # Per-scenario bookkeeping
 _SEEN_SCENARIOS: set[str] = set()
 _TESTING_SEEN_COUNT: Dict[str, int] = {}
+
+# Scenario ordering (stable numbering for later replay)
+_SCENARIO_COUNTER = itertools.count(1)
+_SCENARIO_ORDER: Dict[Tuple[str, str, str], int] = {}
+_SCENARIO_NAMES: Dict[Tuple[str, str, str], str] = {}
+
+_SCENARIO_ORDER_FILE_RAW = _CFG.get("scenario_order_file")
+if _SCENARIO_ORDER_FILE_RAW:
+    _SCENARIO_ORDER_FILE = pathlib.Path(_SCENARIO_ORDER_FILE_RAW).expanduser()
+    if not _SCENARIO_ORDER_FILE.is_absolute():
+        _SCENARIO_ORDER_FILE = _PAYLOADS_DIR / _SCENARIO_ORDER_FILE
+    _SCENARIO_ORDER_FILE = _SCENARIO_ORDER_FILE.resolve()
+else:
+    _SCENARIO_ORDER_FILE = None
+
+
+def _write_scenario_order() -> None:
+    if _SCENARIO_ORDER_FILE is None:
+        return
+    try:
+        ordered = sorted(
+            ((idx, _SCENARIO_NAMES[key]) for key, idx in _SCENARIO_ORDER.items()),
+            key=lambda item: item[0],
+        )
+        names = [name for _, name in ordered]
+        _SCENARIO_ORDER_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _SCENARIO_ORDER_FILE.write_text(json.dumps(names, indent=2), encoding="utf-8")
+    except Exception as e:
+        _log(f"scenario order write failed: {e}")
 
 # --- Test lifecycle + global no-phase bookkeeping ---
 _TESTS_STARTED: bool = False  # flipped True on first phased test sendraw (setup/testing/cleanup)
@@ -213,7 +243,21 @@ def _scenario_name(file_base: str, test_name: str) -> str:
         tn = re.sub(r"-benchmark-gas-value_[^-]+", "-benchmark", tn, count=1)
         suffix = f"_{value}" if value else ""
 
-    return f"{fb}__{tn}{suffix}"
+    key = (fb, tn, suffix)
+    if key not in _SCENARIO_ORDER:
+        _SCENARIO_ORDER[key] = next(_SCENARIO_COUNTER)
+        idx = _SCENARIO_ORDER[key]
+        scenario = f"{idx:03d}__{fb}__{tn}{suffix}"
+        _SCENARIO_NAMES[key] = scenario
+        _write_scenario_order()
+        return scenario
+
+    idx = _SCENARIO_ORDER[key]
+    scenario = _SCENARIO_NAMES.get(key)
+    if scenario is None:
+        scenario = f"{idx:03d}__{fb}__{tn}{suffix}"
+        _SCENARIO_NAMES[key] = scenario
+    return scenario
 
 
 def _collect_hashes_from_node(node: Any) -> List[str]:

@@ -304,6 +304,16 @@ def main():
     ensure_pip_pkg("requests")
 
     payloads_dir = _ensure_payloads_dir(Path(args.payload_dir))
+    scenario_order_file = payloads_dir / "scenario_order.json"
+    if scenario_order_file.exists():
+        scenario_order_file.unlink()
+    scenario_order_file.write_text("[]", encoding="utf-8")
+
+    for subdir in ("setup", "testing", "cleanup"):
+        sub_path = payloads_dir / subdir
+        if sub_path.exists():
+            shutil.rmtree(sub_path)
+
 
     repo_dir = Path("execution-spec-tests")
     if not repo_dir.exists():
@@ -411,6 +421,7 @@ def main():
         "jwt_hex_path": str(jwt_path),
         "finalized_block": finalized_hash,
         "payload_dir": str(payloads_dir),
+        "scenario_order_file": str(scenario_order_file),
     }
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
