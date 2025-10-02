@@ -33,7 +33,7 @@ services:
       - --JsonRpc.EnginePort=8551
       - --Network.DiscoveryPort=0
       - --Network.MaxActivePeers=0
-      - --Discovery.Enabled=false
+      - --Init.DiscoveryEnabled=false
       - --HealthChecks.Enabled=true
       - --Metrics.Enabled=true
       - --Metrics.ExposePort=8008
