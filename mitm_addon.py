@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import threading
 import time
@@ -204,7 +205,15 @@ def _derive_group_from_meta(meta: Optional[Dict[str, Any]]) -> Tuple[str, str, s
 def _scenario_name(file_base: str, test_name: str) -> str:
     fb = _sanitize_filename_component(file_base)
     tn = _sanitize_filename_component(test_name)
-    return f"{fb}__{tn}"
+
+    suffix = ""
+    match = re.search(r"-benchmark-gas-value_([^-]+)", tn)
+    if match:
+        value = _sanitize_filename_component(match.group(1))
+        tn = re.sub(r"-benchmark-gas-value_[^-]+", "-benchmark", tn, count=1)
+        suffix = f"_{value}" if value else ""
+
+    return f"{fb}__{tn}{suffix}"
 
 
 def _collect_hashes_from_node(node: Any) -> List[str]:
