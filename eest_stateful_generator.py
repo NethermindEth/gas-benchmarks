@@ -293,6 +293,11 @@ def main():
         default="eest_stateful",
         help="Directory where generated stateful payloads are written.",
     )
+    parser.add_argument(
+        "--gas-benchmark-values",
+        default="30,60,90,120,150",
+        help="Comma-separated gas benchmark values to pass to execute remote.",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
@@ -427,7 +432,7 @@ def main():
             f"--rpc-seed-key={args.rpc_seed_key}",
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
-            "--gas-benchmark-values=30,60,90,120,150",
+            f"--gas-benchmark-values={args.gas_benchmark_values}",
             args.test_path,
             "--",
             "-m", "benchmark", "-n", "1",
