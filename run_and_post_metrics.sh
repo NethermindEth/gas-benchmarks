@@ -10,6 +10,10 @@
 #   --prometheus-endpoint   The Prometheus endpoint URL.
 #   --prometheus-username   The Prometheus basic auth username.
 #   --prometheus-password   The Prometheus basic auth password.
+#   --network      Network name forwarded to run.sh (e.g. mainnet)
+#   --snapshot-root Base directory for overlay snapshots (can include placeholders)
+#   --snapshot-template Optional template appended to snapshot root (supports <<CLIENT>> / <<NETWORK>>)
+#   --clients      Comma-separated client list forwarded to run.sh
 #   --debug        Enable debug mode with detailed timing
 #   --debug-file   Enable debug mode and save output to specified file
 #   --profile-test Enable test-specific profiling (shows individual test timings)
@@ -27,7 +31,11 @@ DEBUG_ARGS=()
 DEBUG=false
 DEBUG_FILE=""
 NETWORK=""
+NETWORK_LABEL="all"
 SNAPSHOT_ROOT=""
+SNAPSHOT_TEMPLATE=""
+CLIENTS=""
+CLIENTS_LABEL="all"
 
 # Timing variables
 declare -A STEP_TIMES
@@ -147,10 +155,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --network)
       NETWORK="$2"
+      NETWORK_LABEL=$(sanitize_label "$NETWORK")
       shift 2
       ;;
     --snapshot-root)
       SNAPSHOT_ROOT="$2"
+      shift 2
+      ;;
+    --snapshot-template)
+      SNAPSHOT_TEMPLATE="$2"
       shift 2
       ;;
     *)
@@ -161,7 +174,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list>]"
   exit 1
 fi
 
@@ -218,9 +231,23 @@ while true; do
   if [ -n "$NETWORK" ]; then
     RUN_CMD+=(-n "$NETWORK")
   fi
-  if [ -n "$SNAPSHOT_ROOT" ]; then
-    RUN_CMD+=(-B "$SNAPSHOT_ROOT")
+
+  snapshot_arg="$SNAPSHOT_ROOT"
+  if [ -n "$SNAPSHOT_TEMPLATE" ]; then
+    if [ -n "$snapshot_arg" ]; then
+      snapshot_arg="${snapshot_arg%/}/$SNAPSHOT_TEMPLATE"
+    else
+      snapshot_arg="$SNAPSHOT_TEMPLATE"
+    fi
   fi
+  if [ -n "$snapshot_arg" ]; then
+    RUN_CMD+=(-B "$snapshot_arg")
+  fi
+
+  if [ -n "$CLIENTS" ]; then
+    RUN_CMD+=(-c "$CLIENTS")
+  fi
+
   if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then
     RUN_CMD+=("${DEBUG_ARGS[@]}")
   fi
@@ -234,14 +261,16 @@ while true; do
   start_timer "populate_postgres_db_background"
   # Create unique backup directory with timestamp
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-  BACKUP_DIR="reports_backup_$TIMESTAMP"
-  
-  # Clean up old backup directories (keep only 2 newest)
-  if ls reports_backup_* 1> /dev/null 2>&1; then
+  BACKUP_PREFIX="reports_backup_${CLIENTS_LABEL}_${NETWORK_LABEL}"
+  BACKUP_DIR="${BACKUP_PREFIX}_${TIMESTAMP}"
+
+  # Clean up old backup directories (keep only 2 newest per client/network)
+  shopt -s nullglob
+  backup_candidates=("${BACKUP_PREFIX}"_*)
+  shopt -u nullglob
+  if [ ${#backup_candidates[@]} -gt 0 ]; then
     debug_log "Cleaning up old backup directories..."
-    # Get all backup directories sorted by modification time (newest first)
-    # Keep only the 2 newest, remove the rest
-    ls -dt reports_backup_* | tail -n +3 | xargs -r rm -rf
+    ls -dt "${backup_candidates[@]}" | tail -n +3 | xargs -r rm -rf
     debug_log "Cleanup completed"
   fi
   

@@ -192,6 +192,30 @@ dir_has_content() {
   find "$dir" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .
 }
 
+resolve_snapshot_root_for_client() {
+  local client="$1"
+  local network="$2"
+  local root_template="$SNAPSHOT_ROOT"
+
+  if [[ -z "$root_template" ]]; then
+    echo ""
+    return
+  fi
+
+  local client_lower="${client,,}"
+  local network_lower="${network,,}"
+
+  root_template="${root_template//<<CLIENT>>/$client}"
+  root_template="${root_template//<<client>>/$client_lower}"
+  root_template="${root_template//<<Client>>/$client}"
+
+  root_template="${root_template//<<NETWORK>>/$network}"
+  root_template="${root_template//<<network>>/$network_lower}"
+  root_template="${root_template//<<Network>>/$network}"
+
+  echo "$root_template"
+}
+
 is_measured_file() {
   local file_path="$1"
   local normalized="${file_path//\\/\/}"
@@ -541,12 +565,13 @@ for run in $(seq 1 $RUNS); do
 
     data_dir=""
     if [ "$USE_OVERLAY" = true ]; then
-      if [ ! -d "$SNAPSHOT_ROOT" ]; then
-        echo "❌ Snapshot root '$SNAPSHOT_ROOT' not found" >&2
+      snapshot_root_for_client=$(resolve_snapshot_root_for_client "$client_base" "$NETWORK")
+      if [ -z "$snapshot_root_for_client" ]; then
+        echo "❌ Snapshot root not specified for $client" >&2
         cleanup_overlay_for_client "$client_base"
         continue
       fi
-      data_dir=$(prepare_overlay_for_client "$client_base" "$NETWORK" "$SNAPSHOT_ROOT") || {
+      data_dir=$(prepare_overlay_for_client "$client_base" "$NETWORK" "$snapshot_root_for_client") || {
         echo "❌ Skipping $client - overlay setup failed" >&2
         cleanup_overlay_for_client "$client_base"
         continue
