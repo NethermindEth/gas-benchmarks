@@ -10,6 +10,6 @@ source ../common/wait_for_rpc.sh
 
 docker compose up -d
 
-wait_for_rpc "http://127.0.0.1:8545"
+wait_for_rpc "http://127.0.0.1:8545" 300
 
 docker compose logs
