@@ -27,9 +27,7 @@ services:
     volumes:
       - ${EC_DATA_DIR}:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
-    ports:
-      - "30303:30303/tcp"
-      - "30303:30303/udp"
+   ports:
       - "8008:8008/tcp"
       - "8551:8551"
     expose:
@@ -46,9 +44,12 @@ services:
       - --http.api
       - web3,eth,net
       - --datadir=/var/lib/goethereum
-      - --port=30303
+      - --port=0
       - --http.port=8545
       - ${GETH_NETWORK_FLAG}
+      - --maxpeers=0
+      - --nodiscover
+      - --bootnodes=
       - --ws
       - --ws.addr=0.0.0.0
       - --ws.port=8546
@@ -79,3 +80,4 @@ services:
 networks:
   gas:
     name: gas-network
+    internal: true

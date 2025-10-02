@@ -13,8 +13,6 @@ services:
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     user: root
     ports:
-      - 30303:30303/tcp
-      - 30303:30303/udp
       - 8008:8008/tcp
       - 8545:8545
       - 8551:8551
@@ -29,6 +27,8 @@ services:
       - --metrics-port=8008
       - --engine-api=true
       - --max-peers=0
+      - --max-outbound-peers=0
+      - --no-discovery
       - --jwt-secret=/tmp/jwt/jwtsecret
       - --engine-api-port=8551
       - --engine-api-address=0.0.0.0
@@ -44,3 +44,4 @@ services:
 networks:
   gas:
     name: gas-network
+    internal: true

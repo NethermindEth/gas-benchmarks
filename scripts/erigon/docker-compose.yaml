@@ -30,8 +30,6 @@ services:
       - ${EC_DATA_DIR}:/var/lib/erigon
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
-      - "30303:30303/tcp"
-      - "30303:30303/udp"
       - "8008:8008/tcp"
       - "8551:8551"
     command:
@@ -39,6 +37,7 @@ services:
       - --externalcl
       - --private.api.addr=0.0.0.0:9090
       - --nat=any
+      - --p2p.disable
       - --http
       - --http.addr=0.0.0.0
       - --http.port=8545
@@ -77,3 +76,4 @@ services:
 networks:
   gas:
     name: gas-network
+    internal: true

@@ -12,8 +12,6 @@ services:
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     user: root
     ports:
-      - 30303:30303/tcp
-      - 30303:30303/udp
       - 8008:8008/tcp
       - 8545:8545
       - 8551:8551
@@ -29,6 +27,7 @@ services:
       - --http.addr=0.0.0.0
       - --http.port=8545
       - --authrpc.addr=0.0.0.0
+      - --p2p.disable
     logging:
       driver: json-file
       options:
@@ -37,3 +36,4 @@ services:
 networks:
   gas:
     name: gas-network
+    internal: true

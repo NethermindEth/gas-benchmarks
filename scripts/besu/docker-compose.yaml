@@ -13,8 +13,6 @@ services:
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
     user: root
     ports:
-      - 30303:30303/tcp
-      - 30303:30303/udp
       - 8008:8008/tcp
       - 8545:8545
       - 8551:8551
@@ -40,6 +38,8 @@ services:
       - --rpc-http-api=${EC_ENABLED_MODULES}
       - --rpc-http-cors-origins=*
       - --host-allowlist=*
+      - --p2p-enabled=false
+      - --max-peers=0
     logging:
       driver: json-file
       options:
@@ -59,3 +59,4 @@ services:
 networks:
   gas:
     name: gas-network
+    internal: true
