@@ -154,6 +154,32 @@ collect_stateful_directory() {
   local -A seen=()
   local file
   local phase
+  local order_file="$dir/scenario_order.json"
+  local -a scenario_names=()
+
+  if [ -f "$order_file" ]; then
+    while IFS= read -r name; do
+      if [ -n "$name" ]; then
+        scenario_names+=("$name")
+      fi
+    done < <(python3 - <<'PY' "$order_file"
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    data = []
+
+if isinstance(data, list):
+    for item in data:
+        if isinstance(item, str) and item.strip():
+            print(item.strip())
+PY
+)
+  fi
 
   for file in "$dir/gas-bump.txt" "$dir/funding.txt" "$dir/setup-global-test.txt"; do
     if [ -f "$file" ] && [ -z "${seen[$file]}" ]; then
@@ -161,6 +187,18 @@ collect_stateful_directory() {
       seen["$file"]=1
     fi
   done
+
+  if [ "${#scenario_names[@]}" -gt 0 ]; then
+    for scenario in "${scenario_names[@]}"; do
+      for phase in setup testing cleanup; do
+        local scenario_path="$dir/$phase/$scenario.txt"
+        if [ -f "$scenario_path" ] && [ -z "${seen[$scenario_path]}" ]; then
+          ordered+=("$scenario_path")
+          seen["$scenario_path"]=1
+        fi
+      done
+    done
+  fi
 
   for phase in setup testing cleanup; do
     local phase_dir="$dir/$phase"
