@@ -36,6 +36,7 @@ SNAPSHOT_ROOT=""
 SNAPSHOT_TEMPLATE=""
 CLIENTS=""
 CLIENTS_LABEL="all"
+RESTART_BEFORE_TESTING=false
 
 # Timing variables
 declare -A STEP_TIMES
@@ -171,6 +172,10 @@ while [[ $# -gt 0 ]]; do
       CLIENTS_LABEL=$(sanitize_label "$CLIENTS")
       shift 2
       ;;
+    --restart-before-testing)
+      RESTART_BEFORE_TESTING=true
+      shift
+      ;;
     *)
       echo "Unknown argument: $1"
       exit 1
@@ -179,7 +184,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restart-before-testing]"
   exit 1
 fi
 
@@ -251,6 +256,10 @@ while true; do
 
   if [ -n "$CLIENTS" ]; then
     RUN_CMD+=(-c "$CLIENTS")
+  fi
+
+  if [ "$RESTART_BEFORE_TESTING" = true ]; then
+    RUN_CMD+=(--restart-before-testing)
   fi
 
   if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then

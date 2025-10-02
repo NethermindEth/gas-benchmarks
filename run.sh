@@ -20,6 +20,12 @@ SNAPSHOT_ROOT="snapshots"
 OVERLAY_TMP_ROOT="overlay-runtime"
 USE_OVERLAY=false
 PREPARATION_RESULTS_DIR="prepresults"
+RESTART_BEFORE_TESTING=false
+
+if [ -f "scripts/common/wait_for_rpc.sh" ]; then
+  # shellcheck source=/dev/null
+  source "scripts/common/wait_for_rpc.sh"
+fi
 
 # Timing variables
 declare -A STEP_TIMES
@@ -216,6 +222,40 @@ resolve_snapshot_root_for_client() {
   echo "$root_template"
 }
 
+restart_client_containers() {
+  local client_base="$1"
+  local compose_dir="scripts/$client_base"
+  local compose_file="$compose_dir/docker-compose.yaml"
+  local env_file="$compose_dir/.env"
+
+  if [ ! -f "$compose_file" ]; then
+    echo "⚠️  Compose file not found for $client_base" >&2
+    return 1
+  fi
+
+  if [ -f "$env_file" ]; then
+    if ! docker compose -f "$compose_file" --env-file "$env_file" restart >/dev/null 2>&1; then
+      if ! docker compose -f "$compose_file" --env-file "$env_file" restart; then
+        echo "❌ Failed to restart services for $client_base" >&2
+        return 1
+      fi
+    fi
+  else
+    if ! (
+      cd "$compose_dir" && docker compose restart
+    ); then
+      echo "❌ Failed to restart services for $client_base" >&2
+      return 1
+    fi
+  fi
+
+  if declare -f wait_for_rpc >/dev/null 2>&1; then
+    wait_for_rpc "http://127.0.0.1:8545" 300
+  else
+    sleep 5
+  fi
+}
+
 is_measured_file() {
   local file_path="$1"
   local normalized="${file_path//\\/\/}"
@@ -406,6 +446,26 @@ update_execution_time() {
 }
 
 # Parse command line arguments
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --restart-before-testing)
+      RESTART_BEFORE_TESTING=true
+      shift
+      ;;
+    --)
+      shift
+      POSITIONAL_ARGS+=("$@")
+      break
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+set -- "${POSITIONAL_ARGS[@]}"
+
 while getopts "T:t:g:w:c:r:i:o:f:n:B:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
@@ -642,6 +702,13 @@ for run in $(seq 1 $RUNS); do
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
         echo ""
         continue
+      fi
+
+      if [ "$RESTART_BEFORE_TESTING" = true ]; then
+        if ! restart_client_containers "$client_base"; then
+          echo "⚠️  Skipping $filename for $client - restart failed" >&2
+          continue
+        fi
       fi
 
       base_prefix="${filename%-gas-value_*}"
