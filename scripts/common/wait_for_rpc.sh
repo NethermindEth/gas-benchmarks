@@ -2,7 +2,7 @@
 
 wait_for_rpc() {
   local url="${1:-http://localhost:8545}"
-  local max_attempts="${2:-60}"
+  local max_attempts="${2:-600}"
   local attempt=1
 
   if ! command -v curl >/dev/null 2>&1; then
