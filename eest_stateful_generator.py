@@ -58,10 +58,10 @@ def rpc_call(url, method, params=None, headers=None, timeout=10):
 
 # ---------------------- new helpers for line-based outputs ----------------------
 
-def _ensure_payloads_dir() -> Path:
-    p = Path("eest_stateful")
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+def _ensure_payloads_dir(base_path: Path) -> Path:
+    base = base_path.expanduser()
+    base.mkdir(parents=True, exist_ok=True)
+    return base.resolve()
 
 def _minified_json_line(obj: dict) -> str:
     return json.dumps(obj, separators=(",", ":"))
@@ -288,10 +288,17 @@ def main():
     parser.add_argument("--no-snapshot", action="store_true")
     parser.add_argument("--refresh-snapshot", action="store_true")
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument(
+        "--payload-dir",
+        default="eest_stateful",
+        help="Directory where generated stateful payloads are written.",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
     ensure_pip_pkg("requests")
+
+    payloads_dir = _ensure_payloads_dir(Path(args.payload_dir))
 
     repo_dir = Path("execution-spec-tests")
     if not repo_dir.exists():
@@ -373,7 +380,6 @@ def main():
     ensure_pip_pkg("mitmproxy")
 
     # -------- prepare combined line-based output files (truncate each run) --------
-    payloads_dir = _ensure_payloads_dir()
     gas_bump_file = payloads_dir / "gas-bump.txt"
     funding_file  = payloads_dir / "funding.txt"
     _truncate_file(gas_bump_file)
@@ -399,6 +405,7 @@ def main():
         "engine_url": "http://127.0.0.1:8551",
         "jwt_hex_path": str(jwt_path),
         "finalized_block": finalized_hash,
+        "payload_dir": str(payloads_dir),
     }
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
@@ -420,6 +427,7 @@ def main():
             f"--rpc-seed-key={args.rpc_seed_key}",
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
+            "--gas-benchmark-values=30,60,90,120,150",
             args.test_path,
             "--",
             "-m", "benchmark", "-n", "1",

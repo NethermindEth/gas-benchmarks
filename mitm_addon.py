@@ -58,7 +58,10 @@ _TESTING_SEEN_COUNT: Dict[str, int] = {}
 _TESTS_STARTED: bool = False  # flipped True on first phased test sendraw (setup/testing/cleanup)
 
 # Base paths
-_PAYLOADS_DIR = pathlib.Path("eest_stateful")
+# Allow overriding payload directory via config (defaults to repo-relative path)
+_PAYLOADS_DIR = pathlib.Path(_CFG.get("payload_dir", "eest_stateful")).expanduser()
+if not _PAYLOADS_DIR.is_absolute():
+    _PAYLOADS_DIR = _PAYLOADS_DIR.resolve()
 _SETUP_DIR = _PAYLOADS_DIR / "setup"
 _TESTING_DIR = _PAYLOADS_DIR / "testing"
 _CLEANUP_DIR = _PAYLOADS_DIR / "cleanup"
