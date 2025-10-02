@@ -128,7 +128,8 @@ def ensure_jwt(jwt_dir: Path) -> Path:
     return jwt
 
 def start_nethermind_container(chain: str, db_dir: Path, jwt_path: Path,
-                               rpc_port=8545, engine_port=8551, name="eest-nethermind") -> str:
+                               rpc_port=8545, engine_port=8551, name="eest-nethermind",
+                               image: str = "nethermindeth/nethermind:gp-hacked") -> str:
     cmd = [
         "docker", "run", "-d",
         "--name", name,
@@ -136,7 +137,7 @@ def start_nethermind_container(chain: str, db_dir: Path, jwt_path: Path,
         "-p", f"{engine_port}:{engine_port}",
         "-v", f"{str(db_dir.resolve())}:/db",
         "-v", f"{str(jwt_path.parent.resolve())}:/jwt:ro",
-        "nethermindeth/nethermind:gp-hacked",
+        image,
         "--config", str(chain),
         "--JsonRpc.Enabled", "true",
         "--JsonRpc.Host", "0.0.0.0",
@@ -298,6 +299,11 @@ def main():
         default="30,60,90,120,150",
         help="Comma-separated gas benchmark values to pass to execute remote.",
     )
+    parser.add_argument(
+        "--nethermind-image",
+        default="nethermindeth/nethermind:gp-hacked",
+        help="Docker image to use when launching the Nethermind container.",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
@@ -356,6 +362,7 @@ def main():
         rpc_port=8545,
         engine_port=8551,
         name=container_name,
+        image=args.nethermind_image,
     )
 
     if not wait_for_port("127.0.0.1", 8545, timeout=180):
