@@ -36,7 +36,6 @@ services:
       - 8546
       - 8551
     command:
-      - --syncmode=full
       - --nat=none
       - --http
       - --http.addr=0.0.0.0
@@ -61,6 +60,7 @@ services:
       - --authrpc.vhosts=*
       - --metrics
       - --metrics.port=8008
+      - --verbosity=5
     logging:
       driver: json-file
       options:
