@@ -1,18 +1,18 @@
 services:
-  execution-sync:
-    container_name: gas-execution-client-sync
-    image: ${EC_IMAGE_VERSION}
-    pull_policy: always
-    networks:
-      - gas
-    volumes:
-      - ${EC_DATA_DIR}:/var/lib/goethereum
-      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
-      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-    entrypoint:
-      - /bin/sh
-      - -c
-      - ${GETH_INIT_COMMAND}
+  #execution-sync:
+  #  container_name: gas-execution-client-sync
+  #  image: ${EC_IMAGE_VERSION}
+  #  pull_policy: always
+  #  networks:
+  #    - gas
+  #  volumes:
+  #    - ${EC_DATA_DIR}:/var/lib/goethereum
+  #    - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+  #    - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+  #  entrypoint:
+  #    - /bin/sh
+  #    - -c
+  #    - ${GETH_INIT_COMMAND}
   execution:
     stop_grace_period: 30m
     container_name: gas-execution-client
