@@ -155,11 +155,13 @@ collect_stateful_directory() {
   local file
   local phase
   local order_file="$dir/scenario_order.json"
+  local -a scenario_indices=()
   local -a scenario_names=()
 
   if [ -f "$order_file" ]; then
-    while IFS= read -r name; do
+    while IFS=$'\t' read -r idx name; do
       if [ -n "$name" ]; then
+        scenario_indices+=("$idx")
         scenario_names+=("$name")
       fi
     done < <(python3 - <<'PY' "$order_file"
@@ -171,12 +173,28 @@ path = Path(sys.argv[1])
 try:
     data = json.loads(path.read_text(encoding="utf-8"))
 except Exception:
-    data = []
+    sys.exit(0)
 
 if isinstance(data, list):
     for item in data:
-        if isinstance(item, str) and item.strip():
-            print(item.strip())
+        idx = None
+        name = None
+        if isinstance(item, dict):
+            name = item.get("name")
+            idx = item.get("index")
+        elif isinstance(item, str):
+            name = item
+        if not name:
+            continue
+        name = str(name).strip()
+        if not name:
+            continue
+        if isinstance(idx, int):
+            print(f"{idx}\t{name}")
+        elif isinstance(idx, str) and idx.strip():
+            print(f"{idx.strip()}\t{name}")
+        else:
+            print(f"\t{name}")
 PY
 )
   fi
@@ -189,9 +207,19 @@ PY
   done
 
   if [ "${#scenario_names[@]}" -gt 0 ]; then
-    for scenario in "${scenario_names[@]}"; do
+    local scenario_count="${#scenario_names[@]}"
+    local si
+    for (( si=0; si<scenario_count; si++ )); do
+      local scenario="${scenario_names[$si]}"
+      local idx="${scenario_indices[$si]}"
+      idx="${idx//[[:space:]]/}"
       for phase in setup testing cleanup; do
-        local scenario_path="$dir/$phase/$scenario.txt"
+        local scenario_path
+        if [ -n "$idx" ]; then
+          scenario_path="$dir/$phase/$idx/$scenario.txt"
+        else
+          scenario_path="$dir/$phase/$scenario.txt"
+        fi
         if [ -f "$scenario_path" ] && [ -z "${seen[$scenario_path]}" ]; then
           ordered+=("$scenario_path")
           seen["$scenario_path"]=1

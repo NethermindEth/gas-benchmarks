@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import hmac
 import hashlib
-import itertools
 import json
 import os
 import pathlib
@@ -11,7 +10,7 @@ import re
 import shutil
 import threading
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from mitmproxy import http
@@ -57,33 +56,29 @@ _SEEN_SCENARIOS: set[str] = set()
 _TESTING_SEEN_COUNT: Dict[str, int] = {}
 
 # Scenario ordering (stable numbering for later replay)
-_SCENARIO_COUNTER = itertools.count(1)
-_SCENARIO_ORDER: Dict[Tuple[str, str, str], int] = {}
-_SCENARIO_NAMES: Dict[Tuple[str, str, str], str] = {}
-
-_SCENARIO_ORDER_FILE_RAW = _CFG.get("scenario_order_file")
-if _SCENARIO_ORDER_FILE_RAW:
-    _SCENARIO_ORDER_FILE = pathlib.Path(_SCENARIO_ORDER_FILE_RAW).expanduser()
-    if not _SCENARIO_ORDER_FILE.is_absolute():
-        _SCENARIO_ORDER_FILE = _PAYLOADS_DIR / _SCENARIO_ORDER_FILE
-    _SCENARIO_ORDER_FILE = _SCENARIO_ORDER_FILE.resolve()
-else:
-    _SCENARIO_ORDER_FILE = None
-
+_SCENARIO_INDEX: Dict[str, int] = {}
+_SCENARIO_SEQUENCE: List[Dict[str, Any]] = []
 
 def _write_scenario_order() -> None:
     if _SCENARIO_ORDER_FILE is None:
         return
     try:
-        ordered = sorted(
-            ((idx, _SCENARIO_NAMES[key]) for key, idx in _SCENARIO_ORDER.items()),
-            key=lambda item: item[0],
-        )
-        names = [name for _, name in ordered]
         _SCENARIO_ORDER_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _SCENARIO_ORDER_FILE.write_text(json.dumps(names, indent=2), encoding="utf-8")
+        _SCENARIO_ORDER_FILE.write_text(json.dumps(_SCENARIO_SEQUENCE, indent=2), encoding="utf-8")
     except Exception as e:
         _log(f"scenario order write failed: {e}")
+
+
+def _register_scenario(name: str) -> int:
+    idx = _SCENARIO_INDEX.get(name)
+    if idx is not None:
+        return idx
+    idx = len(_SCENARIO_INDEX) + 1
+    _SCENARIO_INDEX[name] = idx
+    _SCENARIO_SEQUENCE.append({"index": idx, "name": name})
+    _write_scenario_order()
+    return idx
+
 
 # --- Test lifecycle + global no-phase bookkeeping ---
 _TESTS_STARTED: bool = False  # flipped True on first phased test sendraw (setup/testing/cleanup)
@@ -96,6 +91,33 @@ if not _PAYLOADS_DIR.is_absolute():
 _SETUP_DIR = _PAYLOADS_DIR / "setup"
 _TESTING_DIR = _PAYLOADS_DIR / "testing"
 _CLEANUP_DIR = _PAYLOADS_DIR / "cleanup"
+
+_PHASE_BASE_DIRS: Dict[str, pathlib.Path] = {
+    "setup": _SETUP_DIR,
+    "testing": _TESTING_DIR,
+    "cleanup": _CLEANUP_DIR,
+}
+
+
+def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
+    base = _PHASE_BASE_DIRS.get(phase.lower())
+    if base is None:
+        raise ValueError(f"unknown phase '{phase}'")
+    idx = _register_scenario(scenario)
+    scenario_dir = base / str(idx)
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+    return scenario_dir / f"{scenario}.txt"
+
+
+_SCENARIO_ORDER_FILE_RAW = _CFG.get("scenario_order_file")
+if _SCENARIO_ORDER_FILE_RAW:
+    _SCENARIO_ORDER_FILE = pathlib.Path(_SCENARIO_ORDER_FILE_RAW).expanduser()
+    if not _SCENARIO_ORDER_FILE.is_absolute():
+        _SCENARIO_ORDER_FILE = (_PAYLOADS_DIR / _SCENARIO_ORDER_FILE).resolve()
+    else:
+        _SCENARIO_ORDER_FILE = _SCENARIO_ORDER_FILE.resolve()
+else:
+    _SCENARIO_ORDER_FILE = (_PAYLOADS_DIR / "scenario_order.json").resolve()
 
 # Legacy/unknown helpers
 _GLOBAL_SETUP_FILE = _PAYLOADS_DIR / "global-setup.txt"   # only used for one-time migration on load
@@ -243,20 +265,8 @@ def _scenario_name(file_base: str, test_name: str) -> str:
         tn = re.sub(r"-benchmark-gas-value_[^-]+", "-benchmark", tn, count=1)
         suffix = f"_{value}" if value else ""
 
-    key = (fb, tn, suffix)
-    if key not in _SCENARIO_ORDER:
-        _SCENARIO_ORDER[key] = next(_SCENARIO_COUNTER)
-        idx = _SCENARIO_ORDER[key]
-        scenario = f"{idx:03d}__{fb}__{tn}{suffix}"
-        _SCENARIO_NAMES[key] = scenario
-        _write_scenario_order()
-        return scenario
-
-    idx = _SCENARIO_ORDER[key]
-    scenario = _SCENARIO_NAMES.get(key)
-    if scenario is None:
-        scenario = f"{idx:03d}__{fb}__{tn}{suffix}"
-        _SCENARIO_NAMES[key] = scenario
+    scenario = f"{fb}__{tn}{suffix}"
+    _register_scenario(scenario)
     return scenario
 
 
@@ -356,14 +366,14 @@ def _truncate(path: pathlib.Path) -> None:
 def _truncate_if_first_seen(scenario: str) -> None:
     if scenario in _SEEN_SCENARIOS:
         return
+    idx = _register_scenario(scenario)
     _SEEN_SCENARIOS.add(scenario)
-    for base in (_SETUP_DIR, _TESTING_DIR, _CLEANUP_DIR):
-        p = base / f"{scenario}.txt"
-        p.parent.mkdir(parents=True, exist_ok=True)
+    for phase in ("setup", "testing", "cleanup"):
+        p = _scenario_file_path(phase, scenario)
         with p.open("w", encoding="utf-8"):
             pass
     _TESTING_SEEN_COUNT[scenario] = 0
-    _log(f"initialized scenario files for {scenario}")
+    _log(f"initialized scenario index {idx} for {scenario}")
 
 
 def _dump_pair_to_phase(phase: str, scenario: str, np_body: Dict[str, Any], fcu_body: Dict[str, Any]) -> None:
@@ -371,21 +381,23 @@ def _dump_pair_to_phase(phase: str, scenario: str, np_body: Dict[str, Any], fcu_
     fcu_line = _minified_json_line(fcu_body)
 
     if phase == "setup":
-        _append_line(_SETUP_DIR / f"{scenario}.txt", np_line)
-        _append_line(_SETUP_DIR / f"{scenario}.txt", fcu_line)
-        _log(f"setup append → {_SETUP_DIR / (scenario + '.txt')}")
+        setup_path = _scenario_file_path("setup", scenario)
+        _append_line(setup_path, np_line)
+        _append_line(setup_path, fcu_line)
+        _log(f"setup append → {setup_path}")
         return
 
     if phase == "cleanup":
-        _append_line(_CLEANUP_DIR / f"{scenario}.txt", np_line)
-        _append_line(_CLEANUP_DIR / f"{scenario}.txt", fcu_line)
-        _log(f"cleanup append → {_CLEANUP_DIR / (scenario + '.txt')}")
+        cleanup_path = _scenario_file_path("cleanup", scenario)
+        _append_line(cleanup_path, np_line)
+        _append_line(cleanup_path, fcu_line)
+        _log(f"cleanup append → {cleanup_path}")
         return
 
     # testing
     count = _TESTING_SEEN_COUNT.get(scenario, 0)
-    testing_path = _TESTING_DIR / f"{scenario}.txt"
-    setup_path = _SETUP_DIR / f"{scenario}.txt"
+    testing_path = _scenario_file_path("testing", scenario)
+    setup_path = _scenario_file_path("setup", scenario)
 
     if count == 0:
         _overwrite_with_lines(testing_path, [np_line, fcu_line])
