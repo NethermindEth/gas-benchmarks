@@ -42,6 +42,7 @@ services:
       - --Init.AutoDump=None
       - --Pruning.PruningBoundary=2000
       - --Merge.TerminalTotalDifficulty=0
+      - --Init.LogRules=Consensus.Processing.ProcessingStats:Debug
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
     logging:
       driver: json-file
