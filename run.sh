@@ -419,7 +419,19 @@ prepare_overlay_for_client() {
     return 1
   fi
 
-  local overlay_root="$OVERLAY_TMP_ROOT/$client"
+  local overlay_base="$OVERLAY_TMP_ROOT"
+  local abs_lower
+  abs_lower=$(abspath "$lower")
+
+  if [[ "$overlay_base" != /* ]]; then
+    local lower_parent
+    lower_parent=$(dirname "$abs_lower")
+    overlay_base="$lower_parent/$overlay_base"
+  fi
+
+  mkdir -p "$overlay_base"
+
+  local overlay_root="$overlay_base/$client"
   local merged="$overlay_root/merged"
   local upper="$overlay_root/upper"
   local work="$overlay_root/work"
@@ -440,8 +452,7 @@ prepare_overlay_for_client() {
   rm -rf "$merged" "$upper" "$work"
   mkdir -p "$merged" "$upper" "$work"
 
-  local abs_lower abs_upper abs_work
-  abs_lower=$(abspath "$lower")
+  local abs_upper abs_work
   abs_upper=$(abspath "$upper")
   abs_work=$(abspath "$work")
   local mount_opts="lowerdir=$abs_lower,upperdir=$abs_upper,workdir=$abs_work"
@@ -672,7 +683,7 @@ if [ -n "$DEBUG_FILE" ]; then
   fi
 fi
 
-if [ "$USE_OVERLAY" = true ]; then
+if [ "$USE_OVERLAY" = true ] && [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
   mkdir -p "$OVERLAY_TMP_ROOT"
 fi
 
