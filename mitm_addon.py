@@ -266,7 +266,6 @@ def _scenario_name(file_base: str, test_name: str) -> str:
         suffix = f"_{value}" if value else ""
 
     scenario = f"{fb}__{tn}{suffix}"
-    _register_scenario(scenario)
     return scenario
 
 

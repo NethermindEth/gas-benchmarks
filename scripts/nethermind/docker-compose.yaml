@@ -40,7 +40,7 @@ services:
       - --Init.GenesisHash=0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc
       - --Sync.MaxAttemptsToUpdatePivot=0
       - --Init.AutoDump=None
-      - --Pruning.PruningBoundary=2000
+      #- --Pruning.PruningBoundary=2000
       - --Merge.TerminalTotalDifficulty=0
       - --Init.LogRules=Consensus.Processing.ProcessingStats:Debug
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
