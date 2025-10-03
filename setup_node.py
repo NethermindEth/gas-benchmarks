@@ -163,6 +163,22 @@ def evaluate_flag(flag_entry: Dict[str, Any], network: Optional[str], use_custom
     return value or ""
 
 
+INIT_SKIP_ON_OVERLAY: Dict[str, Dict[str, str]] = {
+    "geth": {"GETH_INIT_COMMAND": "true"},
+}
+
+
+def _is_overlay_path(candidate: Optional[str]) -> bool:
+    if not candidate:
+        return False
+    try:
+        resolved = Path(candidate).resolve()
+    except Exception:
+        return False
+    lowercase_parts = [part.lower() for part in resolved.parts]
+    return "merged" in lowercase_parts and any("overlay" in part for part in lowercase_parts)
+
+
 def set_env(
     client: str,
     el_images: Dict[str, str],
@@ -192,6 +208,11 @@ def set_env(
 
     for extra_key, extra_value in metadata.get("extra_env", {}).items():
         env_map[extra_key] = extra_value
+
+    if _is_overlay_path(data_dir):
+        overrides = INIT_SKIP_ON_OVERLAY.get(client, {})
+        for env_key, override in overrides.items():
+            env_map[env_key] = override
 
     env_lines = [f"{key}={value}" for key, value in env_map.items()]
 
@@ -282,14 +303,14 @@ def main():
 
     # Prepare .env file
     set_env(
-        client_without_tag,
-        el_images,
-        run_path,
-        data_dir,
-        network,
-        use_custom_genesis,
-        genesis_target,
-        metadata,
+        client=client_without_tag,
+        el_images=el_images,
+        run_path=run_path,
+        data_dir=data_dir,
+        network=network,
+        use_custom_genesis=use_custom_genesis,
+        genesis_host_path=genesis_target,
+        metadata=metadata,
     )
 
     # Start client

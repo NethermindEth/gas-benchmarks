@@ -512,6 +512,26 @@ docker_compose_down_for_client() {
   fi
 }
 
+docker_container_exists() {
+  local name="$1"
+  docker ps -a --format '{{.Names}}' | grep -Fxq "$name"
+}
+
+dump_client_logs() {
+  local client_base="$1"
+  if ! command -v docker >/dev/null 2>&1; then
+    return
+  fi
+  mkdir -p logs
+  local ts=$(date +%s)
+  if docker_container_exists "gas-execution-client"; then
+    docker logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
+  fi
+  if docker_container_exists "gas-execution-client-sync"; then
+    docker logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
+  fi
+}
+
 cleanup_on_exit() {
   local exit_status=$?
   trap - EXIT INT TERM
@@ -520,11 +540,13 @@ cleanup_on_exit() {
     local client_base client_spec
     if [ "${#RUNNING_CLIENTS[@]}" -gt 0 ]; then
       for client_base in "${!RUNNING_CLIENTS[@]}"; do
+        dump_client_logs "$client_base"
         docker_compose_down_for_client "$client_base"
       done
     elif [ "${#CLIENT_ARRAY[@]}" -gt 0 ]; then
       for client_spec in "${CLIENT_ARRAY[@]}"; do
         client_base=$(echo "$client_spec" | cut -d '_' -f 1)
+        dump_client_logs "$client_base"
         docker_compose_down_for_client "$client_base"
       done
     fi
@@ -842,8 +864,7 @@ for run in $(seq 1 $RUNS); do
     # Collect logs & teardown
     start_timer "teardown_${client}"
     ts=$(date +%s)
-    docker logs gas-execution-client &> logs/docker_${client}_${ts}.log
-    docker logs gas-execution-client-sync &> logs/docker_sync_${client}_${ts}.log
+    dump_client_logs "$client_base"
     docker_compose_down_for_client "$client_base"
 
     rm -rf "scripts/$client_base/execution-data"
