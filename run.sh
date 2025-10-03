@@ -455,7 +455,7 @@ prepare_overlay_for_client() {
   local abs_upper abs_work
   abs_upper=$(abspath "$upper")
   abs_work=$(abspath "$work")
-  local mount_opts="lowerdir=$abs_lower,upperdir=$abs_upper,workdir=$abs_work"
+  local mount_opts="lowerdir=$abs_lower,upperdir=$abs_upper,workdir=$abs_work,redirect_dir=on"
 
   if ! mount -t overlay overlay -o "$mount_opts" "$merged" 2>/dev/null; then
     if command -v sudo >/dev/null 2>&1; then
