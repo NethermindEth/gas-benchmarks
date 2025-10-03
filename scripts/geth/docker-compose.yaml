@@ -16,9 +16,9 @@ services:
   execution:
     stop_grace_period: 30m
     container_name: gas-execution-client
-    depends_on:
-      execution-sync:
-        condition: service_completed_successfully
+    #depends_on:
+    #  execution-sync:
+    #    condition: service_completed_successfully
     restart: unless-stopped
     image: ${EC_IMAGE_VERSION}
     pull_policy: always
