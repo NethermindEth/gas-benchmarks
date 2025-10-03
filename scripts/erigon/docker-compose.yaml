@@ -32,6 +32,7 @@ services:
     ports:
       - "8008:8008/tcp"
       - "8551:8551"
+      - "8545:8545"
     command:
       - ${ERIGON_CHAIN_FLAG}
       - --externalcl
