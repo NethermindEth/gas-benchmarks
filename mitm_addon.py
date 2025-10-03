@@ -104,7 +104,7 @@ def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
     if base is None:
         raise ValueError(f"unknown phase '{phase}'")
     idx = _register_scenario(scenario)
-    scenario_dir = base / str(idx)
+    scenario_dir = base / f"{idx:06d}"
     scenario_dir.mkdir(parents=True, exist_ok=True)
     return scenario_dir / f"{scenario}.txt"
 

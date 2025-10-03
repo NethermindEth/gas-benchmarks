@@ -33,6 +33,7 @@ declare -A ACTIVE_OVERLAY_MOUNTS
 declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
 declare -A ACTIVE_OVERLAY_CLIENTS
+declare -A RUNNING_CLIENTS
 SCRIPT_START_TIME=$(date +%s.%N)
 
 # Debug logging function
@@ -213,10 +214,18 @@ PY
       local scenario="${scenario_names[$si]}"
       local idx="${scenario_indices[$si]}"
       idx="${idx//[[:space:]]/}"
+      local idx_dir=""
+      if [ -n "$idx" ]; then
+        if [[ "$idx" =~ ^[0-9]+$ ]]; then
+          printf -v idx_dir "%06d" "$idx"
+        else
+          idx_dir="$idx"
+        fi
+      fi
       for phase in setup testing cleanup; do
         local scenario_path
-        if [ -n "$idx" ]; then
-          scenario_path="$dir/$phase/$idx/$scenario.txt"
+        if [ -n "$idx_dir" ]; then
+          scenario_path="$dir/$phase/$idx_dir/$scenario.txt"
         else
           scenario_path="$dir/$phase/$scenario.txt"
         fi
@@ -485,6 +494,49 @@ cleanup_all_overlays() {
   done
 }
 
+docker_compose_down_for_client() {
+  local client_base="$1"
+  local compose_dir="scripts/$client_base"
+
+  if ! command -v docker >/dev/null 2>&1; then
+    return
+  fi
+
+  if [ -f "$compose_dir/docker-compose.yaml" ]; then
+    docker compose -f "$compose_dir/docker-compose.yaml" down >/dev/null 2>&1 || \
+      docker compose -f "$compose_dir/docker-compose.yaml" down
+  elif [ -d "$compose_dir" ]; then
+    (
+      cd "$compose_dir" && docker compose down >/dev/null 2>&1 || docker compose down
+    )
+  fi
+}
+
+cleanup_on_exit() {
+  local exit_status=$?
+  trap - EXIT INT TERM
+
+  if command -v docker >/dev/null 2>&1; then
+    local client_base client_spec
+    if [ "${#RUNNING_CLIENTS[@]}" -gt 0 ]; then
+      for client_base in "${!RUNNING_CLIENTS[@]}"; do
+        docker_compose_down_for_client "$client_base"
+      done
+    elif [ "${#CLIENT_ARRAY[@]}" -gt 0 ]; then
+      for client_spec in "${CLIENT_ARRAY[@]}"; do
+        client_base=$(echo "$client_spec" | cut -d '_' -f 1)
+        docker_compose_down_for_client "$client_base"
+      done
+    fi
+  fi
+
+  if declare -F cleanup_all_overlays >/dev/null 2>&1; then
+    cleanup_all_overlays
+  fi
+
+  exit $exit_status
+}
+
 # Function to initialize executions.json if it doesn't exist
 init_executions_file() {
   if [ ! -f "$EXECUTIONS_FILE" ]; then
@@ -562,6 +614,8 @@ done
 IFS=',' read -ra CLIENT_ARRAY <<< "$CLIENTS"
 IFS=',' read -ra FILTERS <<< "$FILTER"
 
+trap cleanup_on_exit EXIT INT TERM
+
 mkdir -p results warmupresults logs
 
 # Initialize debug file if specified
@@ -598,7 +652,6 @@ fi
 
 if [ "$USE_OVERLAY" = true ]; then
   mkdir -p "$OVERLAY_TMP_ROOT"
-  trap cleanup_all_overlays EXIT
 fi
 
 # Set up environment
@@ -698,6 +751,8 @@ for run in $(seq 1 $RUNS); do
       setup_cmd+=(--genesisPath "$genesis_path")
     fi
 
+    RUNNING_CLIENTS["$client_base"]=1
+
     "${setup_cmd[@]}"
 
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
@@ -789,13 +844,7 @@ for run in $(seq 1 $RUNS); do
     ts=$(date +%s)
     docker logs gas-execution-client &> logs/docker_${client}_${ts}.log
     docker logs gas-execution-client-sync &> logs/docker_sync_${client}_${ts}.log
-    if [ -f "scripts/$client_base/docker-compose.yaml" ]; then
-      docker compose -f "scripts/$client_base/docker-compose.yaml" down
-    elif [ -d "scripts/$client_base" ]; then
-      (
-        cd "scripts/$client_base" && docker compose down
-      )
-    fi
+    docker_compose_down_for_client "$client_base"
 
     rm -rf "scripts/$client_base/execution-data"
 
@@ -803,6 +852,8 @@ for run in $(seq 1 $RUNS); do
       cleanup_overlay_for_client "$client_base"
     fi
     end_timer "teardown_${client}"
+
+    unset RUNNING_CLIENTS["$client_base"]
 
     update_execution_time "$client"
     end_timer "client_${client}_run_${run}"
