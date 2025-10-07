@@ -108,7 +108,9 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
             phase_dir = payload_dir / phase
             if not phase_dir.exists():
                 continue
-            for path in phase_dir.rglob(f"{old}.txt"):
+            for path in phase_dir.rglob("*.txt"):
+                if path.stem != old:
+                    continue
                 target = path.with_name(f"{new}.txt")
                 try:
                     target.parent.mkdir(parents=True, exist_ok=True)
