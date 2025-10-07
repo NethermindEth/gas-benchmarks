@@ -14,6 +14,7 @@
 #   --snapshot-root Base directory for overlay snapshots (can include placeholders)
 #   --snapshot-template Optional template appended to snapshot root (supports <<CLIENT>> / <<NETWORK>>)
 #   --clients      Comma-separated client list forwarded to run.sh
+#   --restarts     true/false to control client restarts (-R flag for run.sh)
 #   --debug        Enable debug mode with detailed timing
 #   --debug-file   Enable debug mode and save output to specified file
 #   --profile-test Enable test-specific profiling (shows individual test timings)
@@ -37,6 +38,14 @@ SNAPSHOT_TEMPLATE=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
+
+parse_bool() {
+  case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) echo true ;;
+    false|0|no|off) echo false ;;
+    *) echo "invalid" ;;
+  esac
+}
 
 # Timing variables
 declare -A STEP_TIMES
@@ -176,6 +185,15 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=true
       shift
       ;;
+    --restarts)
+      value=$(parse_bool "$2")
+      if [ "$value" = "invalid" ]; then
+        echo "Invalid value for --restarts: $2 (expected true/false)"
+        exit 1
+      fi
+      RESTART_BEFORE_TESTING=$value
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1"
       exit 1
@@ -184,7 +202,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restart-before-testing]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
   exit 1
 fi
 
@@ -259,7 +277,7 @@ while true; do
   fi
 
   if [ "$RESTART_BEFORE_TESTING" = true ]; then
-    RUN_CMD+=(--restart-before-testing)
+    RUN_CMD+=(-R true)
   fi
 
   if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then

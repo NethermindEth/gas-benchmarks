@@ -11,6 +11,8 @@ services:
       - ${EC_DATA_DIR}:/var/lib/besu/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
+    environment:
+      BESU_USER_NAME: root
     user: root
     ports:
       - 8008:8008/tcp
