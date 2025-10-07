@@ -76,6 +76,75 @@ def _truncate_file(path: Path):
     with path.open("w", encoding="utf-8"):
         pass
 
+def _safe_suffix(value: str) -> str:
+    cleaned = "".join(ch for ch in value if ch.isalnum() or ch in ("-", "_"))
+    return cleaned or value.strip()
+
+
+def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
+    order_file = payload_dir / "scenario_order.json"
+    if not order_file.exists():
+        return
+
+    try:
+        order_data = json.loads(order_file.read_text(encoding="utf-8"))
+    except Exception:
+        return
+
+    if not isinstance(order_data, list):
+        return
+
+    suffix = _safe_suffix(suffix)
+    if not suffix:
+        return
+
+    changed = False
+
+    def rename_files(old: str, new: str) -> None:
+        nonlocal changed
+        if old == new:
+            return
+        for phase in ("setup", "testing", "cleanup"):
+            phase_dir = payload_dir / phase
+            if not phase_dir.exists():
+                continue
+            for path in phase_dir.rglob(f"{old}.txt"):
+                target = path.with_name(f"{new}.txt")
+                try:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    path.rename(target)
+                    changed = True
+                except Exception:
+                    pass
+
+    def update_entry(entry):
+        if isinstance(entry, dict):
+            name = entry.get("name")
+            idx = entry.get("index")
+        else:
+            name = entry
+            idx = None
+        if not isinstance(name, str):
+            return entry
+        if name.endswith(f"_{suffix}") or "gas-value" in name:
+            return entry
+        new_name = f"{name}_{suffix}"
+        rename_files(name, new_name)
+        if isinstance(entry, dict):
+            entry = dict(entry)
+            entry["name"] = new_name
+        else:
+            entry = new_name
+        return entry
+
+    new_order = [update_entry(item) for item in order_data]
+
+    if changed:
+        try:
+            order_file.write_text(json.dumps(new_order, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
 # --------------------------------------------------------------------------------
 
 def is_mounted(mount_point: Path) -> bool:
@@ -310,6 +379,7 @@ def main():
     ensure_pip_pkg("requests")
 
     payloads_dir = _ensure_payloads_dir(Path(args.payload_dir))
+    gas_values = [v.strip() for v in args.gas_benchmark_values.split(",") if v.strip()]
     scenario_order_file = payloads_dir / "scenario_order.json"
     if scenario_order_file.exists():
         scenario_order_file.unlink()
@@ -465,6 +535,8 @@ def main():
             run_env["PYTHONPATH"] = src_path
 
         run(uv_cmd, cwd=str(repo_dir), env=run_env, check=True)
+        if len(gas_values) == 1:
+            _append_suffix_to_scenarios(payloads_dir, gas_values[0])
     finally:
         if not args.keep:
             try: print_container_logs(container_name)
