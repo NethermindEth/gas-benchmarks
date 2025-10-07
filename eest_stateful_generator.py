@@ -97,6 +97,10 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
     suffix = _safe_suffix(suffix)
     if not suffix:
         return
+    if suffix.upper().endswith("M"):
+        suffix = suffix.upper()
+    elif suffix.isdigit():
+        suffix = f"{suffix}M"
 
     changed = False
 
