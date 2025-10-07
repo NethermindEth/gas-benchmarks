@@ -151,120 +151,106 @@ is_stateful_directory() {
 
 collect_stateful_directory() {
   local dir="$1"
-  local -a ordered=()
-  local -A seen=()
-  local file
-  local phase
-  local order_file="$dir/scenario_order.json"
-  local -a scenario_indices=()
-  local -a scenario_names=()
-
-  if [ -f "$order_file" ]; then
-    while IFS=$'\t' read -r idx name; do
-      if [ -n "$name" ]; then
-        scenario_indices+=("$idx")
-        scenario_names+=("$name")
-      fi
-    done < <(python3 - <<'PY' "$order_file"
+  python3 - <<'PY' "$dir"
 import json
 import sys
 from pathlib import Path
 
-path = Path(sys.argv[1])
-try:
-    data = json.loads(path.read_text(encoding="utf-8"))
-except Exception:
+root = Path(sys.argv[1])
+if not root.exists():
     sys.exit(0)
 
-if isinstance(data, list):
-    for item in data:
-        idx = None
-        name = None
-        if isinstance(item, dict):
-            name = item.get("name")
-            idx = item.get("index")
-        elif isinstance(item, str):
-            name = item
-        if not name:
+def try_append(path, bucket):
+    if path.is_file() and path.suffix == ".txt":
+        bucket.append(str(path))
+
+ordered = []
+
+for name in ("gas-bump.txt", "funding.txt", "setup-global-test.txt"):
+    try_append(root / name, ordered)
+
+scenario_map = {}
+scenario_order = []
+
+order_file = root / "scenario_order.json"
+if order_file.is_file():
+    try:
+        data = json.loads(order_file.read_text(encoding="utf-8"))
+    except Exception:
+        data = []
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                idx = item.get("index")
+                name = item.get("name")
+            else:
+                idx = None
+                name = item
+            if not isinstance(name, str):
+                continue
+            name = name.strip()
+            if not name:
+                continue
+            scenario_order.append((idx, name))
+
+if not scenario_order:
+    for phase in ("setup", "testing", "cleanup"):
+        phase_dir = root / phase
+        if not phase_dir.is_dir():
             continue
-        name = str(name).strip()
-        if not name:
-            continue
-        if isinstance(idx, int):
-            print(f"{idx}\t{name}")
-        elif isinstance(idx, str) and idx.strip():
-            print(f"{idx.strip()}\t{name}")
-        else:
-            print(f"\t{name}")
+        for idx_dir in sorted(p for p in phase_dir.iterdir() if p.is_dir()):
+            try:
+                idx_val = int(idx_dir.name)
+            except ValueError:
+                continue
+            for file in sorted(idx_dir.glob("*.txt")):
+                scenario_order.append((idx_val, file.stem))
+
+added = set()
+scenario_entries = []
+for idx, name in scenario_order:
+    key = (idx, name)
+    if key in added:
+        continue
+    added.add(key)
+    scenario_entries.append((idx, name))
+
+def resolve_path(phase, idx, name):
+    candidates = []
+    if isinstance(idx, int):
+        candidates.append(root / phase / f"{idx:06d}" / f"{name}.txt")
+        candidates.append(root / phase / str(idx) / f"{name}.txt")
+    if isinstance(idx, str) and idx:
+        candidates.append(root / phase / idx / f"{name}.txt")
+    candidates.append(root / phase / f"{name}.txt")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+scenario_entries.sort(key=lambda item: (item[0] if isinstance(item[0], int) else float('inf')))
+for idx, name in scenario_entries:
+    for phase in ("setup", "testing", "cleanup"):
+        path = resolve_path(phase, idx, name)
+        if path is not None:
+            ordered.append(str(path))
+
+for name in ("teardown-global-test.txt", "current-last-global-test.txt"):
+    try_append(root / name, ordered)
+
+extra_root = []
+for file in sorted(root.glob("*.txt")):
+    extra_root.append(str(file))
+
+final = []
+seen = set()
+for path in ordered + extra_root:
+    if path not in seen:
+        seen.add(path)
+        final.append(path)
+
+sys.stdout.write("\0".join(final))
 PY
-)
-  fi
-
-  for file in "$dir/gas-bump.txt" "$dir/funding.txt" "$dir/setup-global-test.txt"; do
-    if [ -f "$file" ] && [ -z "${seen[$file]}" ]; then
-      ordered+=("$file")
-      seen["$file"]=1
-    fi
-  done
-
-  if [ "${#scenario_names[@]}" -gt 0 ]; then
-    local scenario_count="${#scenario_names[@]}"
-    local si
-    for (( si=0; si<scenario_count; si++ )); do
-      local scenario="${scenario_names[$si]}"
-      local idx="${scenario_indices[$si]}"
-      idx="${idx//[[:space:]]/}"
-      local idx_dir=""
-      if [ -n "$idx" ]; then
-        if [[ "$idx" =~ ^[0-9]+$ ]]; then
-          printf -v idx_dir "%06d" "$idx"
-        else
-          idx_dir="$idx"
-        fi
-      fi
-      for phase in setup testing cleanup; do
-        local scenario_path
-        if [ -n "$idx_dir" ]; then
-          scenario_path="$dir/$phase/$idx_dir/$scenario.txt"
-        else
-          scenario_path="$dir/$phase/$scenario.txt"
-        fi
-        if [ -f "$scenario_path" ] && [ -z "${seen[$scenario_path]}" ]; then
-          ordered+=("$scenario_path")
-          seen["$scenario_path"]=1
-        fi
-      done
-    done
-  fi
-
-  for phase in setup testing cleanup; do
-    local phase_dir="$dir/$phase"
-    if [ -d "$phase_dir" ]; then
-      while IFS= read -r -d '' phase_file; do
-        if [ -z "${seen[$phase_file]}" ]; then
-          ordered+=("$phase_file")
-          seen["$phase_file"]=1
-        fi
-      done < <(find "$phase_dir" -type f -name '*.txt' -print0 | sort -z)
-    fi
-  done
-
-  local teardown="$dir/teardown-global-test.txt"
-  if [ -f "$teardown" ] && [ -z "${seen[$teardown]}" ]; then
-    ordered+=("$teardown")
-    seen["$teardown"]=1
-  fi
-
-  if [ -d "$dir" ]; then
-    while IFS= read -r -d '' root_file; do
-      if [ -z "${seen[$root_file]}" ]; then
-        ordered+=("$root_file")
-        seen["$root_file"]=1
-      fi
-    done < <(find "$dir" -maxdepth 1 -type f -name '*.txt' -print0 | sort -z)
-  fi
-
-  printf '%s\0' "${ordered[@]}"
 }
 
 dir_has_content() {
