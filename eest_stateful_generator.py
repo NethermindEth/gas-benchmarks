@@ -224,6 +224,18 @@ def unmount_overlay(merged: Path):
         cmd = ["sudo"] + cmd
     subprocess.run(cmd, check=False)
 
+def describe_mount(path: Path) -> str:
+    try:
+        mount_path = path.resolve()
+        with open('/proc/mounts', 'r', encoding='utf-8') as mounts:
+            for line in mounts:
+                parts = line.split()
+                if len(parts) >= 4 and parts[1] == str(mount_path):
+                    return line.strip()
+    except Exception:
+        pass
+    return ''
+
 def download_snapshot(chain: str, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     sh = textwrap.dedent(f"""
@@ -572,6 +584,9 @@ def main():
     try:
         prepare_scenario_overlay()
         restart_node(scenario_merged, show_logs=False)
+        mount_line = describe_mount(scenario_merged)
+        if mount_line:
+            print(f"[DEBUG] Scenario overlay mount: {mount_line}")
     except Exception as exc:
         print(f"[ERROR] Unable to initialize scenario overlay before tests: {exc}")
         try: unmount_overlay(scenario_merged)
