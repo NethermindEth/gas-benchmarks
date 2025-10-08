@@ -629,7 +629,7 @@ def main():
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
             f"--gas-benchmark-values={args.gas_benchmark_values}",
-            "--eoa-start", "0xe590f237b4c6d4872b2003046ea885cad5bbb2b107f558ae5d387a9aad960e70",
+            "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             args.test_path,
             "--",
             "-m", "benchmark", "-n", "1",
