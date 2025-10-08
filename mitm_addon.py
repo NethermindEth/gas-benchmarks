@@ -588,8 +588,11 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         _dump_pair_to_phase(ph, scenario, np_body, fcu_body)
         _log(f"produced block group={grp} stage={idx}")
-        if ph == "cleanup" or (SKIP_CLEANUP and ph == "testing"):
+        if ph == "cleanup":
             _signal_cleanup_pause(scenario, idx, exec_payload.get("blockHash"))
+        elif SKIP_CLEANUP and ph == "testing":
+            globals()['_PENDING_OVERLAY'] = (scenario, idx, exec_payload.get("blockHash"))
+            _log(f"testing stage {idx} complete for {scenario}; overlay refresh deferred to next scenario")
     except Exception as e:  # pragma: no cover
         _log(f"produce error: {e}")
 
