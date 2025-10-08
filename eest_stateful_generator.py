@@ -627,7 +627,6 @@ def main():
             f"--gas-benchmark-values={args.gas_benchmark_values}",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             "--skip-cleanup",
-            "--seed-account-sweep-amount", "1000 gwei",
             args.test_path,
             "--",
             "-m", "benchmark", "-n", "1",
