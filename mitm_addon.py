@@ -111,6 +111,8 @@ _PAUSE_TOKEN: Optional[str] = None
 _PAUSE_SCENARIO: Optional[str] = None
 _CONTROL_THREAD: Optional[threading.Thread] = None
 
+_OVERLAY_PRIMED: bool = False
+
 
 def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
     base = _PHASE_BASE_DIRS.get(phase.lower())
@@ -569,6 +571,10 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
                         _minified_json_line(fcu_body)
                     ])
                     _log(f"global-no-phase CURRENT-LAST updated -> {_CURRENT_LAST_FILE}")
+            if not _OVERLAY_PRIMED and not _TESTS_STARTED:
+                _signal_cleanup_pause("__overlay_init__", idx, exec_payload.get("blockHash"))
+                _log("global-no-phase overlay init pause triggered")
+                globals()['_OVERLAY_PRIMED'] = True
             _log(f"produced block group={grp} stage={idx}")
             return
         # -------------------------------------------------------------------------------------
@@ -690,6 +696,7 @@ def _wait_for_resume() -> None:
 def load(loader) -> None:
     global _MON_THR, _CONTROL_THREAD
     _ensure_dirs_and_cleanup_old()
+    globals()['_OVERLAY_PRIMED'] = False
     _ensure_control_dir()
     try:
         if _RESUME_FILE.exists():
