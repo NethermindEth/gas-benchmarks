@@ -110,6 +110,7 @@ _PAUSE_EVENT.set()
 _PAUSE_TOKEN: Optional[str] = None
 _PAUSE_SCENARIO: Optional[str] = None
 _CONTROL_THREAD: Optional[threading.Thread] = None
+_PENDING_OVERLAY: Optional[Tuple[str, int, Optional[str]]] = None  # (scenario, stage, block)
 
 _OVERLAY_PRIMED: bool = False
 
@@ -572,7 +573,9 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
                     ])
                     _log(f"global-no-phase CURRENT-LAST updated -> {_CURRENT_LAST_FILE}")
             if not _OVERLAY_PRIMED and not _TESTS_STARTED:
-                _signal_cleanup_pause("__overlay_init__", idx, exec_payload.get("blockHash"))
+                block_hash = exec_payload.get("blockHash")
+                globals()["_PENDING_OVERLAY"] = ("__overlay_init__", idx, block_hash)
+                _signal_cleanup_pause("__overlay_init__", idx, block_hash)
                 _log("global-no-phase overlay init pause triggered")
                 globals()['_OVERLAY_PRIMED'] = True
             _log(f"produced block group={grp} stage={idx}")
@@ -589,8 +592,18 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         _dump_pair_to_phase(ph, scenario, np_body, fcu_body)
         _log(f"produced block group={grp} stage={idx}")
         if ph == "cleanup":
-            _signal_cleanup_pause(scenario, idx, exec_payload.get("blockHash"))
+            block_hash = exec_payload.get("blockHash")
+            globals()['_PENDING_OVERLAY'] = (scenario, idx, block_hash)
+            _signal_cleanup_pause(scenario, idx, block_hash)
         elif SKIP_CLEANUP and ph == "testing":
+            pending = globals().get('_PENDING_OVERLAY')
+            if pending:
+                pend_scenario, pend_stage, pend_block = pending
+                if pend_scenario != scenario:
+                    globals()['_PENDING_OVERLAY'] = None
+                    _log(f"overlay restore pause triggered before scenario {scenario}")
+                    _signal_cleanup_pause('__overlay_restore__', pend_stage, pend_block)
+                    _wait_for_resume()
             globals()['_PENDING_OVERLAY'] = (scenario, idx, exec_payload.get("blockHash"))
             _log(f"testing stage {idx} complete for {scenario}; overlay refresh deferred to next scenario")
     except Exception as e:  # pragma: no cover
@@ -807,6 +820,23 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
     global _ACTIVE_GRP, _LAST_TS, _PENDING, _BUF, _TESTS_STARTED
 
     _wait_for_resume()
+
+    pending_overlay = globals().get('_PENDING_OVERLAY')
+    if pending_overlay:
+        pending_scenario, pending_stage, pending_block = pending_overlay
+        meta_probe, _src_probe = _extract_meta(headers, item)
+        current_scenario = None
+        if meta_probe:
+            try:
+                grp_probe = _derive_group_from_meta(meta_probe)
+                current_scenario = _scenario_name(grp_probe[0], grp_probe[1])
+            except Exception:
+                current_scenario = None
+        if current_scenario and current_scenario != pending_scenario:
+            globals()['_PENDING_OVERLAY'] = None
+            _log(f"overlay restore pause triggered before scenario {current_scenario}")
+            _signal_cleanup_pause('__overlay_restore__', pending_stage, pending_block)
+            _wait_for_resume()
 
     params = item.get("params") or []
     raw = params[0] if params and isinstance(params[0], str) and params[0].startswith("0x") else None
