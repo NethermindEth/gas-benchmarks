@@ -989,8 +989,8 @@ def response(flow: http.HTTPFlow) -> None:
                 scenario = _scenario_name(grp[0], grp[1])
             except Exception:
                 scenario = None
-        if not scenario or scenario != pending_scenario:
-            return
+        if scenario is None:
+            scenario = pending_scenario
 
         # Ensure the response actually contains a result before rewinding
         try:
