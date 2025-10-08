@@ -595,20 +595,6 @@ def main():
         print(f"[WARN] Finalized block {finalized_hash} not found; clearing anchor.")
         finalized_hash = ""
 
-    # Switch Nethermind onto the scenario overlay baseline before tests
-    stop_and_remove_container(container_name)
-    try:
-        prepare_scenario_overlay()
-        restart_node(scenario_merged, show_logs=False)
-        mount_line = describe_mount(scenario_merged)
-        if mount_line:
-            print(f"[DEBUG] Scenario overlay mount: {mount_line}")
-    except Exception as exc:
-        print(f"[ERROR] Unable to initialize scenario overlay before tests: {exc}")
-        try: unmount_overlay(scenario_merged)
-        except Exception: pass
-        sys.exit(1)
-
     mitm_config = {
         "rpc_direct": "http://127.0.0.1:8545",
         "engine_url": "http://127.0.0.1:8551",
@@ -673,6 +659,9 @@ def main():
                 pass
             try:
                 prepare_scenario_overlay()
+                mount_line = describe_mount(scenario_merged)
+                if mount_line:
+                    print(f"[DEBUG] Scenario overlay mount: {mount_line}")
             except Exception as exc:
                 print(f"[ERROR] Unable to prepare scenario overlay: {exc}")
                 raise
