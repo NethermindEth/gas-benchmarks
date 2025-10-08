@@ -590,6 +590,7 @@ def main():
         "finalized_block": finalized_hash or "",
         "payload_dir": str(payloads_dir),
         "reuse_globals": reuse_globals,
+        "skip_cleanup": True,
     }
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 

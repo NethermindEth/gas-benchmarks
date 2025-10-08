@@ -27,6 +27,7 @@ RPC_DIRECT: str = _CFG["rpc_direct"]
 ENGINE_URL: str = _CFG["engine_url"]
 JWT_HEX_PATH: str = _CFG["jwt_hex_path"]
 FINALIZED_BLOCK: str = _CFG.get("finalized_block") or ""
+SKIP_CLEANUP: bool = bool(_CFG.get("skip_cleanup"))
 REUSE_GLOBALS: bool = bool(_CFG.get("reuse_globals"))
 
 _DYN_FINALIZED: str = FINALIZED_BLOCK
@@ -581,7 +582,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         _dump_pair_to_phase(ph, scenario, np_body, fcu_body)
         _log(f"produced block group={grp} stage={idx}")
-        if ph == "cleanup":
+        if ph == "cleanup" or (SKIP_CLEANUP and ph == "testing"):
             _signal_cleanup_pause(scenario, idx, exec_payload.get("blockHash"))
     except Exception as e:  # pragma: no cover
         _log(f"produce error: {e}")
