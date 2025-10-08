@@ -961,3 +961,59 @@ def response(flow: http.HTTPFlow) -> None:
         )
     except Exception as e:
         _log(f"RESP log error: {e}")
+
+    # After logging, check for confirmation RPCs (e.g., eth_getTransactionByHash)
+    try:
+        req_text = flow.request.get_text("utf-8")
+    except Exception:
+        req_text = (
+            flow.request.content[:4096].decode("utf-8", errors="ignore") if flow.request.content else ""
+        )
+
+    def _maybe_handle_confirmation(obj: Any) -> None:
+        pending = globals().get("_PENDING_OVERLAY")
+        if not pending:
+            return
+        if not isinstance(obj, dict):
+            return
+        method = obj.get("method")
+        if method != "eth_getTransactionByHash":
+            return
+
+        pending_scenario, pending_stage, pending_block = pending
+        meta, _ = _extract_meta(flow.request.headers, obj)
+        scenario = None
+        if meta:
+            try:
+                grp = _derive_group_from_meta(meta)
+                scenario = _scenario_name(grp[0], grp[1])
+            except Exception:
+                scenario = None
+        if not scenario or scenario != pending_scenario:
+            return
+
+        # Ensure the response actually contains a result before rewinding
+        try:
+            resp_obj = json.loads(body_text) if body_text else None
+        except Exception:
+            resp_obj = None
+        if not isinstance(resp_obj, dict):
+            return
+        if resp_obj.get("result") in (None, False):
+            return
+
+        globals()["_PENDING_OVERLAY"] = None
+        _log(f"overlay restore pause triggered after confirmation for scenario {scenario}")
+        _signal_cleanup_pause("__overlay_restore__", pending_stage, pending_block)
+        _wait_for_resume()
+
+    if flow.request.method.upper() == "POST":
+        try:
+            req_obj = json.loads(req_text) if req_text else None
+        except Exception:
+            req_obj = None
+        if isinstance(req_obj, list):
+            for entry in req_obj:
+                _maybe_handle_confirmation(entry)
+        elif isinstance(req_obj, dict):
+            _maybe_handle_confirmation(req_obj)
