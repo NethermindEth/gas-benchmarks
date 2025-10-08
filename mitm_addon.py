@@ -869,6 +869,8 @@ def serverdisconnect(con) -> None:
 
 
 def request(flow: http.HTTPFlow) -> None:
+    _wait_for_resume()
+
     try:
         hdrs = {k: str(v) for k, v in flow.request.headers.items()}
         try:
