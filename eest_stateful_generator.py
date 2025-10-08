@@ -192,6 +192,32 @@ def _wait_for_resume_consumed(path: Path, timeout: float = 60.0) -> bool:
         time.sleep(0.2)
     return True
 
+def _block_exists(rpc_url: str, block_hash: str) -> bool:
+    if not block_hash:
+        return False
+    try:
+        result = rpc_call(rpc_url, "eth_getBlockByHash", [block_hash, False])
+    except Exception:
+        return False
+    return bool(result)
+
+
+def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, funding_file: Path) -> str:
+    print("[INFO] Regenerating gas-bump and funding payloads.")
+    _truncate_file(gas_bump_file)
+    _truncate_file(funding_file)
+    try:
+        for _ in range(301):
+            preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
+    except Exception as exc:
+        print(f"[WARN] Gas bump failed: {exc}")
+    finalized = ""
+    try:
+        finalized = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_file)
+    except Exception as exc:
+        print(f"[WARN] Funding prep failed: {exc}")
+    return finalized or ""
+
 def _latest_block_hash_from_payload_file(path: Path) -> Optional[str]:
     try:
         lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
@@ -581,24 +607,20 @@ def main():
     ensure_pip_pkg("mitmproxy")
 
     finalized_hash = ""
+    rpc_url = "http://127.0.0.1:8545"
     if reuse_preparation:
         print("[INFO] Reusing existing gas-bump and funding payloads.")
         finalized_hash = _latest_block_hash_from_payload_file(funding_file) or ""
-    else:
-        print("[INFO] Generating gas-bump and funding payloads.")
-        _truncate_file(gas_bump_file)
-        _truncate_file(funding_file)
-        try:
-            for i in range(301):
-                # Append NP+FCU pairs as lines to gas-bump.txt
-                preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
-        except Exception as e:
-            print(f"[WARN] Gas bump failed: {e}")
-        try:
-            # Append NP+FCU pair(s) as lines to funding.txt
-            finalized_hash = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_file)
-        except Exception as e:
-            print(f"[WARN] Funding prep failed: {e}")
+        if not finalized_hash or not _block_exists(rpc_url, finalized_hash):
+            print("[WARN] Reused funding payload is missing finalized block; regenerating preparations.")
+            reuse_preparation = False
+
+    if not reuse_preparation:
+        finalized_hash = _generate_preparation_payloads(jwt_path, args, gas_bump_file, funding_file)
+
+    if finalized_hash and not _block_exists(rpc_url, finalized_hash):
+        print(f"[WARN] Finalized block {finalized_hash} not found; clearing anchor.")
+        finalized_hash = ""
 
     mitm_config = {
         "rpc_direct": "http://127.0.0.1:8545",
