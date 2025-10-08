@@ -268,11 +268,11 @@ def start_nethermind_container(chain: str, db_dir: Path, jwt_path: Path,
         "--JsonRpc.EnabledModules", "Eth,Net,Web3,Admin,Debug,Trace,TxPool",
         "--Blocks.TargetBlockGasLimit", "1000000000000",
         "--data-dir", "/db",
-        "--log", "DEBUG",
+        "--log", "INFO",
         "--Network.MaxActivePeers", "0",
         "--TxPool.Size", "10000",
         "--TxPool.MaxTxSize", "null",
-        "--Pruning.CacheMb", "1",
+        "--Init.LogRules", "Consensus.Processing.ProcessingStats:Debug",
     ]
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
