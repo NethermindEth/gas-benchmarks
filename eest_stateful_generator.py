@@ -567,6 +567,19 @@ def main():
 
     ensure_pip_pkg("mitmproxy")
 
+    try:
+        prepare_scenario_overlay()
+    except Exception as exc:
+        print(f"[WARN] Failed to prepare scenario overlay before tests: {exc}")
+    else:
+        try:
+            restart_node(scenario_merged, show_logs=False)
+        except RuntimeError as exc:
+            print(f"[ERROR] Unable to restart node on scenario overlay before tests: {exc}")
+            try: unmount_overlay(scenario_merged)
+            except Exception: pass
+            sys.exit(1)
+
     finalized_hash = ""
     rpc_url = "http://127.0.0.1:8545"
     if reuse_preparation:
