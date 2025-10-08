@@ -10,6 +10,7 @@ import re
 import shutil
 import threading
 import time
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -26,6 +27,7 @@ RPC_DIRECT: str = _CFG["rpc_direct"]
 ENGINE_URL: str = _CFG["engine_url"]
 JWT_HEX_PATH: str = _CFG["jwt_hex_path"]
 FINALIZED_BLOCK: str = _CFG.get("finalized_block") or ""
+REUSE_GLOBALS: bool = bool(_CFG.get("reuse_globals"))
 
 _DYN_FINALIZED: str = FINALIZED_BLOCK
 
@@ -98,6 +100,16 @@ _PHASE_BASE_DIRS: Dict[str, pathlib.Path] = {
     "cleanup": _CLEANUP_DIR,
 }
 
+_CONTROL_DIR = _PAYLOADS_DIR / "_control"
+_PAUSE_FILE = _CONTROL_DIR / "pause.json"
+_RESUME_FILE = _CONTROL_DIR / "resume.json"
+_PAUSE_LOCK = threading.Lock()
+_PAUSE_EVENT = threading.Event()
+_PAUSE_EVENT.set()
+_PAUSE_TOKEN: Optional[str] = None
+_PAUSE_SCENARIO: Optional[str] = None
+_CONTROL_THREAD: Optional[threading.Thread] = None
+
 
 def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
     base = _PHASE_BASE_DIRS.get(phase.lower())
@@ -110,14 +122,16 @@ def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
 
 
 _SCENARIO_ORDER_FILE_RAW = _CFG.get("scenario_order_file")
-if _SCENARIO_ORDER_FILE_RAW:
+if isinstance(_SCENARIO_ORDER_FILE_RAW, str) and _SCENARIO_ORDER_FILE_RAW.strip():
     _SCENARIO_ORDER_FILE = pathlib.Path(_SCENARIO_ORDER_FILE_RAW).expanduser()
     if not _SCENARIO_ORDER_FILE.is_absolute():
         _SCENARIO_ORDER_FILE = (_PAYLOADS_DIR / _SCENARIO_ORDER_FILE).resolve()
     else:
         _SCENARIO_ORDER_FILE = _SCENARIO_ORDER_FILE.resolve()
+elif _SCENARIO_ORDER_FILE_RAW:
+    _SCENARIO_ORDER_FILE = pathlib.Path(_SCENARIO_ORDER_FILE_RAW).expanduser().resolve()
 else:
-    _SCENARIO_ORDER_FILE = (_PAYLOADS_DIR / "scenario_order.json").resolve()
+    _SCENARIO_ORDER_FILE = None
 
 # Legacy/unknown helpers
 _GLOBAL_SETUP_FILE = _PAYLOADS_DIR / "global-setup.txt"   # only used for one-time migration on load
@@ -126,7 +140,6 @@ _UNKNOWN_FILE = _PAYLOADS_DIR / "unknown.txt"
 # Global no-phase lifecycle files (root of payloads/)
 _SETUP_GLOBAL_FILE = _PAYLOADS_DIR / "setup-global-test.txt"
 _MIDDLE_GLOBAL_FILE = _PAYLOADS_DIR / "middle-global-tests.txt"
-_TEAR_GLOBAL_FILE = _PAYLOADS_DIR / "teardown-global-test.txt"
 _CURRENT_LAST_FILE = _PAYLOADS_DIR / "current-last-global-test.txt"
 
 # ---------------------------------------------------------------------------
@@ -441,20 +454,6 @@ def _migrate_current_last_to_middle() -> None:
         except Exception as e:
             _log(f"migrate current-last→middle failed: {e}")
 
-def _finalize_current_last_to_teardown() -> None:
-    if _file_has_content(_CURRENT_LAST_FILE):
-        try:
-            tmp = _TEAR_GLOBAL_FILE.with_suffix(".tmp")
-            with _CURRENT_LAST_FILE.open("r", encoding="utf-8") as f_in, tmp.open("w", encoding="utf-8") as f_out:
-                for ln in f_in:
-                    if ln.strip():
-                        f_out.write(ln)
-            tmp.replace(_TEAR_GLOBAL_FILE)
-            _CURRENT_LAST_FILE.unlink(missing_ok=True)
-            _log(f"finalized current-last → { _TEAR_GLOBAL_FILE }")
-        except Exception as e:
-            _log(f"finalize current-last→teardown failed: {e}")
-
 def _cleanup_empty_txt_files() -> None:
     try:
         for p in _PAYLOADS_DIR.rglob("*.txt"):
@@ -538,19 +537,22 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         # ---- GLOBAL NO-PHASE (both legacy 'global-setup' and explicit 'global-nophase') ----
         if file_base in {"global-setup", "global-nophase"}:
-            if not _TESTS_STARTED:
-                # Before any phased test started → setup-global-test
-                _append_pair(_SETUP_GLOBAL_FILE, np_body, fcu_body)
-                _log(f"global-no-phase PRE-TEST → {_SETUP_GLOBAL_FILE}")
+            if REUSE_GLOBALS and _file_has_content(_SETUP_GLOBAL_FILE):
+                _log(f"global-no-phase reuse active; skipping file updates for {grp}")
             else:
-                # During/after tests: roll current-last
-                if _file_has_content(_CURRENT_LAST_FILE):
-                    _migrate_current_last_to_middle()
-                _overwrite_with_lines(_CURRENT_LAST_FILE, [
-                    _minified_json_line(np_body),
-                    _minified_json_line(fcu_body)
-                ])
-                _log(f"global-no-phase CURRENT-LAST updated → {_CURRENT_LAST_FILE}")
+                if not _TESTS_STARTED:
+                    # Before any phased test started -> setup-global-test
+                    _append_pair(_SETUP_GLOBAL_FILE, np_body, fcu_body)
+                    _log(f"global-no-phase PRE-TEST -> {_SETUP_GLOBAL_FILE}")
+                else:
+                    # During/after tests: roll current-last
+                    if _file_has_content(_CURRENT_LAST_FILE):
+                        _migrate_current_last_to_middle()
+                    _overwrite_with_lines(_CURRENT_LAST_FILE, [
+                        _minified_json_line(np_body),
+                        _minified_json_line(fcu_body)
+                    ])
+                    _log(f"global-no-phase CURRENT-LAST updated -> {_CURRENT_LAST_FILE}")
             _log(f"produced block group={grp} stage={idx}")
             return
         # -------------------------------------------------------------------------------------
@@ -564,6 +566,8 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         _dump_pair_to_phase(ph, scenario, np_body, fcu_body)
         _log(f"produced block group={grp} stage={idx}")
+        if ph == "cleanup":
+            _signal_cleanup_pause(scenario, idx, exec_payload.get("blockHash"))
     except Exception as e:  # pragma: no cover
         _log(f"produce error: {e}")
 
@@ -598,69 +602,158 @@ def _monitor() -> None:
 # mitmproxy addon hooks
 # ---------------------------------------------------------------------------
 
-def load(loader) -> None:
-    global _MON_THR
-    _ensure_dirs_and_cleanup_old()
+def _ensure_control_dir() -> None:
+    try:
+        _CONTROL_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
 
-    # Truncate global lifecycle files at start of run
-    for p in (_SETUP_GLOBAL_FILE, _MIDDLE_GLOBAL_FILE, _TEAR_GLOBAL_FILE, _CURRENT_LAST_FILE):
+
+def _signal_cleanup_pause(scenario: str, stage: int, block_hash: Optional[str]) -> None:
+    global _PAUSE_TOKEN, _PAUSE_SCENARIO
+    with _PAUSE_LOCK:
+        if not _PAUSE_EVENT.is_set():
+            _log(f"pause already active; skip scenario={scenario}")
+            return
+        token = str(uuid.uuid4())
+        _PAUSE_TOKEN = token
+        _PAUSE_SCENARIO = scenario
+        _PAUSE_EVENT.clear()
+        _ensure_control_dir()
+        payload = {
+            "token": token,
+            "scenario": scenario,
+            "phase": "cleanup",
+            "stage": stage,
+            "blockHash": block_hash,
+            "timestamp": time.time(),
+        }
+        try:
+            _PAUSE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except Exception as e:
+            _log(f"pause write failed: {e}")
+        _log(f"pause signaled scenario={scenario} stage={stage} token={token}")
+
+
+def _control_watcher() -> None:
+    while not _STOP:
+        if _PAUSE_EVENT.is_set():
+            time.sleep(0.2)
+            continue
+        if not _RESUME_FILE.exists():
+            time.sleep(0.2)
+            continue
+        try:
+            data = json.loads(_RESUME_FILE.read_text(encoding="utf-8"))
+        except Exception as e:
+            _log(f"resume read failed: {e}")
+            time.sleep(0.5)
+            continue
+        token = data.get("token")
+        scenario = data.get("scenario")
+        with _PAUSE_LOCK:
+            if not _PAUSE_EVENT.is_set() and token == _PAUSE_TOKEN and scenario == _PAUSE_SCENARIO:
+                _PAUSE_EVENT.set()
+                _log(f"resume accepted scenario={scenario} token={token}")
+                try:
+                    _RESUME_FILE.unlink()
+                except Exception:
+                    pass
+            else:
+                _log(f"resume ignored token={token} scenario={scenario}")
+        time.sleep(0.2)
+
+
+def _wait_for_resume() -> None:
+    while not _PAUSE_EVENT.wait(timeout=0.2):
+        if _STOP:
+            return
+        time.sleep(0.1)
+
+
+def load(loader) -> None:
+    global _MON_THR, _CONTROL_THREAD
+    _ensure_dirs_and_cleanup_old()
+    _ensure_control_dir()
+    try:
+        if _RESUME_FILE.exists():
+            _RESUME_FILE.unlink()
+    except Exception:
+        pass
+    try:
+        if _PAUSE_FILE.exists():
+            _PAUSE_FILE.unlink()
+    except Exception:
+        pass
+    _PAUSE_EVENT.set()
+
+    files_to_truncate = [_CURRENT_LAST_FILE]
+    if not REUSE_GLOBALS:
+        files_to_truncate.extend([_SETUP_GLOBAL_FILE, _MIDDLE_GLOBAL_FILE])
+    for p in files_to_truncate:
         _truncate(p)
 
-    # One-time migration: move any legacy global-setup.txt NP/FCU pairs into lifecycle files
     if _GLOBAL_SETUP_FILE.exists():
         try:
-            lines = [ln.rstrip("\n") for ln in _GLOBAL_SETUP_FILE.read_text(encoding="utf-8").splitlines() if ln.strip()]
+            lines = [ln.strip() for ln in _GLOBAL_SETUP_FILE.read_text(encoding='utf-8').splitlines() if ln.strip()]
             if lines:
                 if len(lines) % 2 != 0:
                     _log(f"[warn] global-setup.txt has odd number of lines ({len(lines)}); expected NP+FCU pairs")
                 pairs = [lines[i:i+2] for i in range(0, len(lines) - len(lines) % 2, 2)]
                 if pairs:
-                    # first pair -> setup
                     for ln in pairs[0]:
                         _append_line(_SETUP_GLOBAL_FILE, ln)
-                    # middle pairs -> middle
                     for pair in pairs[1:-1]:
                         for ln in pair:
                             _append_line(_MIDDLE_GLOBAL_FILE, ln)
-                    # last pair -> teardown
-                    for ln in pairs[-1]:
-                        _append_line(_TEAR_GLOBAL_FILE, ln)
-                    # backup the legacy file
-                    _GLOBAL_SETUP_FILE.rename(_GLOBAL_SETUP_FILE.with_suffix(".migrated.bak"))
-                    _log(f"migrated {len(pairs)} global-setup pair(s) → lifecycle files; backed up to global-setup.migrated.bak")
+                    if len(pairs) > 1:
+                        for ln in pairs[-1]:
+                            _append_line(_MIDDLE_GLOBAL_FILE, ln)
+                    _GLOBAL_SETUP_FILE.rename(_GLOBAL_SETUP_FILE.with_suffix('.migrated.bak'))
+                    _log(f"migrated {len(pairs)} global-setup pair(s) into lifecycle files; backed up to global-setup.migrated.bak")
         except Exception as e:
             _log(f"migration of global-setup.txt failed: {e}")
 
-    # Historical stray: move setup/global-setup__global-setup.txt → global-setup.txt (then migration above will handle it next time)
-    stray = _SETUP_DIR / "global-setup__global-setup.txt"
+    stray = _SETUP_DIR / 'global-setup__global-setup.txt'
     if stray.exists():
         try:
-            with stray.open("r", encoding="utf-8") as f_in:
+            with stray.open('r', encoding='utf-8') as f_in:
                 content = f_in.read()
-            with _GLOBAL_SETUP_FILE.open("a", encoding="utf-8") as f_out:
+            with _GLOBAL_SETUP_FILE.open('a', encoding='utf-8') as f_out:
                 f_out.write(content)
             stray.unlink()
-            _log(f"moved stray {stray} → {_GLOBAL_SETUP_FILE}")
+            _log(f"moved stray {stray} into {_GLOBAL_SETUP_FILE}")
         except Exception as e:
             _log(f"migration of {stray} failed: {e}")
 
+    _CONTROL_THREAD = threading.Thread(target=_control_watcher, daemon=True)
+    _CONTROL_THREAD.start()
     _MON_THR = threading.Thread(target=_monitor, daemon=True)
     _MON_THR.start()
-    _log("mitm_addon loaded")
-
+    _log('mitm_addon loaded')
 
 def done() -> None:
-    global _STOP
-    # Finalize the last no-phase global into teardown
-    _finalize_current_last_to_teardown()
+    global _STOP, _CONTROL_THREAD
     # Remove any leftover empty .txt files (root and subdirs)
     _cleanup_empty_txt_files()
 
     _STOP = True
+    _PAUSE_EVENT.set()
     if _MON_THR and _MON_THR.is_alive():
         _MON_THR.join(timeout=1.0)
+    if _CONTROL_THREAD and _CONTROL_THREAD.is_alive():
+        _CONTROL_THREAD.join(timeout=1.0)
+    try:
+        if _RESUME_FILE.exists():
+            _RESUME_FILE.unlink()
+    except Exception:
+        pass
+    try:
+        if _PAUSE_FILE.exists():
+            _PAUSE_FILE.unlink()
+    except Exception:
+        pass
     _log("mitm_addon done")
-
 
 def _is_sendraw(item: Any) -> bool:
     return isinstance(item, dict) and item.get("method") == "eth_sendRawTransaction"
@@ -686,6 +779,8 @@ def _append_raw_request_line(path: pathlib.Path, obj: Any) -> None:
 
 def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
     global _ACTIVE_GRP, _LAST_TS, _PENDING, _BUF, _TESTS_STARTED
+
+    _wait_for_resume()
 
     params = item.get("params") or []
     raw = params[0] if params and isinstance(params[0], str) and params[0].startswith("0x") else None

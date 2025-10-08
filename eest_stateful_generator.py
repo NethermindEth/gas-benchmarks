@@ -11,6 +11,7 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+from typing import Optional
 import atexit
 import re
 
@@ -22,7 +23,17 @@ CHAIN_TO_ID = {
     "goerli": 5,
 }
 
-CLEANUP = {"keep": False, "container": None, "merged": None, "upper": None, "work": None, "mitm": None}
+CLEANUP = {
+    "keep": False,
+    "container": None,
+    "primary_merged": None,
+    "primary_upper": None,
+    "primary_work": None,
+    "scenario_merged": None,
+    "scenario_upper": None,
+    "scenario_work": None,
+    "mitm": None,
+}
 
 def run(cmd, cwd=None, env=None, check=True):
     print("\n[RUN] " + " ".join(cmd))
@@ -152,6 +163,55 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
             pass
 
 # --------------------------------------------------------------------------------
+
+def _read_json_file(path: Path):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_resume_signal(path: Path, token: str, scenario: str) -> None:
+    payload = {
+        "token": token,
+        "scenario": scenario,
+        "timestamp": time.time(),
+    }
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+
+def _wait_for_resume_consumed(path: Path, timeout: float = 60.0) -> bool:
+    deadline = time.time() + timeout
+    while path.exists():
+        if time.time() > deadline:
+            return False
+        time.sleep(0.2)
+    return True
+
+def _latest_block_hash_from_payload_file(path: Path) -> Optional[str]:
+    try:
+        lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    except Exception:
+        return None
+    for line in reversed(lines):
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        method = obj.get("method")
+        if not isinstance(method, str):
+            continue
+        if method.startswith("engine_newPayload"):
+            params = obj.get("params") or []
+            if params and isinstance(params[0], dict):
+                block_hash = params[0].get("blockHash")
+                if isinstance(block_hash, str):
+                    return block_hash
+    return None
 
 def is_mounted(mount_point: Path) -> bool:
     try:
@@ -328,11 +388,19 @@ def _cleanup():
         except Exception:
             pass
         try:
-            if CLEANUP.get("merged"):
-                unmount_overlay(CLEANUP["merged"])
+            if CLEANUP.get("scenario_merged"):
+                unmount_overlay(CLEANUP["scenario_merged"])
         except Exception:
             pass
-        for key in ("upper","work","merged"):
+        try:
+            if CLEANUP.get("primary_merged"):
+                unmount_overlay(CLEANUP["primary_merged"])
+        except Exception:
+            pass
+        for key in (
+            "scenario_upper","scenario_work","scenario_merged",
+            "primary_upper","primary_work","primary_merged"
+        ):
             try:
                 d = CLEANUP.get(key)
                 if d: shutil.rmtree(d, ignore_errors=True)
@@ -386,15 +454,24 @@ def main():
 
     payloads_dir = _ensure_payloads_dir(Path(args.payload_dir))
     gas_values = [v.strip() for v in args.gas_benchmark_values.split(",") if v.strip()]
-    scenario_order_file = payloads_dir / "scenario_order.json"
-    if scenario_order_file.exists():
-        scenario_order_file.unlink()
-    scenario_order_file.write_text("[]", encoding="utf-8")
+    gas_bump_file = payloads_dir / "gas-bump.txt"
+    funding_file  = payloads_dir / "funding.txt"
+    setup_global_file = payloads_dir / "setup-global-test.txt"
+    reuse_preparation = gas_bump_file.exists() and funding_file.exists()
+    reuse_globals = setup_global_file.exists()
+
 
     for subdir in ("setup", "testing", "cleanup"):
         sub_path = payloads_dir / subdir
         if sub_path.exists():
             shutil.rmtree(sub_path)
+
+    control_dir = payloads_dir / "_control"
+    if control_dir.exists():
+        shutil.rmtree(control_dir)
+    control_dir.mkdir(parents=True, exist_ok=True)
+    pause_file = control_dir / "pause.json"
+    resume_file = control_dir / "resume.json"
 
 
     repo_dir = Path("execution-spec-tests")
@@ -421,49 +498,75 @@ def main():
 
     jwt_path = ensure_jwt(Path("engine-jwt"))
 
-    merged_dir = Path("overlay-merged")
-    upper_dir  = Path("overlay-upper")
-    work_dir   = Path("overlay-work")
-    CLEANUP["merged"], CLEANUP["upper"], CLEANUP["work"] = merged_dir, upper_dir, work_dir
+    primary_merged = Path("overlay-merged")
+    primary_upper  = Path("overlay-upper")
+    primary_work   = Path("overlay-work")
+    CLEANUP["primary_merged"], CLEANUP["primary_upper"], CLEANUP["primary_work"] = primary_merged, primary_upper, primary_work
+
+    scenario_merged = Path("overlay-scenario-merged")
+    scenario_upper  = Path("overlay-scenario-upper")
+    scenario_work   = Path("overlay-scenario-work")
+    CLEANUP["scenario_merged"], CLEANUP["scenario_upper"], CLEANUP["scenario_work"] = scenario_merged, scenario_upper, scenario_work
 
     stop_and_remove_container("eest-nethermind")
-    ensure_overlay_mount(lower=snapshot_dir, upper=upper_dir, work=work_dir, merged=merged_dir)
+    ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
 
     container_name = "eest-nethermind"
     CLEANUP["container"] = container_name
-    _ = start_nethermind_container(
-        chain=args.chain,
-        db_dir=merged_dir,
-        jwt_path=jwt_path,
-        rpc_port=8545,
-        engine_port=8551,
-        name=container_name,
-        image=args.nethermind_image,
-    )
+    active_db_dir = primary_merged
 
-    if not wait_for_port("127.0.0.1", 8545, timeout=180):
-        print("ERROR: 8545 not reachable.")
-        print_container_logs(container_name)
+    def restart_node(db_dir: Path, *, show_logs: bool = False) -> None:
+        nonlocal active_db_dir
         stop_and_remove_container(container_name)
-        try: unmount_overlay(merged_dir)
+        _ = start_nethermind_container(
+            chain=args.chain,
+            db_dir=db_dir,
+            jwt_path=jwt_path,
+            rpc_port=8545,
+            engine_port=8551,
+            name=container_name,
+            image=args.nethermind_image,
+        )
+        if not wait_for_port("127.0.0.1", 8545, timeout=180):
+            print("ERROR: 8545 not reachable.")
+            print_container_logs(container_name)
+            stop_and_remove_container(container_name)
+            raise RuntimeError("JSON-RPC port not reachable")
+        for _ in range(60):
+            try:
+                _ = rpc_call("http://127.0.0.1:8545", "eth_blockNumber")
+                break
+            except Exception:
+                time.sleep(2)
+        else:
+            print("ERROR: JSON-RPC not responding.")
+            print_container_logs(container_name)
+            stop_and_remove_container(container_name)
+            raise RuntimeError("JSON-RPC not responding")
+        if show_logs:
+            print_container_logs(container_name)
+        active_db_dir = db_dir
+
+    try:
+        restart_node(primary_merged, show_logs=True)
+    except RuntimeError:
+        try: unmount_overlay(primary_merged)
         except Exception: pass
         sys.exit(1)
 
-    for _ in range(60):
-        try:
-            _ = rpc_call("http://127.0.0.1:8545", "eth_blockNumber")
-            break
-        except Exception:
-            time.sleep(2)
-    else:
-        print("ERROR: JSON-RPC not responding.")
-        print_container_logs(container_name)
-        stop_and_remove_container(container_name)
-        try: unmount_overlay(merged_dir)
-        except Exception: pass
-        sys.exit(1)
+    scenario_overlay_ready = False
 
-    print_container_logs(container_name)
+    def prepare_scenario_overlay() -> None:
+        nonlocal scenario_overlay_ready
+        if scenario_overlay_ready:
+            try: unmount_overlay(scenario_merged)
+            except Exception:
+                pass
+        shutil.rmtree(scenario_upper, ignore_errors=True)
+        shutil.rmtree(scenario_work, ignore_errors=True)
+        shutil.rmtree(scenario_merged, ignore_errors=True)
+        ensure_overlay_mount(lower=primary_merged, upper=scenario_upper, work=scenario_work, merged=scenario_merged)
+        scenario_overlay_ready = True
 
     chain_id = args.rpc_chain_id
     if chain_id is None:
@@ -477,34 +580,33 @@ def main():
 
     ensure_pip_pkg("mitmproxy")
 
-    # -------- prepare combined line-based output files (truncate each run) --------
-    gas_bump_file = payloads_dir / "gas-bump.txt"
-    funding_file  = payloads_dir / "funding.txt"
-    _truncate_file(gas_bump_file)
-    _truncate_file(funding_file)
-    # ------------------------------------------------------------------------------
-
-    try:
-        for i in range(301):
-            # Append NP+FCU pairs as lines to gas-bump.txt
-            preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
-    except Exception as e:
-        print(f"[WARN] Gas bump failed: {e}")
-
     finalized_hash = ""
-    try:
-        # Append NP+FCU pair(s) as lines to funding.txt
-        finalized_hash = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_file)
-    except Exception as e:
-        print(f"[WARN] Funding prep failed: {e}")
+    if reuse_preparation:
+        print("[INFO] Reusing existing gas-bump and funding payloads.")
+        finalized_hash = _latest_block_hash_from_payload_file(funding_file) or ""
+    else:
+        print("[INFO] Generating gas-bump and funding payloads.")
+        _truncate_file(gas_bump_file)
+        _truncate_file(funding_file)
+        try:
+            for i in range(301):
+                # Append NP+FCU pairs as lines to gas-bump.txt
+                preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
+        except Exception as e:
+            print(f"[WARN] Gas bump failed: {e}")
+        try:
+            # Append NP+FCU pair(s) as lines to funding.txt
+            finalized_hash = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_file)
+        except Exception as e:
+            print(f"[WARN] Funding prep failed: {e}")
 
     mitm_config = {
         "rpc_direct": "http://127.0.0.1:8545",
         "engine_url": "http://127.0.0.1:8551",
         "jwt_hex_path": str(jwt_path),
-        "finalized_block": finalized_hash,
+        "finalized_block": finalized_hash or "",
         "payload_dir": str(payloads_dir),
-        "scenario_order_file": str(scenario_order_file),
+        "reuse_globals": reuse_globals,
     }
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
@@ -527,6 +629,7 @@ def main():
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
             f"--gas-benchmark-values={args.gas_benchmark_values}",
+            "--eoa-start", "0xe590f237b4c6d4872b2003046ea885cad5bbb2b107f558ae5d387a9aad960e70",
             args.test_path,
             "--",
             "-m", "benchmark", "-n", "1",
@@ -540,19 +643,97 @@ def main():
         else:
             run_env["PYTHONPATH"] = src_path
 
-        run(uv_cmd, cwd=str(repo_dir), env=run_env, check=True)
+        tests_proc = subprocess.Popen(uv_cmd, cwd=str(repo_dir), env=run_env)
+        processed_tokens: set[str] = set()
+        return_code: Optional[int] = None
+
+        def handle_pause(payload: dict) -> None:
+            token = str(payload.get("token") or "")
+            if not token:
+                print(f"[WARN] Ignoring pause payload without token: {payload}")
+                return
+            scenario_name = payload.get("scenario") or "unknown"
+            stage = payload.get("stage")
+            block_hash = payload.get("blockHash")
+            print(f"[STATE] Pause requested: scenario={scenario_name} stage={stage} token={token} block={block_hash}")
+            try:
+                stop_and_remove_container(container_name)
+            except Exception:
+                pass
+            try:
+                prepare_scenario_overlay()
+            except Exception as exc:
+                print(f"[ERROR] Unable to prepare scenario overlay: {exc}")
+                raise
+            try:
+                restart_node(scenario_merged, show_logs=False)
+            except RuntimeError as exc:
+                print(f"[ERROR] Failed to restart node for scenario {scenario_name}: {exc}")
+                raise
+            try:
+                resume_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+            _write_resume_signal(resume_file, token, scenario_name)
+            if not _wait_for_resume_consumed(resume_file, timeout=300.0):
+                print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
+            else:
+                print(f"[STATE] Resume acknowledged for scenario {scenario_name} token={token}")
+            processed_tokens.add(token)
+
+        try:
+            while True:
+                payload = _read_json_file(pause_file) if pause_file.exists() else None
+                if payload:
+                    token = str(payload.get("token") or "")
+                    if token and token not in processed_tokens:
+                        handle_pause(payload)
+                        continue
+                ret = tests_proc.poll()
+                if ret is not None:
+                    payload = _read_json_file(pause_file) if pause_file.exists() else None
+                    if payload:
+                        token = str(payload.get("token") or "")
+                        if token and token not in processed_tokens:
+                            handle_pause(payload)
+                    break
+                time.sleep(0.5)
+            return_code = tests_proc.wait()
+        finally:
+            if tests_proc.poll() is None:
+                tests_proc.terminate()
+                try:
+                    tests_proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    tests_proc.kill()
+                    tests_proc.wait()
+
+        if return_code is None:
+            return_code = tests_proc.returncode
+        if return_code != 0:
+            raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:
             _append_suffix_to_scenarios(payloads_dir, gas_values[0])
     finally:
         if not args.keep:
-            try: print_container_logs(container_name)
-            except Exception: pass
+            try:
+                print_container_logs(container_name)
+            except Exception:
+                pass
             stop_and_remove_container(container_name)
-            try: unmount_overlay(merged_dir)
-            except Exception: pass
-            shutil.rmtree(upper_dir, ignore_errors=True)
-            shutil.rmtree(work_dir, ignore_errors=True)
-            shutil.rmtree(merged_dir, ignore_errors=True)
+            try:
+                unmount_overlay(scenario_merged)
+            except Exception:
+                pass
+            try:
+                unmount_overlay(primary_merged)
+            except Exception:
+                pass
+            for path in (
+                scenario_upper, scenario_work, scenario_merged,
+                primary_upper, primary_work, primary_merged,
+            ):
+                shutil.rmtree(path, ignore_errors=True)
         print("Done.")
 
 if __name__ == "__main__":
