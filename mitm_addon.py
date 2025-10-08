@@ -595,6 +595,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             block_hash = exec_payload.get("blockHash")
             globals()['_PENDING_OVERLAY'] = (scenario, idx, block_hash)
             _signal_cleanup_pause(scenario, idx, block_hash)
+            globals()['_PENDING_OVERLAY'] = None
         elif SKIP_CLEANUP and ph == "testing":
             pending = globals().get('_PENDING_OVERLAY')
             if pending:
@@ -693,6 +694,8 @@ def _control_watcher() -> None:
             if not _PAUSE_EVENT.is_set() and token == _PAUSE_TOKEN and scenario == _PAUSE_SCENARIO:
                 _PAUSE_EVENT.set()
                 _log(f"resume accepted scenario={scenario} token={token}")
+                if scenario == "__overlay_init__":
+                    globals()["_PENDING_OVERLAY"] = None
                 try:
                     _RESUME_FILE.unlink()
                 except Exception:
@@ -962,58 +965,59 @@ def response(flow: http.HTTPFlow) -> None:
     except Exception as e:
         _log(f"RESP log error: {e}")
 
-    # After logging, check for confirmation RPCs (e.g., eth_getTransactionByHash)
-    try:
-        req_text = flow.request.get_text("utf-8")
-    except Exception:
-        req_text = (
-            flow.request.content[:4096].decode("utf-8", errors="ignore") if flow.request.content else ""
-        )
+    if SKIP_CLEANUP:
+        # After logging, check for confirmation RPCs (e.g., eth_getTransactionByHash)
+        try:
+            req_text = flow.request.get_text("utf-8")
+        except Exception:
+            req_text = (
+                flow.request.content[:4096].decode("utf-8", errors="ignore") if flow.request.content else ""
+            )
 
-    def _maybe_handle_confirmation(obj: Any) -> None:
-        pending = globals().get("_PENDING_OVERLAY")
-        if not pending:
-            return
-        if not isinstance(obj, dict):
-            return
-        method = obj.get("method")
-        if method != "eth_getTransactionByHash":
-            return
+        def _maybe_handle_confirmation(obj: Any) -> None:
+            pending = globals().get("_PENDING_OVERLAY")
+            if not pending:
+                return
+            if not isinstance(obj, dict):
+                return
+            method = obj.get("method")
+            if method != "eth_getTransactionByHash":
+                return
 
-        pending_scenario, pending_stage, pending_block = pending
-        meta, _ = _extract_meta(flow.request.headers, obj)
-        scenario = None
-        if meta:
+            pending_scenario, pending_stage, pending_block = pending
+            meta, _ = _extract_meta(flow.request.headers, obj)
+            scenario = None
+            if meta:
+                try:
+                    grp = _derive_group_from_meta(meta)
+                    scenario = _scenario_name(grp[0], grp[1])
+                except Exception:
+                    scenario = None
+            if scenario is None:
+                scenario = pending_scenario
+
+            # Ensure the response actually contains a result before rewinding
             try:
-                grp = _derive_group_from_meta(meta)
-                scenario = _scenario_name(grp[0], grp[1])
+                resp_obj = json.loads(body_text) if body_text else None
             except Exception:
-                scenario = None
-        if scenario is None:
-            scenario = pending_scenario
+                resp_obj = None
+            if not isinstance(resp_obj, dict):
+                return
+            if resp_obj.get("result") in (None, False):
+                return
 
-        # Ensure the response actually contains a result before rewinding
-        try:
-            resp_obj = json.loads(body_text) if body_text else None
-        except Exception:
-            resp_obj = None
-        if not isinstance(resp_obj, dict):
-            return
-        if resp_obj.get("result") in (None, False):
-            return
+            globals()["_PENDING_OVERLAY"] = None
+            _log(f"overlay restore pause triggered after confirmation for scenario {scenario}")
+            _signal_cleanup_pause("__overlay_restore__", pending_stage, pending_block)
+            _wait_for_resume()
 
-        globals()["_PENDING_OVERLAY"] = None
-        _log(f"overlay restore pause triggered after confirmation for scenario {scenario}")
-        _signal_cleanup_pause("__overlay_restore__", pending_stage, pending_block)
-        _wait_for_resume()
-
-    if flow.request.method.upper() == "POST":
-        try:
-            req_obj = json.loads(req_text) if req_text else None
-        except Exception:
-            req_obj = None
-        if isinstance(req_obj, list):
-            for entry in req_obj:
-                _maybe_handle_confirmation(entry)
-        elif isinstance(req_obj, dict):
-            _maybe_handle_confirmation(req_obj)
+        if flow.request.method.upper() == "POST":
+            try:
+                req_obj = json.loads(req_text) if req_text else None
+            except Exception:
+                req_obj = None
+            if isinstance(req_obj, list):
+                for entry in req_obj:
+                    _maybe_handle_confirmation(entry)
+            elif isinstance(req_obj, dict):
+                _maybe_handle_confirmation(req_obj)
