@@ -93,18 +93,6 @@ def _safe_suffix(value: str) -> str:
 
 
 def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
-    order_file = payload_dir / "scenario_order.json"
-    if not order_file.exists():
-        return
-
-    try:
-        order_data = json.loads(order_file.read_text(encoding="utf-8"))
-    except Exception:
-        return
-
-    if not isinstance(order_data, list):
-        return
-
     suffix = _safe_suffix(suffix)
     if not suffix:
         return
@@ -113,54 +101,24 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
     elif suffix.isdigit():
         suffix = f"{suffix}M"
 
-    changed = False
-
-    def rename_files(old: str, new: str) -> None:
-        nonlocal changed
-        if old == new:
-            return
-        for phase in ("setup", "testing", "cleanup"):
-            phase_dir = payload_dir / phase
-            if not phase_dir.exists():
+    for phase in ("setup", "testing", "cleanup"):
+        phase_dir = payload_dir / phase
+        if not phase_dir.is_dir():
+            continue
+        for path in sorted(phase_dir.glob("*.txt")):
+            stem = path.stem
+            if stem.endswith(f"_{suffix}") or "gas-value" in stem:
                 continue
-            for path in phase_dir.rglob("*.txt"):
-                if path.stem != old:
-                    continue
-                target = path.with_name(f"{new}.txt")
-                try:
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    path.rename(target)
-                    changed = True
-                except Exception:
-                    pass
-
-    def update_entry(entry):
-        if isinstance(entry, dict):
-            name = entry.get("name")
-            idx = entry.get("index")
-        else:
-            name = entry
-            idx = None
-        if not isinstance(name, str):
-            return entry
-        if name.endswith(f"_{suffix}") or "gas-value" in name:
-            return entry
-        new_name = f"{name}_{suffix}"
-        rename_files(name, new_name)
-        if isinstance(entry, dict):
-            entry = dict(entry)
-            entry["name"] = new_name
-        else:
-            entry = new_name
-        return entry
-
-    new_order = [update_entry(item) for item in order_data]
-
-    if changed:
-        try:
-            order_file.write_text(json.dumps(new_order, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+            base_name = stem
+            target = path.with_name(f"{base_name}_{suffix}{path.suffix}")
+            counter = 1
+            while target.exists():
+                target = path.with_name(f"{base_name}_{suffix}_{counter}{path.suffix}")
+                counter += 1
+            try:
+                path.rename(target)
+            except Exception:
+                pass
 
 # --------------------------------------------------------------------------------
 
