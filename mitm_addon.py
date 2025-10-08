@@ -115,10 +115,9 @@ def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
     base = _PHASE_BASE_DIRS.get(phase.lower())
     if base is None:
         raise ValueError(f"unknown phase '{phase}'")
-    idx = _register_scenario(scenario)
-    scenario_dir = base / f"{idx:06d}"
-    scenario_dir.mkdir(parents=True, exist_ok=True)
-    return scenario_dir / f"{scenario}.txt"
+    _register_scenario(scenario)
+    base.mkdir(parents=True, exist_ok=True)
+    return base / f"{scenario}.txt"
 
 
 _SCENARIO_ORDER_FILE_RAW = _CFG.get("scenario_order_file")
@@ -346,6 +345,18 @@ def _ensure_dirs_and_cleanup_old() -> None:
                 _log(f"removed old payloads subdir: {p}")
             except Exception as e:
                 _log(f"failed to remove old subdir {p}: {e}")
+    # Flatten legacy numeric subdirectories within setup/testing/cleanup
+    for phase_dir in (_SETUP_DIR, _TESTING_DIR, _CLEANUP_DIR):
+        try:
+            for child in phase_dir.iterdir():
+                if child.is_dir():
+                    try:
+                        shutil.rmtree(child)
+                        _log(f"removed legacy scenario directory: {child}")
+                    except Exception as exc:
+                        _log(f"failed to remove legacy scenario dir {child}: {exc}")
+        except Exception:
+            pass
 
 
 def _minified_json_line(obj: Any) -> str:
@@ -456,9 +467,13 @@ def _migrate_current_last_to_middle() -> None:
 
 def _cleanup_empty_txt_files() -> None:
     try:
+        phase_dirs = {_SETUP_DIR.resolve(), _TESTING_DIR.resolve(), _CLEANUP_DIR.resolve()}
         for p in _PAYLOADS_DIR.rglob("*.txt"):
             try:
                 if p.exists() and p.stat().st_size == 0:
+                    parent = p.parent.resolve()
+                    if parent in phase_dirs:
+                        continue
                     p.unlink()
                     _log(f"removed empty file: {p}")
             except Exception:

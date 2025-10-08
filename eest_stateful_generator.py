@@ -480,6 +480,9 @@ def main():
 
     payloads_dir = _ensure_payloads_dir(Path(args.payload_dir))
     gas_values = [v.strip() for v in args.gas_benchmark_values.split(",") if v.strip()]
+    scenario_order_file = payloads_dir / "scenario_order.json"
+    if scenario_order_file.exists():
+        scenario_order_file.unlink()
     gas_bump_file = payloads_dir / "gas-bump.txt"
     funding_file  = payloads_dir / "funding.txt"
     setup_global_file = payloads_dir / "setup-global-test.txt"

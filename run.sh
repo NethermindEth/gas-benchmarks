@@ -205,6 +205,16 @@ if not scenario_order:
                 continue
             for file in sorted(idx_dir.glob("*.txt")):
                 scenario_order.append((idx_val, file.stem))
+    if not scenario_order:
+        flat_names = set()
+        for phase in ("setup", "testing", "cleanup"):
+            phase_dir = root / phase
+            if not phase_dir.is_dir():
+                continue
+            for file in sorted(phase_dir.glob("*.txt")):
+                flat_names.add(file.stem)
+        for name in sorted(flat_names):
+            scenario_order.append((None, name))
 
 added = set()
 scenario_entries = []
