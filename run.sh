@@ -244,8 +244,7 @@ for idx, name in scenario_entries:
         if path is not None:
             ordered.append(str(path))
         elif phase in ("setup", "testing"):
-            sys.stderr.write(f"[WARN] Missing {phase} file for scenario {name}
-")
+            sys.stderr.write(f"[WARN] Missing {phase} file for scenario {name}\n")
 
 for name in ("teardown-global-test.txt", "current-last-global-test.txt"):
     try_append(root / name, ordered)
