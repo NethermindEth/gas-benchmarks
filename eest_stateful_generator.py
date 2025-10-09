@@ -48,7 +48,7 @@ def wait_for_port(host, port, timeout=180):
             with socket.create_connection((host, port), timeout=2):
                 return True
         except OSError:
-            time.sleep(1)
+            time.sleep(0.2)
     return False
 
 def ensure_pip_pkg(pkg):
@@ -147,7 +147,7 @@ def _wait_for_resume_consumed(path: Path, timeout: float = 60.0) -> bool:
     while path.exists():
         if time.time() > deadline:
             return False
-        time.sleep(0.2)
+        time.sleep(0.05)
     return True
 
 def _block_exists(rpc_url: str, block_hash: str) -> bool:
@@ -537,7 +537,7 @@ def main():
                 _ = rpc_call("http://127.0.0.1:8545", "eth_blockNumber")
                 break
             except Exception:
-                time.sleep(2)
+                time.sleep(0.5)
         else:
             print("ERROR: JSON-RPC not responding.")
             print_container_logs(container_name)
@@ -696,7 +696,7 @@ def main():
                         if token and token not in processed_tokens:
                             handle_pause(payload)
                     break
-                time.sleep(0.5)
+                time.sleep(0.1)
             return_code = tests_proc.wait()
         finally:
             if tests_proc.poll() is None:
