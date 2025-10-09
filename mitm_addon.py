@@ -594,8 +594,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         if ph == "cleanup":
             block_hash = exec_payload.get("blockHash")
             globals()['_PENDING_OVERLAY'] = (scenario, idx, block_hash)
-            _signal_cleanup_pause(scenario, idx, block_hash)
-            globals()['_PENDING_OVERLAY'] = None
+            _log(f"cleanup stage {idx} complete for {scenario}; awaiting confirmation")
         elif SKIP_CLEANUP and ph == "testing":
             pending = globals().get('_PENDING_OVERLAY')
             if pending:

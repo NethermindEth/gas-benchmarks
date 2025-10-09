@@ -169,8 +169,7 @@ ordered = []
 for name in ("gas-bump.txt", "funding.txt", "setup-global-test.txt"):
     try_append(root / name, ordered)
 
-scenario_map = {}
-scenario_order = []
+scenario_entries = []
 
 order_file = root / "scenario_order.json"
 if order_file.is_file():
@@ -179,6 +178,7 @@ if order_file.is_file():
     except Exception:
         data = []
     if isinstance(data, list):
+        seen_names = set()
         for item in data:
             if isinstance(item, dict):
                 idx = item.get("index")
@@ -189,32 +189,40 @@ if order_file.is_file():
             if not isinstance(name, str):
                 continue
             name = name.strip()
-            if not name:
+            if not name or name in seen_names:
                 continue
-            scenario_order.append((idx, name))
+            seen_names.add(name)
+            scenario_entries.append((idx, name))
 
-if not scenario_order:
-    for phase in ("setup", "testing", "cleanup"):
-        phase_dir = root / phase
-        if not phase_dir.is_dir():
-            continue
-        for idx_dir in sorted(p for p in phase_dir.iterdir() if p.is_dir()):
-            try:
-                idx_val = int(idx_dir.name)
-            except ValueError:
-                continue
-            for file in sorted(idx_dir.glob("*.txt")):
-                scenario_order.append((idx_val, file.stem))
-    if not scenario_order:
-        flat_names = set()
-        for phase in ("setup", "testing", "cleanup"):
+if not scenario_entries:
+    testing_dir = root / "testing"
+    if testing_dir.is_dir():
+        names = [f.stem for f in sorted(testing_dir.glob("*.txt"))]
+    else:
+        names = []
+    if not names:
+        phases = ("setup", "testing", "cleanup")
+        name_set = set()
+        for phase in phases:
             phase_dir = root / phase
             if not phase_dir.is_dir():
                 continue
-            for file in sorted(phase_dir.glob("*.txt")):
-                flat_names.add(file.stem)
-        for name in sorted(flat_names):
-            scenario_order.append((None, name))
+            for file in phase_dir.glob("*.txt"):
+                name_set.add(file.stem)
+        names = sorted(name_set)
+    scenario_entries = [(None, name) for name in names]
+
+deduped_entries = []
+seen = set()
+for idx, name in scenario_entries:
+    key = (idx, name)
+    if key in seen:
+        continue
+    seen.add(key)
+    deduped_entries.append((idx, name))
+
+scenario_entries = deduped_entries
+
 
 added = set()
 scenario_entries = []
