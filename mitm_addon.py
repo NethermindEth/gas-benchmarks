@@ -40,7 +40,7 @@ _ENGINE_PATH = _u.path or "/"
 _LOG_FILE = "/root/mitm_logs.log"
 
 # Quiet period before producing a block (seconds)
-QUIET_SECONDS: float = 0.1
+QUIET_SECONDS: float = 0.2
 
 # Synchronization / state
 _GROUP_LOCK = threading.Lock()
