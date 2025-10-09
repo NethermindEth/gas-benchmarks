@@ -11,6 +11,7 @@ import shutil
 import threading
 import time
 import uuid
+from datetime import datetime
 from time import perf_counter
 from time import perf_counter
 from typing import Any, Dict, List, Optional, Tuple
@@ -155,7 +156,8 @@ _CURRENT_LAST_FILE = _PAYLOADS_DIR / "current-last-global-test.txt"
 def _log(msg: str) -> None:
     try:
         with open(_LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            f.write(f"{ts} {msg}\n")
     except Exception:
         pass
 
