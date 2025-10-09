@@ -111,6 +111,7 @@ _PAUSE_TOKEN: Optional[str] = None
 _PAUSE_SCENARIO: Optional[str] = None
 _CONTROL_THREAD: Optional[threading.Thread] = None
 _PENDING_OVERLAY: Optional[Tuple[str, int, Optional[str]]] = None  # (scenario, stage, block)
+_PENDING_OVERLAY_CONFIRMED: bool = False
 
 _OVERLAY_PRIMED: bool = False
 
@@ -594,6 +595,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         if ph == "cleanup":
             block_hash = exec_payload.get("blockHash")
             globals()['_PENDING_OVERLAY'] = (scenario, idx, block_hash)
+            globals()['_PENDING_OVERLAY_CONFIRMED'] = False
             _log(f"cleanup stage {idx} complete for {scenario}; awaiting confirmation")
         elif SKIP_CLEANUP and ph == "testing":
             pending = globals().get('_PENDING_OVERLAY')
@@ -605,6 +607,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
                     _signal_cleanup_pause('__overlay_restore__', pend_stage, pend_block)
                     _wait_for_resume()
             globals()['_PENDING_OVERLAY'] = (scenario, idx, exec_payload.get("blockHash"))
+            globals()['_PENDING_OVERLAY_CONFIRMED'] = False
             _log(f"testing stage {idx} complete for {scenario}; overlay refresh deferred to next scenario")
     except Exception as e:  # pragma: no cover
         _log(f"produce error: {e}")
@@ -633,6 +636,7 @@ def _produce_if_quiet(force: bool = False) -> None:
 def _monitor() -> None:
     while not _STOP:
         _produce_if_quiet(force=False)
+        time.sleep(0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -691,6 +695,7 @@ def _control_watcher() -> None:
         with _PAUSE_LOCK:
             if not _PAUSE_EVENT.is_set() and token == _PAUSE_TOKEN and scenario == _PAUSE_SCENARIO:
                 _PAUSE_EVENT.set()
+                globals()['_PENDING_OVERLAY_CONFIRMED'] = False
                 _log(f"resume accepted scenario={scenario} token={token}")
                 if scenario == "__overlay_init__":
                     globals()["_PENDING_OVERLAY"] = None
@@ -714,6 +719,8 @@ def load(loader) -> None:
     global _MON_THR, _CONTROL_THREAD
     _ensure_dirs_and_cleanup_old()
     globals()['_OVERLAY_PRIMED'] = False
+    globals()['_PENDING_OVERLAY'] = None
+    globals()['_PENDING_OVERLAY_CONFIRMED'] = False
     _ensure_control_dir()
     try:
         if _RESUME_FILE.exists():
@@ -835,6 +842,7 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
                 current_scenario = None
         if current_scenario and current_scenario != pending_scenario:
             globals()['_PENDING_OVERLAY'] = None
+            globals()['_PENDING_OVERLAY_CONFIRMED'] = False
             _log(f"overlay restore pause triggered before scenario {current_scenario}")
             _signal_cleanup_pause('__overlay_restore__', pending_stage, pending_block)
             _wait_for_resume()
@@ -935,6 +943,30 @@ def request(flow: http.HTTPFlow) -> None:
     except Exception:
         return
 
+    pending = globals().get("_PENDING_OVERLAY")
+    pending_confirmed = globals().get("_PENDING_OVERLAY_CONFIRMED")
+    if pending and pending_confirmed:
+        entries: list[Any] = []
+        if isinstance(req_obj, dict):
+            entries = [req_obj]
+        elif isinstance(req_obj, list):
+            entries = [entry for entry in req_obj if isinstance(entry, dict)]
+        else:
+            entries = []
+        trigger_method = None
+        for entry in entries:
+            method = entry.get("method") if isinstance(entry, dict) else None
+            if method and method != "eth_getTransactionByHash":
+                trigger_method = method
+                break
+        if trigger_method:
+            scenario, stage, block_hash = pending
+            globals()["_PENDING_OVERLAY"] = None
+            globals()["_PENDING_OVERLAY_CONFIRMED"] = False
+            _log(f"overlay restore pause triggered before method {trigger_method} for scenario {scenario}")
+            _signal_cleanup_pause("__overlay_restore__", stage, block_hash)
+            _wait_for_resume()
+
     if isinstance(req_obj, list):
         for it in req_obj:
             if _is_sendraw(it):
@@ -963,59 +995,64 @@ def response(flow: http.HTTPFlow) -> None:
     except Exception as e:
         _log(f"RESP log error: {e}")
 
-    if SKIP_CLEANUP:
-        # After logging, check for confirmation RPCs (e.g., eth_getTransactionByHash)
-        try:
-            req_text = flow.request.get_text("utf-8")
-        except Exception:
-            req_text = (
-                flow.request.content[:4096].decode("utf-8", errors="ignore") if flow.request.content else ""
-            )
+    try:
+        req_text = flow.request.get_text("utf-8")
+    except Exception:
+        req_text = (
+            flow.request.content[:4096].decode("utf-8", errors="ignore") if flow.request.content else ""
+        )
 
-        def _maybe_handle_confirmation(obj: Any) -> None:
-            pending = globals().get("_PENDING_OVERLAY")
-            if not pending:
-                return
-            if not isinstance(obj, dict):
-                return
-            method = obj.get("method")
-            if method != "eth_getTransactionByHash":
-                return
+    if flow.request.method.upper() != "POST":
+        return
 
-            pending_scenario, pending_stage, pending_block = pending
-            meta, _ = _extract_meta(flow.request.headers, obj)
-            scenario = None
-            if meta:
-                try:
-                    grp = _derive_group_from_meta(meta)
-                    scenario = _scenario_name(grp[0], grp[1])
-                except Exception:
-                    scenario = None
-            if scenario is None:
-                scenario = pending_scenario
+    try:
+        req_obj = json.loads(req_text) if req_text else None
+    except Exception:
+        req_obj = None
 
-            # Ensure the response actually contains a result before rewinding
+    pending = globals().get("_PENDING_OVERLAY")
+    if not pending:
+        return
+
+    entries: list[Any] = []
+    if isinstance(req_obj, dict):
+        entries = [req_obj]
+    elif isinstance(req_obj, list):
+        entries = [entry for entry in req_obj if isinstance(entry, dict)]
+    else:
+        return
+
+    pending_scenario, pending_stage, pending_block = pending
+
+    try:
+        resp_obj = json.loads(body_text) if body_text else None
+    except Exception:
+        resp_obj = None
+
+    for entry in entries:
+        method = entry.get("method")
+        if method != "eth_getTransactionByHash":
+            continue
+
+        meta, _ = _extract_meta(flow.request.headers, entry)
+        scenario = None
+        if meta:
             try:
-                resp_obj = json.loads(body_text) if body_text else None
+                grp = _derive_group_from_meta(meta)
+                scenario = _scenario_name(grp[0], grp[1])
             except Exception:
-                resp_obj = None
-            if not isinstance(resp_obj, dict):
-                return
-            if resp_obj.get("result") in (None, False):
-                return
+                scenario = None
+        if scenario is None:
+            scenario = pending_scenario
+        if scenario != pending_scenario:
+            continue
 
-            globals()["_PENDING_OVERLAY"] = None
-            _log(f"overlay restore pause triggered after confirmation for scenario {scenario}")
-            _signal_cleanup_pause("__overlay_restore__", pending_stage, pending_block)
-            _wait_for_resume()
+        if not isinstance(resp_obj, dict):
+            continue
+        if resp_obj.get("result") in (None, False):
+            continue
 
-        if flow.request.method.upper() == "POST":
-            try:
-                req_obj = json.loads(req_text) if req_text else None
-            except Exception:
-                req_obj = None
-            if isinstance(req_obj, list):
-                for entry in req_obj:
-                    _maybe_handle_confirmation(entry)
-            elif isinstance(req_obj, dict):
-                _maybe_handle_confirmation(req_obj)
+        globals()["_PENDING_OVERLAY_CONFIRMED"] = True
+        _log(f"cleanup confirmation observed for scenario {scenario}")
+        return
+
