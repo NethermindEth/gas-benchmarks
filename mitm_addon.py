@@ -633,7 +633,6 @@ def _produce_if_quiet(force: bool = False) -> None:
 def _monitor() -> None:
     while not _STOP:
         _produce_if_quiet(force=False)
-        time.sleep(0.2)
 
 
 # ---------------------------------------------------------------------------
