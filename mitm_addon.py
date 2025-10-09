@@ -13,7 +13,6 @@ import time
 import uuid
 from datetime import datetime
 from time import perf_counter
-from time import perf_counter
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
