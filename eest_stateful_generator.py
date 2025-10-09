@@ -285,6 +285,7 @@ def start_nethermind_container(chain: str, db_dir: Path, jwt_path: Path,
         "--TxPool.Size", "10000",
         "--TxPool.MaxTxSize", "null",
         "--Init.LogRules", "Consensus.Processing.ProcessingStats:Debug",
+        "--Blocks.SingleBlockImprovementOfSlot", "0.10",
     ]
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
