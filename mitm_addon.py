@@ -11,6 +11,8 @@ import shutil
 import threading
 import time
 import uuid
+from time import perf_counter
+from time import perf_counter
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -40,7 +42,7 @@ _ENGINE_PATH = _u.path or "/"
 _LOG_FILE = "/root/mitm_logs.log"
 
 # Quiet period before producing a block (seconds)
-QUIET_SECONDS: float = 0.2
+QUIET_SECONDS: float = 0.1
 
 # Synchronization / state
 _GROUP_LOCK = threading.Lock()
@@ -679,16 +681,16 @@ def _signal_cleanup_pause(scenario: str, stage: int, block_hash: Optional[str]) 
 def _control_watcher() -> None:
     while not _STOP:
         if _PAUSE_EVENT.is_set():
-            time.sleep(0.2)
+            time.sleep(0.05)
             continue
         if not _RESUME_FILE.exists():
-            time.sleep(0.2)
+            time.sleep(0.05)
             continue
         try:
             data = json.loads(_RESUME_FILE.read_text(encoding="utf-8"))
         except Exception as e:
             _log(f"resume read failed: {e}")
-            time.sleep(0.5)
+            time.sleep(0.05)
             continue
         token = data.get("token")
         scenario = data.get("scenario")
@@ -705,14 +707,14 @@ def _control_watcher() -> None:
                     pass
             else:
                 _log(f"resume ignored token={token} scenario={scenario}")
-        time.sleep(0.2)
+        time.sleep(0.05)
 
 
 def _wait_for_resume() -> None:
-    while not _PAUSE_EVENT.wait(timeout=0.2):
+    while not _PAUSE_EVENT.wait(timeout=0.05):
         if _STOP:
             return
-        time.sleep(0.1)
+        time.sleep(0.02)
 
 
 def load(loader) -> None:
@@ -918,10 +920,12 @@ def serverdisconnect(con) -> None:
 
 
 def request(flow: http.HTTPFlow) -> None:
+    start_time = perf_counter()
     _wait_for_resume()
 
     try:
         hdrs = {k: str(v) for k, v in flow.request.headers.items()}
+        start_parse = perf_counter()
         try:
             body_text = flow.request.get_text("utf-8")
         except Exception:
@@ -936,11 +940,15 @@ def request(flow: http.HTTPFlow) -> None:
         _log(f"REQ log error: {e}")
 
     if flow.request.method.upper() != "POST":
+        duration = perf_counter() - start_time
+        _log(f"REQ non-POST handled in {duration:.4f}s")
         return
 
     try:
         req_obj = json.loads(body_text)
     except Exception:
+        duration = perf_counter() - start_time
+        _log(f"REQ parse error after {duration:.4f}s")
         return
 
     pending = globals().get("_PENDING_OVERLAY")
@@ -979,6 +987,7 @@ def request(flow: http.HTTPFlow) -> None:
 
 
 def response(flow: http.HTTPFlow) -> None:
+    start_time = perf_counter()
     try:
         hdrs = {k: str(v) for k, v in flow.response.headers.items()}
         try:
@@ -1003,6 +1012,8 @@ def response(flow: http.HTTPFlow) -> None:
         )
 
     if flow.request.method.upper() != "POST":
+        duration = perf_counter() - start_time
+        _log(f"RESP non-POST handled in {duration:.4f}s")
         return
 
     try:
