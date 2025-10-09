@@ -224,15 +224,6 @@ for idx, name in scenario_entries:
 scenario_entries = deduped_entries
 
 
-added = set()
-scenario_entries = []
-for idx, name in scenario_order:
-    key = (idx, name)
-    if key in added:
-        continue
-    added.add(key)
-    scenario_entries.append((idx, name))
-
 def resolve_path(phase, idx, name):
     candidates = []
     if isinstance(idx, int):
@@ -311,14 +302,14 @@ restart_client_containers() {
   local env_file="$compose_dir/.env"
 
   if [ ! -f "$compose_file" ]; then
-    echo "⚠️  Compose file not found for $client_base" >&2
+    echo "âš ď¸Ź  Compose file not found for $client_base" >&2
     return 1
   fi
 
   if [ -f "$env_file" ]; then
     if ! docker compose -f "$compose_file" --env-file "$env_file" restart >/dev/null 2>&1; then
       if ! docker compose -f "$compose_file" --env-file "$env_file" restart; then
-        echo "❌ Failed to restart services for $client_base" >&2
+        echo "âťŚ Failed to restart services for $client_base" >&2
         return 1
       fi
     fi
@@ -326,7 +317,7 @@ restart_client_containers() {
     if ! (
       cd "$compose_dir" && docker compose restart
     ); then
-      echo "❌ Failed to restart services for $client_base" >&2
+      echo "âťŚ Failed to restart services for $client_base" >&2
       return 1
     fi
   fi
@@ -384,7 +375,7 @@ append_tests_for_path() {
     return
   fi
 
-  echo "⚠️  Test path not found: $base_path" >&2
+  echo "âš ď¸Ź  Test path not found: $base_path" >&2
 }
 
 is_mounted() {
@@ -422,7 +413,7 @@ prepare_overlay_for_client() {
   fi
 
   if [ -z "$lower" ]; then
-    echo "❌ Unable to locate snapshot directory for $client under $snapshot_root" >&2
+    echo "âťŚ Unable to locate snapshot directory for $client under $snapshot_root" >&2
     return 1
   fi
 
@@ -450,7 +441,7 @@ prepare_overlay_for_client() {
       if command -v sudo >/dev/null 2>&1; then
         sudo umount "$merged"
       else
-        echo "❌ Failed to unmount previous overlay for $client" >&2
+        echo "âťŚ Failed to unmount previous overlay for $client" >&2
         return 1
       fi
     fi
@@ -468,7 +459,7 @@ prepare_overlay_for_client() {
     if command -v sudo >/dev/null 2>&1; then
       sudo mount -t overlay overlay -o "$mount_opts" "$merged"
     else
-      echo "❌ Failed to mount overlay for $client (need elevated permissions)" >&2
+      echo "âťŚ Failed to mount overlay for $client (need elevated permissions)" >&2
       return 1
     fi
   fi
@@ -628,11 +619,11 @@ done
 # Fallback to legacy -t/-g if -T not provided
 if [ -z "$TEST_PATHS_JSON" ]; then
   if [ -z "$LEGACY_TEST_PATH" ]; then
-    echo "❌ You must provide either -T <json> or -t <test_path>"
+    echo "âťŚ You must provide either -T <json> or -t <test_path>"
     exit 1
   fi
 
-  echo "⚠️  Falling back to legacy mode with -t and -g"
+  echo "âš ď¸Ź  Falling back to legacy mode with -t and -g"
   if [ -n "$LEGACY_GENESIS_PATH" ]; then
     TEST_PATHS_JSON="[ {\"path\": \"$LEGACY_TEST_PATH\", \"genesis\": \"$LEGACY_GENESIS_PATH\"} ]"
   else
@@ -766,12 +757,12 @@ for run in $(seq 1 $RUNS); do
     if [ "$USE_OVERLAY" = true ]; then
       snapshot_root_for_client=$(resolve_snapshot_root_for_client "$client_base" "$NETWORK")
       if [ -z "$snapshot_root_for_client" ]; then
-        echo "❌ Snapshot root not specified for $client" >&2
+        echo "âťŚ Snapshot root not specified for $client" >&2
         cleanup_overlay_for_client "$client_base"
         continue
       fi
       data_dir=$(prepare_overlay_for_client "$client_base" "$NETWORK" "$snapshot_root_for_client") || {
-        echo "❌ Skipping $client - overlay setup failed" >&2
+        echo "âťŚ Skipping $client - overlay setup failed" >&2
         cleanup_overlay_for_client "$client_base"
         continue
       }
@@ -847,7 +838,7 @@ for run in $(seq 1 $RUNS); do
 
       if [ "$RESTART_BEFORE_TESTING" = true ]; then
         if ! restart_client_containers "$client_base"; then
-          echo "⚠️  Skipping $filename for $client - restart failed" >&2
+          echo "âš ď¸Ź  Skipping $filename for $client - restart failed" >&2
           continue
         fi
       fi
