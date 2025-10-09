@@ -642,7 +642,22 @@ for i in $(seq 0 $((count - 1))); do
 done
 
 IFS=',' read -ra CLIENT_ARRAY <<< "$CLIENTS"
-IFS=',' read -ra FILTERS <<< "$FILTER"
+IFS=',' read -ra RAW_FILTERS <<< "$FILTER"
+FILTERS=()
+for raw_filter in "${RAW_FILTERS[@]}"; do
+  trimmed="${raw_filter#"${raw_filter%%[![:space:]]*}"}"
+  trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+  if [ -n "$trimmed" ]; then
+    FILTERS+=("$trimmed")
+  fi
+done
+
+FILTER_ACTIVE=false
+if [ "${#FILTERS[@]}" -gt 0 ]; then
+  FILTER_ACTIVE=true
+fi
+declare -A SCENARIO_FILTER_CACHE=()
+declare -A SCENARIO_SKIP_LOGGED=()
 
 trap cleanup_on_exit EXIT INT TERM
 
@@ -802,6 +817,7 @@ for run in $(seq 1 $RUNS); do
 
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
+      normalized_path="${test_file//\\/\/}"
       filename="${test_file##*/}"
       if is_measured_file "$test_file"; then
         measured=true
@@ -809,21 +825,35 @@ for run in $(seq 1 $RUNS); do
         measured=false
       fi
 
-      if [ "$measured" = true ] && [ -n "$FILTER" ]; then
-        match=false
-        filename_lc="${filename,,}"  # Convert filename to lowercase once
+      apply_filter=false
+      if [ "$FILTER_ACTIVE" = true ]; then
+        if [ "$measured" = true ] || [[ "$normalized_path" == */setup/* ]] || [[ "$normalized_path" == */cleanup/* ]]; then
+          apply_filter=true
+        fi
+      fi
 
-        for pat in "${FILTERS[@]}"; do
-          pat_lc="${pat,,}"  # Convert filter pattern to lowercase
+      if [ "$apply_filter" = true ]; then
+        scenario_key="${filename,,}"
+        match="${SCENARIO_FILTER_CACHE[$scenario_key]}"
 
-          if [[ "$filename_lc" == *"$pat_lc"* ]]; then
-            match=true
-            break
+        if [ -z "$match" ]; then
+          match=0
+          for pat in "${FILTERS[@]}"; do
+            pat_lc="${pat,,}"
+
+            if [[ "$scenario_key" == *"$pat_lc"* ]]; then
+              match=1
+              break
+            fi
+          done
+          SCENARIO_FILTER_CACHE["$scenario_key"]="$match"
+        fi
+
+        if [ "$match" -ne 1 ]; then
+          if [ -z "${SCENARIO_SKIP_LOGGED[$scenario_key]}" ]; then
+            echo "Skipping scenario $filename (does not match case-insensitive filter)"
+            SCENARIO_SKIP_LOGGED["$scenario_key"]=1
           fi
-        done
-
-        if [ "$match" != true ]; then
-          echo "Skipping $filename (does not match case-insensitive filter)"
           continue
         fi
       fi
