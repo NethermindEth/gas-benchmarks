@@ -317,8 +317,6 @@ def main():
     # Start client
     run_command(client, run_path)
 
-    time.sleep(60)
-
 
 if __name__ == "__main__":
     main()

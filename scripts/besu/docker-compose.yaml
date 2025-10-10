@@ -42,6 +42,7 @@ services:
       - --host-allowlist=*
       - --p2p-enabled=false
       - --max-peers=0
+      - --required-block=22899395=0xe452e5d4fc649919d484db11736a923e9d5ff424eb46cde36fcf19d827bf3d65
     logging:
       driver: json-file
       options:
