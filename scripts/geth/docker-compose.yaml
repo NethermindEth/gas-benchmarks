@@ -60,7 +60,7 @@ services:
       - --authrpc.vhosts=*
       - --metrics
       - --metrics.port=8008
-      - --verbosity=5
+      - --verbosity=3
     logging:
       driver: json-file
       options:
@@ -81,4 +81,3 @@ services:
 networks:
   gas:
     name: gas-network
-    internal: true
