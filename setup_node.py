@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+import time
 from typing import Any, Dict, Optional
 
 import yaml
@@ -315,6 +316,8 @@ def main():
 
     # Start client
     run_command(client, run_path)
+
+    time.sleep(60)
 
 
 if __name__ == "__main__":
