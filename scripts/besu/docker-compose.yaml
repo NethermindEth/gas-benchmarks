@@ -40,7 +40,8 @@ services:
       - --rpc-http-api=${EC_ENABLED_MODULES}
       - --rpc-http-cors-origins=*
       - --host-allowlist=*
-      - --p2p-enabled=true
+      - --p2p-enabled=false
+      - --sync-mode=FULL
       - --max-peers=0
       - --discovery-enabled=false
     logging:
