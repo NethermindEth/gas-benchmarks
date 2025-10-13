@@ -392,11 +392,7 @@ prepare_overlay_for_client() {
   local lower=""
 
   if dir_has_content "$snapshot_root"; then
-    if [ ! -d "$snapshot_root/$client" ]; then
-      if [ -z "$network" ] || [ ! -d "$snapshot_root/$network" ]; then
-        lower="$snapshot_root"
-      fi
-    fi
+    lower="$snapshot_root"
   fi
 
   if [ -z "$lower" ] && [ -n "$network" ] && dir_has_content "$snapshot_root/$network/$client"; then
@@ -478,10 +474,40 @@ cleanup_overlay_for_client() {
   local work="${ACTIVE_OVERLAY_WORKS[$client]}"
 
   if [ -n "$merged" ] && is_mounted "$merged"; then
+    # Try regular unmount first
     if ! umount "$merged" 2>/dev/null; then
       if command -v sudo >/dev/null 2>&1; then
-        sudo umount "$merged"
+        sudo umount "$merged" >/dev/null 2>&1 || sudo umount "$merged"
       fi
+    fi
+
+    # Fallback to lazy unmount if still mounted
+    if is_mounted "$merged"; then
+      if ! umount -l "$merged" 2>/dev/null; then
+        if command -v sudo >/dev/null 2>&1; then
+          sudo umount -l "$merged" >/dev/null 2>&1 || sudo umount -l "$merged"
+        fi
+      fi
+    fi
+
+    # As a last resort, kill lingering processes and try again
+    if is_mounted "$merged" && command -v fuser >/dev/null 2>&1; then
+      fuser -km "$merged" >/dev/null 2>&1 || true
+      if is_mounted "$merged" && command -v sudo >/dev/null 2>&1; then
+        sudo fuser -km "$merged" >/dev/null 2>&1 || true
+      fi
+      sleep 1
+      if is_mounted "$merged"; then
+        umount "$merged" 2>/dev/null || true
+        if is_mounted "$merged" && command -v sudo >/dev/null 2>&1; then
+          sudo umount "$merged" >/dev/null 2>&1 || true
+        fi
+      fi
+    fi
+
+    if is_mounted "$merged"; then
+      echo "⚠️  Unable to unmount overlay for $client ($merged); leaving mount in place" >&2
+      return
     fi
   fi
 
