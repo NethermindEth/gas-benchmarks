@@ -47,6 +47,25 @@ parse_bool() {
   esac
 }
 
+sanitize_label() {
+  local value="${1:-}"
+  if [ -z "$value" ]; then
+    echo "none"
+    return
+  fi
+  local lowered
+  lowered=$(echo "$value" | tr '[:upper:]' '[:lower:]')
+  lowered="${lowered// /_}"
+  lowered="${lowered//[^a-z0-9._-]/_}"
+  # Collapse multiple underscores
+  lowered=$(echo "$lowered" | sed 's/_\+/_/g;s/^_//;s/_$//')
+  if [ -z "$lowered" ]; then
+    echo "none"
+  else
+    echo "$lowered"
+  fi
+}
+
 # Timing variables
 declare -A STEP_TIMES
 SCRIPT_START_TIME=$(date +%s.%N)
