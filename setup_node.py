@@ -63,8 +63,9 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
                 "network": lambda net: f"--{net.lower()}",
             },
             {
-                "env": "GETH_INIT_COMMAND",
-                "custom": "geth init --datadir=/var/lib/goethereum /tmp/genesis/genesis.json",
+                "env": "GETH_INIT_COMMAND",                
+                #"custom": "geth init --datadir=/var/lib/goethereum /tmp/genesis/genesis.json",
+                "custom": "",
                 "network": "true",
             },
         ],
