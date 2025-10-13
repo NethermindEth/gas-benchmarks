@@ -40,7 +40,7 @@ services:
       - --rpc-http-api=${EC_ENABLED_MODULES}
       - --rpc-http-cors-origins=*
       - --host-allowlist=*
-      - --p2p-enabled=false
+      - --p2p-enabled=true
       - --max-peers=0
       - --required-block=22923350=0x50acf6316948b24d94266a452d1856f7189f5b62a48c4b91c414ab1ef702d0c5
       - --logging=TRACE
