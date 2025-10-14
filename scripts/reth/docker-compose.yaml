@@ -38,7 +38,7 @@ services:
     command:
       - node
       - --datadir=/var/lib/reth
-      - ${RETH_CHAIN_ARG}
+      #- ${RETH_CHAIN_ARG}
       - --http
       - --http.addr=0.0.0.0
       - --http.api=web3,eth,net
