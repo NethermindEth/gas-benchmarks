@@ -25,7 +25,7 @@ services:
       - gas
     volumes:
       - ${EC_DATA_DIR}:/var/lib/reth
-      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+      #- ${GENESIS_PATH}:/tmp/genesis/genesis.json
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
       - "8008:8008/tcp"
@@ -37,6 +37,7 @@ services:
       - 8551
     command:
       - node
+      - --full
       - --datadir=/var/lib/reth
       #- ${RETH_CHAIN_ARG}
       - --http
