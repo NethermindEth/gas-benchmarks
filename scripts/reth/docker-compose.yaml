@@ -23,6 +23,8 @@ services:
     pull_policy: always
     networks:
       - gas
+    environment:
+      RUST_LOG: trace
     volumes:
       - ${EC_DATA_DIR}:/var/lib/reth
       #- ${GENESIS_PATH}:/tmp/genesis/genesis.json
