@@ -194,36 +194,39 @@ if order_file.is_file():
             seen_names.add(name)
             scenario_entries.append((idx, name))
 
+testing_dir = root / "testing"
+subdirs = []
+if testing_dir.is_dir():
+    subdirs = [p for p in sorted(testing_dir.iterdir()) if p.is_dir()]
+
+if subdirs:
+    scenario_entries = []
+    for scen_dir in subdirs:
+        txt_files = sorted(scen_dir.glob("*.txt"))
+        if not txt_files:
+            continue
+        try:
+            idx_value = int(scen_dir.name)
+        except ValueError:
+            idx_value = None
+        for txt in txt_files:
+            scenario_entries.append((idx_value, txt.stem))
+
 if not scenario_entries:
-    testing_dir = root / "testing"
+    names = []
     if testing_dir.is_dir():
-        subdirs = [p for p in sorted(testing_dir.iterdir()) if p.is_dir()]
-        if subdirs:
-            for scen_dir in subdirs:
-                txt_files = sorted(scen_dir.glob("*.txt"))
-                if not txt_files:
-                    continue
-                try:
-                    idx_value = int(scen_dir.name)
-                except ValueError:
-                    idx_value = None
-                for txt in txt_files:
-                    scenario_entries.append((idx_value, txt.stem))
-    if not scenario_entries:
-        names = []
-        if testing_dir.is_dir():
-            names = [file.stem for file in sorted(testing_dir.glob("*.txt"))]
-        if not names:
-            phases = ("setup", "testing", "cleanup")
-            name_set = set()
-            for phase in phases:
-                phase_dir = root / phase
-                if not phase_dir.is_dir():
-                    continue
-                for file in sorted(phase_dir.glob("*.txt")):
-                    name_set.add(file.stem)
-            names = sorted(name_set)
-        scenario_entries = [(None, name) for name in names]
+        names = [file.stem for file in sorted(testing_dir.glob("*.txt"))]
+    if not names:
+        phases = ("setup", "testing", "cleanup")
+        name_set = set()
+        for phase in phases:
+            phase_dir = root / phase
+            if not phase_dir.is_dir():
+                continue
+            for file in sorted(phase_dir.glob("*.txt")):
+                name_set.add(file.stem)
+        names = sorted(name_set)
+    scenario_entries = [(None, name) for name in names]
 
 deduped_entries = []
 seen = set()
