@@ -215,7 +215,7 @@ if subdirs:
 if not scenario_entries:
     names = []
     if testing_dir.is_dir():
-        names = [file.stem for file in sorted(testing_dir.glob("*.txt"))]
+        names = [file.stem for file in sorted(testing_dir.rglob("*.txt"))]
     if not names:
         phases = ("setup", "testing", "cleanup")
         name_set = set()
@@ -223,7 +223,7 @@ if not scenario_entries:
             phase_dir = root / phase
             if not phase_dir.is_dir():
                 continue
-            for file in sorted(phase_dir.glob("*.txt")):
+            for file in sorted(phase_dir.rglob("*.txt")):
                 name_set.add(file.stem)
         names = sorted(name_set)
     scenario_entries = [(None, name) for name in names]
