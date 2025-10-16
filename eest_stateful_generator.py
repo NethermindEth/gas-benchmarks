@@ -35,6 +35,14 @@ CLEANUP = {
     "mitm": None,
 }
 
+def _parse_bool(value: str) -> bool:
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
+
 def run(cmd, cwd=None, env=None, check=True):
     print("\n[RUN] " + " ".join(cmd))
     return subprocess.run(cmd, cwd=cwd, env=env, check=check)
@@ -444,6 +452,12 @@ def main():
         default="nethermindeth/nethermind:gp-hacked",
         help="Docker image to use when launching the Nethermind container.",
     )
+    parser.add_argument(
+        "--overlay-reorgs",
+        type=_parse_bool,
+        default=True,
+        help="Enable per-scenario overlay + container restarts (true/false, default true).",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
@@ -503,10 +517,20 @@ def main():
     primary_work   = Path("overlay-work")
     CLEANUP["primary_merged"], CLEANUP["primary_upper"], CLEANUP["primary_work"] = primary_merged, primary_upper, primary_work
 
-    scenario_merged = Path("overlay-scenario-merged")
-    scenario_upper  = Path("overlay-scenario-upper")
-    scenario_work   = Path("overlay-scenario-work")
-    CLEANUP["scenario_merged"], CLEANUP["scenario_upper"], CLEANUP["scenario_work"] = scenario_merged, scenario_upper, scenario_work
+    overlay_reorgs_enabled = args.overlay_reorgs
+
+    if overlay_reorgs_enabled:
+        scenario_merged = Path("overlay-scenario-merged")
+        scenario_upper  = Path("overlay-scenario-upper")
+        scenario_work   = Path("overlay-scenario-work")
+        CLEANUP["scenario_merged"], CLEANUP["scenario_upper"], CLEANUP["scenario_work"] = (
+            scenario_merged,
+            scenario_upper,
+            scenario_work,
+        )
+    else:
+        scenario_merged = scenario_upper = scenario_work = None
+        CLEANUP["scenario_merged"] = CLEANUP["scenario_upper"] = CLEANUP["scenario_work"] = None
 
     stop_and_remove_container("eest-nethermind")
     ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
@@ -558,6 +582,8 @@ def main():
 
     def prepare_scenario_overlay() -> None:
         nonlocal scenario_overlay_ready
+        if not overlay_reorgs_enabled:
+            return
         if scenario_overlay_ready:
             try: unmount_overlay(scenario_merged)
             except Exception:
@@ -653,6 +679,21 @@ def main():
             stage = payload.get("stage")
             block_hash = payload.get("blockHash")
             print(f"[STATE] Pause requested: scenario={scenario_name} stage={stage} token={token} block={block_hash}")
+
+            if not overlay_reorgs_enabled:
+                print("[INFO] Overlay reorgs disabled; skipping scenario overlay and node restart.")
+                try:
+                    resume_file.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                _write_resume_signal(resume_file, token, scenario_name)
+                if not _wait_for_resume_consumed(resume_file, timeout=300.0):
+                    print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
+                else:
+                    print(f"[STATE] Resume acknowledged for scenario {scenario_name} token={token}")
+                processed_tokens.add(token)
+                return
+
             try:
                 stop_and_remove_container(container_name)
             except Exception:
@@ -721,19 +762,21 @@ def main():
             except Exception:
                 pass
             stop_and_remove_container(container_name)
-            try:
-                unmount_overlay(scenario_merged)
-            except Exception:
-                pass
+            if overlay_reorgs_enabled and scenario_merged is not None:
+                try:
+                    unmount_overlay(scenario_merged)
+                except Exception:
+                    pass
             try:
                 unmount_overlay(primary_merged)
             except Exception:
                 pass
-            for path in (
-                scenario_upper, scenario_work, scenario_merged,
-                primary_upper, primary_work, primary_merged,
-            ):
-                shutil.rmtree(path, ignore_errors=True)
+            cleanup_paths = [primary_upper, primary_work, primary_merged]
+            if overlay_reorgs_enabled:
+                cleanup_paths.extend([scenario_upper, scenario_work, scenario_merged])
+            for path in cleanup_paths:
+                if path:
+                    shutil.rmtree(path, ignore_errors=True)
         print("Done.")
 
 if __name__ == "__main__":
