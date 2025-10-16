@@ -347,24 +347,16 @@ def _ensure_dirs_and_cleanup_old() -> None:
     _SETUP_DIR.mkdir(parents=True, exist_ok=True)
     _TESTING_DIR.mkdir(parents=True, exist_ok=True)
     _CLEANUP_DIR.mkdir(parents=True, exist_ok=True)
-    # Remove any old subdirectories inside payloads/ except the three canonical dirs
-    for p in _PAYLOADS_DIR.iterdir():
-        if p.is_dir() and p.name not in {"setup", "testing", "cleanup"}:
-            try:
-                shutil.rmtree(p)
-                _log(f"removed old payloads subdir: {p}")
-            except Exception as e:
-                _log(f"failed to remove old subdir {p}: {e}")
-    # Flatten legacy numeric subdirectories within setup/testing/cleanup
+    # Remove stray files directly under phase directories (legacy layout)
     for phase_dir in (_SETUP_DIR, _TESTING_DIR, _CLEANUP_DIR):
         try:
             for child in phase_dir.iterdir():
-                if child.is_dir():
+                if child.is_file() and child.suffix == ".txt":
                     try:
-                        shutil.rmtree(child)
-                        _log(f"removed legacy scenario directory: {child}")
+                        child.unlink()
+                        _log(f"removed legacy top-level payload file: {child}")
                     except Exception as exc:
-                        _log(f"failed to remove legacy scenario dir {child}: {exc}")
+                        _log(f"failed to remove legacy payload file {child}: {exc}")
         except Exception:
             pass
 

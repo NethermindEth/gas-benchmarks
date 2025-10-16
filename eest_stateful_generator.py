@@ -128,40 +128,6 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
             except Exception:
                 pass
 
-def _renumber_scenarios(payload_dir: Path) -> None:
-    testing_dir = payload_dir / "testing"
-    if not testing_dir.is_dir():
-        return
-
-    if any(item.is_dir() for item in testing_dir.iterdir()):
-        return
-
-    scenario_files = sorted(
-        testing_dir.glob("*.txt"),
-        key=lambda path: (path.stat().st_mtime, path.name),
-    )
-    if not scenario_files:
-        return
-
-    scenario_order = {file.stem: f"{idx:06d}" for idx, file in enumerate(scenario_files, start=1)}
-
-    for phase in ("setup", "testing", "cleanup"):
-        phase_dir = payload_dir / phase
-        if not phase_dir.is_dir():
-            continue
-        for file in sorted(phase_dir.glob("*.txt")):
-            dir_name = scenario_order.get(file.stem)
-            if not dir_name:
-                continue
-            target_dir = phase_dir / dir_name
-            target_dir.mkdir(parents=True, exist_ok=True)
-            target_path = target_dir / file.name
-            if target_path.exists():
-                target_path.unlink()
-            try:
-                file.rename(target_path)
-            except Exception:
-                pass
 
 # --------------------------------------------------------------------------------
 
@@ -807,7 +773,6 @@ def main():
             raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:
             _append_suffix_to_scenarios(payloads_dir, gas_values[0])
-        _renumber_scenarios(payloads_dir)
     finally:
         if not args.keep:
             try:
