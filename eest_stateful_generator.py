@@ -136,7 +136,10 @@ def _renumber_scenarios(payload_dir: Path) -> None:
     if any(item.is_dir() for item in testing_dir.iterdir()):
         return
 
-    scenario_files = sorted(testing_dir.glob("*.txt"))
+    scenario_files = sorted(
+        testing_dir.glob("*.txt"),
+        key=lambda path: (path.stat().st_mtime, path.name),
+    )
     if not scenario_files:
         return
 
