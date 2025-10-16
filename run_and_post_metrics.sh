@@ -31,6 +31,30 @@ DEBUG_FILE=""
 declare -A STEP_TIMES
 SCRIPT_START_TIME=$(date +%s.%N)
 
+# Cleanup function
+cleanup() {
+  debug_log "Script cleanup initiated"
+  
+  # Stop and delete the gas-execution-client container
+  if docker ps -a --format "table {{.Names}}" | grep -q "gas-execution-client"; then
+    debug_log "Stopping gas-execution-client container..."
+    docker stop gas-execution-client 2>/dev/null || true
+    debug_log "Removing gas-execution-client container..."
+    docker rm gas-execution-client 2>/dev/null || true
+  else
+    debug_log "gas-execution-client container not found"
+  fi
+  
+  # Remove script/*/execution-data folders
+  debug_log "Removing script/*/execution-data folders..."
+  find scripts/ -type d -name "execution-data" -exec rm -r {} + 2>/dev/null || true
+  
+  debug_log "Script cleanup completed"
+}
+
+# Set up signal handlers for cleanup
+trap cleanup EXIT INT TERM
+
 # Debug logging function
 debug_log() {
   if [ "$DEBUG" = true ]; then
@@ -87,6 +111,8 @@ print_timing_summary() {
     fi
   fi
 }
+
+
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
