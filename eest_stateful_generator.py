@@ -458,6 +458,11 @@ def main():
         default=True,
         help="Enable per-scenario overlay + container restarts (true/false, default true).",
     )
+    parser.add_argument(
+        "--eest-branch",
+        default="main",
+        help="Git branch of execution-spec-tests to checkout before running (default: main).",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
@@ -489,8 +494,20 @@ def main():
 
 
     repo_dir = Path("execution-spec-tests")
-    if not repo_dir.exists():
-        run(["git", "clone", "https://github.com/ethereum/execution-spec-tests", str(repo_dir)])
+    if repo_dir.exists():
+        run(["git", "fetch", "origin"], cwd=str(repo_dir))
+        run(["git", "checkout", args.eest_branch], cwd=str(repo_dir))
+        run(["git", "pull", "origin", args.eest_branch], cwd=str(repo_dir))
+    else:
+        run([
+            "git",
+            "clone",
+            "--branch",
+            args.eest_branch,
+            "--single-branch",
+            "https://github.com/ethereum/execution-spec-tests",
+            str(repo_dir),
+        ])
     if not check_cmd_exists("uv"):
         run([sys.executable, "-m", "pip", "install", "-U", "uv"])
     run(["uv", "python", "install", "3.11"])
