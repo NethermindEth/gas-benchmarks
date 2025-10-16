@@ -202,13 +202,22 @@ if testing_dir.is_dir():
 if subdirs:
     scenario_entries = []
     for scen_dir in subdirs:
-        txt_files = sorted(scen_dir.glob("*.txt"))
-        if not txt_files:
-            continue
         try:
             idx_value = int(scen_dir.name)
         except ValueError:
             idx_value = None
+        txt_files = sorted(scen_dir.glob("*.txt"))
+        if not txt_files:
+            # Fall back to setup/cleanup directories sharing the same index.
+            for phase in ("setup", "cleanup"):
+                phase_dir = root / phase / scen_dir.name
+                if phase_dir.is_dir():
+                    txt_files = sorted(phase_dir.glob("*.txt"))
+                    if txt_files:
+                        break
+        if not txt_files:
+            # No files found for this scenario yet, skip but preserve ordering gap.
+            continue
         for txt in txt_files:
             scenario_entries.append((idx_value, txt.stem))
 
