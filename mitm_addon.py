@@ -122,9 +122,11 @@ def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
     base = _PHASE_BASE_DIRS.get(phase.lower())
     if base is None:
         raise ValueError(f"unknown phase '{phase}'")
-    _register_scenario(scenario)
+    idx = _register_scenario(scenario)
     base.mkdir(parents=True, exist_ok=True)
-    return base / f"{scenario}.txt"
+    scenario_dir = base / f"{idx:06d}"
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+    return scenario_dir / f"{scenario}.txt"
 
 
 _SCENARIO_ORDER_FILE_RAW = _CFG.get("scenario_order_file")

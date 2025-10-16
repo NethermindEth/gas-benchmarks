@@ -113,7 +113,7 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
         phase_dir = payload_dir / phase
         if not phase_dir.is_dir():
             continue
-        for path in sorted(phase_dir.glob("*.txt")):
+        for path in sorted(phase_dir.glob("**/*.txt")):
             stem = path.stem
             if stem.endswith(f"_{suffix}") or "gas-value" in stem:
                 continue
