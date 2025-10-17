@@ -460,6 +460,11 @@ def main():
         help="Enable per-scenario overlay + container restarts (true/false, default true).",
     )
     parser.add_argument(
+        "--eest-repo",
+        default="https://github.com/ethereum/execution-spec-tests",
+        help="Git repository URL for execution-spec-tests (supports forks).",
+    )
+    parser.add_argument(
         "--eest-branch",
         default="main",
         help="Git branch of execution-spec-tests to checkout before running (default: main).",
@@ -495,7 +500,9 @@ def main():
 
 
     repo_dir = Path("execution-spec-tests")
+    repo_url = args.eest_repo
     if repo_dir.exists():
+        run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
         run(["git", "fetch", "origin"], cwd=str(repo_dir))
         run(["git", "checkout", args.eest_branch], cwd=str(repo_dir))
         run(["git", "pull", "origin", args.eest_branch], cwd=str(repo_dir))
@@ -506,7 +513,7 @@ def main():
             "--branch",
             args.eest_branch,
             "--single-branch",
-            "https://github.com/ethereum/execution-spec-tests",
+            repo_url,
             str(repo_dir),
         ])
     if not check_cmd_exists("uv"):

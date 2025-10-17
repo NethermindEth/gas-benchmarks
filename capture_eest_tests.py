@@ -35,19 +35,31 @@ CACHE_FILE = "release_cache.json"
 SCENARIO_INDICES: Dict[str, int] = {}
 
 
-def fetch_latest_benchmark_release() -> dict:
+def fetch_benchmark_releases() -> list[dict]:
     resp = requests.get(GITHUB_API)
     resp.raise_for_status()
     releases = resp.json()
     bench = [r for r in releases if r.get("tag_name", "").startswith(BENCHMARK_PREFIX)]
-    if not bench:
+    return bench
+
+
+def select_release(tag: str | None) -> dict:
+    releases = fetch_benchmark_releases()
+    if not releases:
         raise RuntimeError("No benchmark releases found")
 
-    def verkey(r):
+    def verkey(r: dict) -> tuple[int, ...]:
         return tuple(int(x) for x in r["tag_name"].split("@v", 1)[1].split("."))
 
-    bench.sort(key=verkey, reverse=True)
-    return bench[0]
+    if tag:
+        for r in releases:
+            if r.get("tag_name") == tag:
+                return r
+        available = ", ".join(r.get("tag_name", "?") for r in releases)
+        raise RuntimeError(f"Benchmark release '{tag}' not found. Available: {available}")
+
+    releases.sort(key=verkey, reverse=True)
+    return releases[0]
 
 
 def download_asset(url: str, dest: Path) -> None:
@@ -198,6 +210,10 @@ def main() -> None:
         default=[],
         help="Comma-separated substrings or regexes to exclude (can repeat)",
     )
+    parser.add_argument(
+        "--release-tag",
+        help="Specific benchmark release tag (e.g. benchmark@v1.2.3). Uses latest if omitted.",
+    )
     args = parser.parse_args()
 
     flat_excludes: list[str] = []
@@ -214,9 +230,11 @@ def main() -> None:
         shutil.rmtree(args.output_dir)
     args.output_dir.mkdir(exist_ok=True)
 
-    release = fetch_latest_benchmark_release()
+    release = select_release(args.release_tag)
+    if args.release_tag:
+        print(f"Using benchmark release: {args.release_tag}")
     tag = release["tag_name"]
-    print(f"Latest benchmark release: {tag}")
+    print(f"Selected benchmark release: {tag}")
 
     cache_path = args.temp_dir / CACHE_FILE
     if load_cached_tag(cache_path) == tag:
