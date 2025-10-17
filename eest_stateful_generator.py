@@ -174,7 +174,7 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
     try:
-        for _ in range(301):
+        for _ in range(max(args.gas_bump_count, 1)):
             preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
@@ -452,6 +452,12 @@ def main():
         "--nethermind-image",
         default="nethermindeth/nethermind:gp-hacked",
         help="Docker image to use when launching the Nethermind container.",
+    )
+    parser.add_argument(
+        "--gas-bump-count",
+        type=int,
+        default=301,
+        help="Number of engine_getPayload iterations when generating gas-bump payload (default: 301).",
     )
     parser.add_argument(
         "--overlay-reorgs",
