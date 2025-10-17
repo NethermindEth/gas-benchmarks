@@ -682,6 +682,7 @@ def main():
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
             f"--gas-benchmark-values={args.gas_benchmark_values}",
+            "--tx-wait-timeout", "300",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             args.test_path,
             "--",
