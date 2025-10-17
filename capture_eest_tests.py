@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
 """
-Download the latest or prerelease "benchmark" fixtures from the Ethereum execution-spec-tests repo,
-cache the release metadata to avoid re-downloading the same version,
-extract each "engineNewPayloads" test scenario into a separate JSON-RPC payload file,
-and name them by test identifier with the gas-value token moved to the end.
-Supports filtering out tests by substring or regex via --exclude flags.
-Uses the repo's `utils/make_rpc.jq` for envelope construction.
+Download the latest benchmark fixtures from the execution-spec-tests repository,
+cache the release metadata to avoid repeat downloads, and emit JSON-RPC payload
+files following the stateful test directory layout:
+
+  <output>/
+    setup/000001/<scenario>.txt
+    testing/000001/<scenario>.txt
+    cleanup/000001/<scenario>.txt
+
+If a scenario produces multiple engine_newPayload calls, every payload except the
+last is written to the setup file (each as a newline-delimited JSON object) and
+the final payload is written to the testing and cleanup files. Single-payload
+scenarios are written only to testing/cleanup.
 """
+
+from __future__ import annotations
+
 import argparse
 import json
 import re
-import subprocess
-import tarfile
 import shutil
+import tarfile
 from pathlib import Path
+from typing import Dict, Iterable, Tuple
 
 import requests
 
@@ -21,6 +31,8 @@ GITHUB_API = "https://api.github.com/repos/ethereum/execution-spec-tests/release
 BENCHMARK_PREFIX = "benchmark@v"
 ASSET_NAME = "fixtures_benchmark.tar.gz"
 CACHE_FILE = "release_cache.json"
+
+SCENARIO_INDICES: Dict[str, int] = {}
 
 
 def fetch_latest_benchmark_release() -> dict:
@@ -32,145 +44,199 @@ def fetch_latest_benchmark_release() -> dict:
         raise RuntimeError("No benchmark releases found")
 
     def verkey(r):
-        return tuple(int(x) for x in r['tag_name'].split("@v", 1)[1].split('.'))
+        return tuple(int(x) for x in r["tag_name"].split("@v", 1)[1].split("."))
 
     bench.sort(key=verkey, reverse=True)
     return bench[0]
 
 
-def download_asset(url: str, dest: Path):
+def download_asset(url: str, dest: Path) -> None:
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
-        with open(dest, 'wb') as f:
+        with open(dest, "wb") as f:
             for chunk in r.iter_content(8192):
                 if chunk:
                     f.write(chunk)
 
 
-def extract_tarball(archive: Path, to: Path):
-    with tarfile.open(archive, 'r:gz') as tf:
+def extract_tarball(archive: Path, to: Path) -> None:
+    with tarfile.open(archive, "r:gz") as tf:
         tf.extractall(path=to)
 
 
-def normalize_name(raw: str) -> (str, str):
+def normalize_name(raw: str) -> Tuple[str, str]:
     m = re.search(r"-gas-value_[^\]-]+", raw)
     if m:
         tok = m.group(0)
-        base = raw.replace(tok, '', 1)
+        base = raw.replace(tok, "", 1)
         return base, tok
-    return raw, ''
+    return raw, ""
 
 
-def locate_utils_jq(utils_dir: Path) -> Path:
-    path = utils_dir / 'make_rpc.jq'
-    if not path.is_file():
-        raise FileNotFoundError(f"make_rpc.jq not found in {utils_dir}")
-    return path
+def safe_filename(name: str) -> str:
+    return re.sub(r'[<>:\\"/\\|?*]', "_", name)
 
 
-def should_exclude(raw: str, exclude_patterns: list[str]) -> bool:
-    """Return True if raw matches any of the exclude patterns (substring or regex)."""
+def assign_index(raw: str) -> int:
+    base, suffix = normalize_name(raw)
+    key = f"{base}{suffix}"
+    if key not in SCENARIO_INDICES:
+        SCENARIO_INDICES[key] = len(SCENARIO_INDICES) + 1
+    return SCENARIO_INDICES[key]
+
+
+def ensure_phase_dirs(base_dir: Path, index: int) -> Tuple[Path, Path, Path]:
+    dir_name = f"{index:06d}"
+    setup_dir = base_dir / "setup" / dir_name
+    testing_dir = base_dir / "testing" / dir_name
+    cleanup_dir = base_dir / "cleanup" / dir_name
+    for directory in (setup_dir, testing_dir, cleanup_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+    return setup_dir, testing_dir, cleanup_dir
+
+
+def should_exclude(raw: str, exclude_patterns: Iterable[str]) -> bool:
     for pat in exclude_patterns:
-        if pat in raw or re.search(pat, raw):
+        if pat and (pat in raw or re.search(pat, raw)):
             return True
     return False
 
 
-def process_fixture_dir(root: Path, outdir: Path, jq_filter: Path, excludes: list[str]):
-    for path in root.rglob('*.json'):
-        proc = subprocess.run([
-            'jq', '-c', '-f', str(jq_filter), str(path)
-        ], capture_output=True, text=True, check=True)
-        lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
-        if not lines:
-            continue
+def iter_cases(data, default_name: str) -> Iterable[Tuple[str, dict]]:
+    if isinstance(data, dict):
+        for name, case in data.items():
+            yield name, case
+    elif isinstance(data, list):
+        for i, case in enumerate(data):
+            name = case.get("name") or f"{default_name}_case_{i}"
+            yield name, case
 
-        data = json.loads(path.read_text())
-        if isinstance(data, dict):
-            items = list(data.items())
-        elif isinstance(data, list):
-            items = [(elt.get('name', f'case_{i}'), elt) for i, elt in enumerate(data)]
-        else:
-            continue
 
-        for (raw, _), line in zip(items, lines):
+def extract_new_payloads(case: dict) -> list[str]:
+    payloads = []
+    for entry in case.get("engineNewPayloads", []):
+        params = entry.get("params", [])
+        version = entry.get("newPayloadVersion") or "1"
+        method = f"engine_newPayloadV{version}"
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": method,
+            "params": params,
+        }
+        payloads.append(json.dumps(payload, separators=(",", ":")))
+    return payloads
+
+
+def write_payloads(
+    output_dir: Path,
+    scenario_name: str,
+    payload_lines: list[str],
+) -> None:
+    index = assign_index(scenario_name)
+    setup_dir, testing_dir, cleanup_dir = ensure_phase_dirs(output_dir, index)
+
+    base, suffix = normalize_name(scenario_name)
+    filename = safe_filename(f"{base}{suffix}.txt")
+
+    if len(payload_lines) > 1:
+        setup_path = setup_dir / filename
+        with setup_path.open("w", encoding="utf-8") as f:
+            for line in payload_lines[:-1]:
+                f.write(line + "\n")
+        print(f"→ Wrote setup payloads: {setup_path}")
+    else:
+        setup_path = setup_dir / filename
+        if setup_path.exists():
+            setup_path.unlink()
+
+    testing_path = testing_dir / filename
+    with testing_path.open("w", encoding="utf-8") as f:
+        f.write(payload_lines[-1] + "\n")
+    print(f"→ Wrote testing payload: {testing_path}")
+
+    cleanup_path = cleanup_dir / filename
+    with cleanup_path.open("w", encoding="utf-8") as f:
+        f.write(payload_lines[-1] + "\n")
+    print(f"→ Wrote cleanup payload: {cleanup_path}")
+
+
+def process_fixture_dir(root: Path, outdir: Path, excludes: list[str]) -> None:
+    for path in sorted(root.rglob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for raw, case in iter_cases(data, path.stem):
             if should_exclude(raw, excludes):
                 print(f"- Skipped: {raw}")
                 continue
 
-            base, suffix = normalize_name(raw)
-            fname = f"{base}{suffix}.txt"
-            safe = re.sub(r'[<>:\\"/\\|?*]', '_', fname)
-            outpath = outdir / safe
-            outdir.mkdir(parents=True, exist_ok=True)
-            with open(outpath, 'w', encoding='utf-8') as f:
-                f.write(line + '\n')
-            print(f"→ Wrote: {outpath}")
+            payload_lines = extract_new_payloads(case)
+            if not payload_lines:
+                continue
+
+            write_payloads(outdir, raw, payload_lines)
 
 
 def load_cached_tag(cache_path: Path) -> str:
     if cache_path.is_file():
         data = json.loads(cache_path.read_text())
-        return data.get('tag_name', '')
-    return ''
+        return data.get("tag_name", "")
+    return ""
 
 
-def save_cached_tag(cache_path: Path, tag: str):
-    cache_path.write_text(json.dumps({'tag_name': tag}), encoding='utf-8')
+def save_cached_tag(cache_path: Path, tag: str) -> None:
+    cache_path.write_text(json.dumps({"tag_name": tag}), encoding="utf-8")
 
 
-def main():
-    p = argparse.ArgumentParser("Generate RPC cases from benchmark fixtures")
-    p.add_argument('-o', '--output-dir', type=Path, default=Path.cwd() / 'rpc_cases')
-    p.add_argument('-t', '--temp-dir', type=Path, default=Path.cwd() / 'tmp')
-    p.add_argument('--utils-dir', type=Path, default=Path(__file__).parent / 'utils',
-                   help='Where to find make_rpc.jq')
-    p.add_argument(
-        '-x', '--exclude',
-        action='append',
+def main() -> None:
+    parser = argparse.ArgumentParser("Generate RPC cases from benchmark fixtures")
+    parser.add_argument("-o", "--output-dir", type=Path, default=Path.cwd() / "rpc_cases")
+    parser.add_argument("-t", "--temp-dir", type=Path, default=Path.cwd() / "tmp")
+    parser.add_argument(
+        "-x",
+        "--exclude",
+        action="append",
         default=[],
-        help='Comma-separated substrings or regexes to exclude (can repeat)')
-    args = p.parse_args()
+        help="Comma-separated substrings or regexes to exclude (can repeat)",
+    )
+    args = parser.parse_args()
 
-    # —— flatten & strip —— #
-    flat = []
+    flat_excludes: list[str] = []
     for chunk in args.exclude:
-        for pat in chunk.split(','):
-            pat = pat.strip()
-            if pat:
-                flat.append(pat)
-    args.exclude = flat
+        for pattern in chunk.split(","):
+            pattern = pattern.strip()
+            if pattern:
+                flat_excludes.append(pattern)
+    args.exclude = flat_excludes
     print(f"ℹ️ excluding patterns: {args.exclude}")
 
     args.temp_dir.mkdir(exist_ok=True)
     if args.output_dir.exists():
         shutil.rmtree(args.output_dir)
     args.output_dir.mkdir(exist_ok=True)
-    jq_filter = locate_utils_jq(args.utils_dir)
 
-    rel = fetch_latest_benchmark_release()
-    tag = rel['tag_name']
+    release = fetch_latest_benchmark_release()
+    tag = release["tag_name"]
     print(f"Latest benchmark release: {tag}")
 
     cache_path = args.temp_dir / CACHE_FILE
     if load_cached_tag(cache_path) == tag:
         print(f"Release {tag} already processed. Skipping download.")
     else:
-        asset = next((a for a in rel['assets'] if a['name'] == ASSET_NAME), None)
+        asset = next((a for a in release["assets"] if a["name"] == ASSET_NAME), None)
         if not asset:
             raise RuntimeError(f"Asset {ASSET_NAME} missing in release {tag}")
         archive = args.temp_dir / ASSET_NAME
         print(f"Downloading {ASSET_NAME}...")
-        download_asset(asset['browser_download_url'], archive)
+        download_asset(asset["browser_download_url"], archive)
         print(f"Extracting to {args.temp_dir}...")
         extract_tarball(archive, args.temp_dir)
         save_cached_tag(cache_path, tag)
 
-    bench_path = args.temp_dir / 'fixtures' / 'blockchain_tests_engine_x' / 'benchmark'
+    bench_path = args.temp_dir / "fixtures" / "blockchain_tests_engine_x" / "benchmark"
     if not bench_path.exists():
         raise RuntimeError(f"Cannot find fixtures at {bench_path}")
-    process_fixture_dir(bench_path, args.output_dir, jq_filter, args.exclude)
+    process_fixture_dir(bench_path, args.output_dir, args.exclude)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
