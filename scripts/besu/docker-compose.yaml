@@ -55,6 +55,10 @@ services:
     extends:
       file: ../addons/alloy/compose.yaml
       service: alloy
+  node-exporter:
+    extends:
+      file: ../addons/node-exporter/compose.yaml
+      service: node-exporter
 networks:
   gas:
     name: gas-network

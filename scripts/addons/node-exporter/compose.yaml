@@ -1,0 +1,20 @@
+services:
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    networks:
+      - gas
+    expose:
+      - 9100
+    ports:
+      - 127.0.0.1:9100:9100
+    volumes:
+      - "/:/host:ro,rslave"
+    command:
+      - "--path.rootfs=/host"
+      - "--web.listen-address=0.0.0.0:9100"
+    labels:
+      metrics_enabled: "true"
+      metrics_port: "9100"
+      logs_enabled: "false"
+      instance: "${GA_METRICS_LABELS_INSTANCE}"
