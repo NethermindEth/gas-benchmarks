@@ -56,12 +56,12 @@ services:
     labels:
       metrics_enabled: "true"
       metrics_port: "8008"
+      metrics_path: "/debug/metrics/prometheus"
       logs_enabled: "false"
       instance: "${GA_METRICS_LABELS_INSTANCE}"
   alloy:
     environment:
       METRICS_LABELS_EXECUTION_CLIENT: "reth"
-      METRICS_ENDPOINT_PATH: "/debug/metrics/prometheus"
     extends:
       file: ../addons/alloy/compose.yaml
       service: alloy

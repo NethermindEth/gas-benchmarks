@@ -16,5 +16,6 @@ services:
     labels:
       metrics_enabled: "true"
       metrics_port: "9100"
+      metrics_path: "/metrics"
       logs_enabled: "false"
       instance: "${GA_METRICS_LABELS_INSTANCE}"
