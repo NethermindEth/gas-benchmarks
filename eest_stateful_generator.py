@@ -365,6 +365,17 @@ def preparation_getpayload(engine_url: str, jwt_hex_path: Path, rpc_address: str
     # Send FCU
     _ = _engine_with_jwt(engine_url, jwt_hex_path, "engine_forkchoiceUpdatedV3", [fcs, None])
 
+    if rpc_address and isinstance(rpc_address, str) and rpc_address.upper() != "EMPTY":
+        try:
+            balance_hex = rpc_call("http://127.0.0.1:8545", "eth_getBalance", [rpc_address, "latest"])
+            if isinstance(balance_hex, str):
+                balance_wei = int(balance_hex, 16)
+                print(f"[INFO] Funding account {rpc_address} balance: {balance_wei} wei ({balance_hex})")
+            else:
+                print(f"[WARN] Unexpected eth_getBalance result for {rpc_address}: {balance_hex!r}")
+        except Exception as exc:
+            print(f"[WARN] Failed to read balance for {rpc_address}: {exc}")
+
     # Append NP + FCU requests as lines if requested
     if save_path is not None:
         np_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_newPayloadV4","params":[exec_payload, [], parent_hash, []]}
