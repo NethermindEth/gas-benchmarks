@@ -425,24 +425,38 @@ def populate_data_for_client(
                 raw_gas_value = row[1]
                 # raw_run_description is the last column if header > 2, otherwise it might be missing
                 raw_run_description = row[-1] if len(header) > 2 else None # Adjusted access
-                run_mgas_s_values_str = row[2:-1] if len(header) > 2 else [] # Adjusted access
+                run_duration_values_str = row[2:-1] if len(header) > 2 else [] # Adjusted access
 
                 agg_stats = aggregated_stats_map.get(test_case_name_raw, {})
 
-                if not run_mgas_s_values_str and len(header) == 2: # Handle case with only 'Test Case', 'Gas'
+                if not run_duration_values_str and len(header) == 2: # Handle case with only 'Test Case', 'Gas'
                      logging.debug(f"Row for '{test_case_name_raw}' seems to only have Test Case and Gas value, no individual runs. Skipping run processing.")
                      # Decide if you want to insert a record with just this minimal info
                      # For now, we expect run values to insert.
 
-                for run_value_str in run_mgas_s_values_str:
+                gas_value_float: Optional[float] = None
+                if raw_gas_value not in ("", None):
                     try:
-                        raw_run_mgas_s = float(run_value_str) if run_value_str.strip() else None
-                        if raw_run_mgas_s is None: # Explicitly skip if value was empty string or spaces
+                        gas_value_float = float(raw_gas_value)
+                    except ValueError:
+                        logging.warning(f"Could not convert gas value '{raw_gas_value}' to float for {test_case_name_raw}. Will keep raw string and skip per-run MGas/s calculation.")
+
+                for run_value_str in run_duration_values_str:
+                    try:
+                        raw_run_duration_ms = float(run_value_str) if run_value_str.strip() else None
+                        if raw_run_duration_ms is None: # Explicitly skip if value was empty string or spaces
                             logging.debug(f"Skipping empty run value for {test_case_name_raw}.")
                             continue
                     except ValueError:
                         logging.warning(f"Could not convert run value '{run_value_str}' to float for {test_case_name_raw}. Skipping this run.")
                         continue
+
+                    raw_run_mgas_s: Optional[float] = None
+                    if gas_value_float is not None:
+                        if raw_run_duration_ms > 0:
+                            raw_run_mgas_s = (gas_value_float / raw_run_duration_ms) * 1000.0
+                        else:
+                            logging.debug(f"Non-positive run duration ({raw_run_duration_ms}) for {test_case_name_raw}; cannot compute MGas/s.")
 
                     start_time = agg_stats.get('start_time')
                     if start_time in (0, "0", "", None):
@@ -459,6 +473,7 @@ def populate_data_for_client(
                         'n_samples': agg_stats.get('n_samples'),
                         'test_description': agg_stats.get('test_description'),
                         'raw_gas_value': raw_gas_value,
+                        'raw_run_duration_ms': raw_run_duration_ms,
                         'raw_run_mgas_s': raw_run_mgas_s,
                         'raw_run_description': raw_run_description, # This is from the raw data row
                         'start_time': start_time,
