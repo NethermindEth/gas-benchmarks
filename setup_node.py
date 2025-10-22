@@ -59,7 +59,6 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
             {
                 "env": "GETH_NETWORK_FLAG",
                 "custom": "--networkid=1337",
-                "custom": "",
                 "network": lambda net: f"--{net.lower()}",
             },
             {
