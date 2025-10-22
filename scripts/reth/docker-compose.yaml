@@ -1,30 +1,28 @@
 services:
-  #execution-sync:
-  #  container_name: gas-execution-client-sync
-  #  image: ${EC_IMAGE_VERSION}
-  #  pull_policy: always
-  #  networks:
-  #    - gas
-  #  volumes:
-  #    - ${EC_DATA_DIR}:/var/lib/reth
-  #    - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-  #  entrypoint:
-  #    - /bin/sh
-  #    - -c
-  #    - ${RETH_INIT_COMMAND}
+  execution-sync:
+    container_name: gas-execution-client-sync
+    image: ${EC_IMAGE_VERSION}
+    pull_policy: always
+    networks:
+      - gas
+    volumes:
+      - ${EC_DATA_DIR}:/var/lib/reth
+      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+    entrypoint:
+      - /bin/sh
+      - -c
+      - ${RETH_INIT_COMMAND}
   execution:
     stop_grace_period: 30m
     container_name: gas-execution-client
-    #depends_on:
-    #  execution-sync:
-    #    condition: service_completed_successfully
+    depends_on:
+      execution-sync:
+        condition: service_completed_successfully
     restart: unless-stopped
     image: ${EC_IMAGE_VERSION}
     pull_policy: always
     networks:
       - gas
-    environment:
-      RUST_LOG: trace
     volumes:
       - ${EC_DATA_DIR}:/var/lib/reth
       #- ${GENESIS_PATH}:/tmp/genesis/genesis.json
@@ -41,7 +39,7 @@ services:
       - node
       - --full
       - --datadir=/var/lib/reth
-      #- ${RETH_CHAIN_ARG}
+      - ${RETH_CHAIN_ARG}
       - --http
       - --http.addr=0.0.0.0
       - --http.api=web3,eth,net
