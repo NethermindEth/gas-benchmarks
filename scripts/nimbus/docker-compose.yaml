@@ -20,14 +20,13 @@ services:
       - 8545
       - 8551
     command:
-      - ${NIMBUS_NETWORK_FLAG}
+      - ${NIMBUS_NETWORK_FLAG:---custom-network=/tmp/genesis/genesis.json}
       - --data-dir=/var/lib/nimbus/data
       - --metrics=true
       - --metrics-address=0.0.0.0
       - --metrics-port=8008
       - --engine-api=true
       - --max-peers=0
-      - --no-discovery
       - --jwt-secret=/tmp/jwt/jwtsecret
       - --engine-api-port=8551
       - --engine-api-address=0.0.0.0
