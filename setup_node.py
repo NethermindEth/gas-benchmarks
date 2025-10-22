@@ -80,7 +80,8 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
             },
             {
                 "env": "RETH_INIT_COMMAND",
-                "custom": "/usr/local/bin/reth init --datadir /var/lib/reth --chain /tmp/genesis/genesis.json",
+                "custom": "",
+                #"custom": "/usr/local/bin/reth init --datadir /var/lib/reth --chain /tmp/genesis/genesis.json",
                 "network": "true",
             },
         ],
