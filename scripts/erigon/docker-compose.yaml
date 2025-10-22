@@ -38,7 +38,6 @@ services:
       - --externalcl
       - --private.api.addr=0.0.0.0:9090
       - --nat=any
-      - --p2p.disable
       - --http
       - --http.addr=0.0.0.0
       - --http.port=8545
