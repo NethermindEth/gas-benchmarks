@@ -2,7 +2,7 @@
 
 # Default inputs
 WARMUP_OPCODES_PATH="warmup-tests"
-WARMUP_FILE=""
+WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon,nimbus,ethrex"
 RUNS=1
 OPCODES_WARMUP_COUNT=1
@@ -21,6 +21,32 @@ OVERLAY_TMP_ROOT="overlay-runtime"
 USE_OVERLAY=false
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
+
+STUBS_FILE=""
+
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --stubs-file)
+      if [[ -n "${2:-}" ]]; then
+        STUBS_FILE="$2"
+        shift 2
+      else
+        echo "Error: --stubs-file requires a value" >&2
+        exit 1
+      fi
+      ;;
+    --stubs-file=*)
+      STUBS_FILE="${1#*=}"
+      shift
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${POSITIONAL_ARGS[@]}"
 
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
@@ -644,7 +670,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:S:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -661,10 +687,27 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:" opt; do
     n) NETWORK="$OPTARG"; USE_OVERLAY=true ;;
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
     R) RESTART_BEFORE_TESTING=true;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root]" >&2
+    S) STUBS_FILE="$OPTARG";;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-S stubs_file]" >&2
        exit 1 ;;
   esac
 done
+
+if [ -n "$STUBS_FILE" ]; then
+  if [ -f "$STUBS_FILE" ]; then
+    if command -v realpath >/dev/null 2>&1; then
+      STUBS_FILE=$(realpath "$STUBS_FILE")
+    else
+      STUBS_DIR=$(cd "$(dirname "$STUBS_FILE")" && pwd)
+      STUBS_FILE="$STUBS_DIR/$(basename "$STUBS_FILE")"
+    fi
+    export EEST_ADDRESS_STUBS="$STUBS_FILE"
+    echo "[INFO] Using address stubs file: $STUBS_FILE"
+  else
+    echo "[WARN] Stubs file '$STUBS_FILE' not found; ignoring."
+    STUBS_FILE=""
+  fi
+fi
 
 # Fallback to legacy -t/-g if -T not provided
 if [ -z "$TEST_PATHS_JSON" ]; then

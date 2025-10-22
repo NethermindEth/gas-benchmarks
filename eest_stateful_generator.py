@@ -446,6 +446,7 @@ def main():
     parser.add_argument("--rpc-chain-id", type=int, default=None)
     parser.add_argument("--rpc-seed-key", required=True)
     parser.add_argument("--rpc-address", required=True)
+    parser.add_argument("--stubs-file", default=None, help="Path to address stubs JSON passed to execute remote")
     parser.add_argument("--no-snapshot", action="store_true")
     parser.add_argument("--refresh-snapshot", action="store_true")
     parser.add_argument("--keep", action="store_true")
@@ -700,6 +701,13 @@ def main():
             "--",
             "-m", "benchmark", "-n", "1",
         ]
+        stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")
+        if stubs_source:
+            stubs_path = Path(stubs_source).expanduser()
+            if stubs_path.exists():
+                uv_cmd.extend(["--address-stubs", str(stubs_path.resolve())])
+            else:
+                print(f"[WARN] Address stubs file {stubs_path} not found; ignoring.")
 
         run_env = os.environ.copy()
         src_path = str((repo_dir / "src").resolve())
