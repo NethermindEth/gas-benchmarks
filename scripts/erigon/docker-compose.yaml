@@ -8,9 +8,12 @@ services:
       - gas
     volumes:
       - ${EC_DATA_DIR}:/var/lib/erigon
-      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-    entrypoint: erigon init --datadir=/var/lib/erigon /tmp/genesis/genesis.json
+      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+    entrypoint:
+      - /bin/sh
+      - -c
+      - ${ERIGON_INIT_COMMAND}
   execution:
     user: "root:root"
     stop_grace_period: 30m
@@ -25,12 +28,12 @@ services:
       - gas
     volumes:
       - ${EC_DATA_DIR}:/var/lib/erigon
+      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
-      - "30303:30303/tcp"
-      - "30303:30303/udp"
       - "8008:8008/tcp"
       - "8551:8551"
+      - "8545:8545"
     command:
       - --externalcl
       - --private.api.addr=0.0.0.0:9090

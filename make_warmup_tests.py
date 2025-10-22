@@ -221,15 +221,19 @@ def main():
         teardown("geth")
 
     # Flatten warmup-tests output directory
-    for sub in dst_root.iterdir():
-        if sub.is_dir():
-            for f in sub.glob("*.txt"):
-                target = dst_root / f.name
-                if target.exists():
-                    print(f"⚠️ File already exists in root: {target}, skipping move.")
-                else:
-                    f.rename(target)
-            sub.rmdir()
+    for sub in list(dst_root.iterdir()):
+        if not sub.is_dir():
+            continue
+
+        for f in sub.rglob("*.txt"):
+            target = dst_root / f.name
+            if target.exists():
+                print(f"⚠️ File already exists in root: {target}, skipping move.")
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            f.rename(target)
+
+        shutil.rmtree(sub, ignore_errors=True)
 
 
 if __name__ == "__main__":
