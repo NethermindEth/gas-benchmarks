@@ -10,7 +10,6 @@ services:
       - ${EC_DATA_DIR}:/var/lib/erigon
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
-      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     entrypoint:
       - /bin/sh
       - -c
@@ -29,13 +28,13 @@ services:
       - gas
     volumes:
       - ${EC_DATA_DIR}:/var/lib/erigon
+      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
       - "8008:8008/tcp"
       - "8551:8551"
       - "8545:8545"
     command:
-      - ${ERIGON_CHAIN_FLAG:---chain=/tmp/genesis/genesis.json}
       - --externalcl
       - --private.api.addr=0.0.0.0:9090
       - --nat=any

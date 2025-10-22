@@ -94,7 +94,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "ERIGON_CHAIN_FLAG",
-                "custom": "--chain=/tmp/genesis/genesis.json",
+                "custom": "",
                 "network": lambda net: f"--chain={net.lower()}",
             },
             {
