@@ -27,7 +27,6 @@ services:
       - --http.addr=0.0.0.0
       - --http.port=8545
       - --authrpc.addr=0.0.0.0
-      - --p2p.disable
     logging:
       driver: json-file
       options:

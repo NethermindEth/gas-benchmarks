@@ -27,7 +27,6 @@ services:
       - --metrics-port=8008
       - --engine-api=true
       - --max-peers=0
-      - --max-outbound-peers=0
       - --no-discovery
       - --jwt-secret=/tmp/jwt/jwtsecret
       - --engine-api-port=8551
