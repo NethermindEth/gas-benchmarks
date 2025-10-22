@@ -25,8 +25,8 @@
 #
 # Default warmup file is set to "warmup/warmup-1000bl-16wi-24tx.txt"
 
-# Default warmup file
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
+# Default warmup file (empty means skip warmup)
+WARMUP_FILE=""
 TEST_PATHS_JSON='[{\"path\": \"eest_tests\", \"genesis\":\"zkevmgenesis.json\"}]'  # default test path
 DEBUG_ARGS=()
 DEBUG=false
@@ -298,9 +298,16 @@ while true; do
   python3 update_performance_images.py
   end_timer "update_performance_images"
   
-  start_timer "benchmark_testing"
-  # Run the benchmark testing using specified warmup file
-  RUN_CMD=(bash run.sh -T "$TEST_PATHS_JSON" -w "$WARMUP_FILE" -r 1)
+start_timer "benchmark_testing"
+# Run the benchmark testing using specified warmup file
+RUN_CMD=(bash run.sh -T "$TEST_PATHS_JSON" -r 1)
+if [ -n "$WARMUP_FILE" ]; then
+  if [ -f "$WARMUP_FILE" ]; then
+    RUN_CMD+=(-w "$WARMUP_FILE")
+  else
+    echo "[WARN] Requested warmup file '$WARMUP_FILE' not found; skipping warmup."
+  fi
+fi
   if [ -n "$NETWORK" ]; then
     RUN_CMD+=(-n "$NETWORK")
   fi
