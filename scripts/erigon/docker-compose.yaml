@@ -34,7 +34,6 @@ services:
       - "8551:8551"
       - "8545:8545"
     command:
-      - node
       - ${ERIGON_CHAIN_FLAG:---chain=/tmp/genesis/genesis.json}
       - --externalcl
       - --private.api.addr=0.0.0.0:9090
