@@ -62,8 +62,9 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
                 "network": lambda net: f"--{net.lower()}",
             },
             {
-                "env": "GETH_INIT_COMMAND",                
+                "env": "GETH_INIT_COMMAND",
                 "custom": "geth init --datadir=/var/lib/goethereum /tmp/genesis/genesis.json",
+                "network": "",
             },
         ],
         "extra_env": {},
@@ -81,7 +82,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
             {
                 "env": "RETH_INIT_COMMAND",
                 "custom": "/usr/local/bin/reth init --datadir /var/lib/reth --chain /tmp/genesis/genesis.json",
-                "network": "true",
+                "network": "",
             },
         ],
         "extra_env": {},
@@ -93,13 +94,13 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "ERIGON_CHAIN_FLAG",
-                "custom": "",
+                "custom": "--chain=/tmp/genesis/genesis.json",
                 "network": lambda net: f"--chain={net.lower()}",
             },
             {
                 "env": "ERIGON_INIT_COMMAND",
                 "custom": "erigon init --datadir=/var/lib/erigon /tmp/genesis/genesis.json",
-                "network": "true",
+                "network": "",
             },
         ],
         "extra_env": {},
@@ -204,7 +205,9 @@ def set_env(
         env_key = flag_entry.get("env")
         if not env_key:
             continue
-        env_map[env_key] = evaluate_flag(flag_entry, network, use_custom_genesis)
+        evaluated = evaluate_flag(flag_entry, network, use_custom_genesis)
+        if evaluated:
+            env_map[env_key] = evaluated
 
     for extra_key, extra_value in metadata.get("extra_env", {}).items():
         env_map[extra_key] = extra_value
