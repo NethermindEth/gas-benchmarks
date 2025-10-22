@@ -859,9 +859,13 @@ for run in $(seq 1 $RUNS); do
     warmed=false
 
     # Warmup
-    if [ "$warmed" = false ]; then
+    if [ "$warmed" = false ] && [ -n "$WARMUP_FILE" ]; then
       start_timer "warmup_${client}_run_${run}"
-      python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
+      if [ -f "$WARMUP_FILE" ]; then
+        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
+      else
+        echo "[WARN] Warmup file '$WARMUP_FILE' not found; skipping warmup."
+      fi
       warmed=true
       end_timer "warmup_${client}_run_${run}"
     fi

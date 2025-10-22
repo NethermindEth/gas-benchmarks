@@ -26,7 +26,7 @@
 # Default warmup file is set to "warmup/warmup-1000bl-16wi-24tx.txt"
 
 # Default warmup file (empty means skip warmup)
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
+WARMUP_FILE=""
 TEST_PATHS_JSON='[{\"path\": \"eest_tests\", \"genesis\":\"zkevmgenesis.json\"}]'  # default test path
 DEBUG_ARGS=()
 DEBUG=false
