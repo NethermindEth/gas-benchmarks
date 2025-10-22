@@ -416,6 +416,12 @@ def populate_data_for_client(
                 logging.warning(f"Raw results file {raw_csv_path} has unexpected header format (less than 3 columns): {header}")
                 return 0
 
+            run_column_headers = header[2:-1] if len(header) > 2 else []
+            values_are_durations = bool(run_column_headers) and all(
+                any(token in col.lower() for token in ("duration", "time", "ms"))
+                for col in run_column_headers
+            ) and not any("mgas" in col.lower() for col in run_column_headers)
+
             for i, row in enumerate(reader):
                 if len(row) != len(header):
                     logging.warning(f"Skipping malformed row {i+2} in {raw_csv_path}. Expected {len(header)} columns, got {len(row)}. Row: {row}")
@@ -425,11 +431,11 @@ def populate_data_for_client(
                 raw_gas_value = row[1]
                 # raw_run_description is the last column if header > 2, otherwise it might be missing
                 raw_run_description = row[-1] if len(header) > 2 else None # Adjusted access
-                run_duration_values_str = row[2:-1] if len(header) > 2 else [] # Adjusted access
+                run_values_str = row[2:-1] if len(header) > 2 else [] # Adjusted access
 
                 agg_stats = aggregated_stats_map.get(test_case_name_raw, {})
 
-                if not run_duration_values_str and len(header) == 2: # Handle case with only 'Test Case', 'Gas'
+                if not run_values_str and len(header) == 2: # Handle case with only 'Test Case', 'Gas'
                      logging.debug(f"Row for '{test_case_name_raw}' seems to only have Test Case and Gas value, no individual runs. Skipping run processing.")
                      # Decide if you want to insert a record with just this minimal info
                      # For now, we expect run values to insert.
@@ -441,22 +447,31 @@ def populate_data_for_client(
                     except ValueError:
                         logging.warning(f"Could not convert gas value '{raw_gas_value}' to float for {test_case_name_raw}. Will keep raw string and skip per-run MGas/s calculation.")
 
-                for run_value_str in run_duration_values_str:
+                for run_value_str in run_values_str:
                     try:
-                        raw_run_duration_ms = float(run_value_str) if run_value_str.strip() else None
-                        if raw_run_duration_ms is None: # Explicitly skip if value was empty string or spaces
-                            logging.debug(f"Skipping empty run value for {test_case_name_raw}.")
-                            continue
+                        run_value = float(run_value_str) if run_value_str.strip() else None
                     except ValueError:
                         logging.warning(f"Could not convert run value '{run_value_str}' to float for {test_case_name_raw}. Skipping this run.")
                         continue
+                    if run_value is None:
+                        logging.debug(f"Skipping empty run value for {test_case_name_raw}.")
+                        continue
 
+                    raw_run_duration_ms: Optional[float] = None
                     raw_run_mgas_s: Optional[float] = None
-                    if gas_value_float is not None:
-                        if raw_run_duration_ms > 0:
+
+                    if values_are_durations:
+                        raw_run_duration_ms = run_value
+                        if gas_value_float is not None and raw_run_duration_ms > 0:
                             raw_run_mgas_s = (gas_value_float / raw_run_duration_ms) * 1000.0
-                        else:
+                        elif gas_value_float is not None:
                             logging.debug(f"Non-positive run duration ({raw_run_duration_ms}) for {test_case_name_raw}; cannot compute MGas/s.")
+                    else:
+                        raw_run_mgas_s = run_value
+                        if gas_value_float is not None and raw_run_mgas_s > 0:
+                            raw_run_duration_ms = (gas_value_float / raw_run_mgas_s) * 1000.0
+                        elif gas_value_float is not None:
+                            logging.debug(f"Non-positive run MGas/s ({raw_run_mgas_s}) for {test_case_name_raw}; cannot estimate duration.")
 
                     start_time = agg_stats.get('start_time')
                     if start_time in (0, "0", "", None):
