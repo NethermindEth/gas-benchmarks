@@ -268,7 +268,7 @@ for idx, name in scenario_entries:
         path = resolve_path(phase, idx, name)
         if path is not None:
             ordered.append(str(path))
-        elif phase in ("setup", "testing"):
+        elif phase == "testing":
             sys.stderr.write(f"[WARN] Missing {phase} file for scenario {name}\n")
 
 for name in ("teardown-global-test.txt", "current-last-global-test.txt"):
