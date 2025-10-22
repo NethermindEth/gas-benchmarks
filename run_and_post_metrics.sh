@@ -38,8 +38,6 @@ SNAPSHOT_TEMPLATE=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
-STUBS_FILE=""
-
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -227,14 +225,6 @@ while [[ $# -gt 0 ]]; do
       CLIENTS_LABEL=$(sanitize_label "$CLIENTS")
       shift 2
       ;;
-    --stubs-file)
-      STUBS_FILE="$2"
-      shift 2
-      ;;
-    --stubs-file=*)
-      STUBS_FILE="${1#*=}"
-      shift
-      ;;
     --restart-before-testing)
       RESTART_BEFORE_TESTING=true
       shift
@@ -255,24 +245,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [ -n "$STUBS_FILE" ]; then
-  if [ -f "$STUBS_FILE" ]; then
-    if command -v realpath >/dev/null 2>&1; then
-      STUBS_FILE=$(realpath "$STUBS_FILE")
-    else
-      STUBS_DIR=$(cd "$(dirname "$STUBS_FILE")" && pwd)
-      STUBS_FILE="$STUBS_DIR/$(basename "$STUBS_FILE")"
-    fi
-    export EEST_ADDRESS_STUBS="$STUBS_FILE"
-    echo "[INFO] Using address stubs file: $STUBS_FILE"
-  else
-    echo "[WARN] Stubs file '$STUBS_FILE' not found; ignoring."
-    STUBS_FILE=""
-  fi
-fi
+
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --stubs-file <path> --restarts <true|false>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
   exit 1
 fi
 
@@ -332,9 +308,6 @@ while true; do
     else
       echo "[WARN] Requested warmup file '$WARMUP_FILE' not found; skipping warmup."
     fi
-  fi
-  if [ -n "$STUBS_FILE" ]; then
-    RUN_CMD+=(--stubs-file "$STUBS_FILE")
   fi
   if [ -n "$NETWORK" ]; then
     RUN_CMD+=(-n "$NETWORK")
