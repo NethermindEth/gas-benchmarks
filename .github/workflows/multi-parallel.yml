@@ -135,7 +135,8 @@ jobs:
             echo "No docker_sync_*.log files found for client=${{ matrix.client }}"
           fi
 
-      - name: Zip the results folder
+      
+      - name: Prepare results artifact
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
           CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
@@ -148,23 +149,20 @@ jobs:
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
-  combine-results:
+  populate-db:
     needs: build
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
 
       - name: Install python dependencies
         run: pip install -r requirements.txt
@@ -179,90 +177,6 @@ jobs:
           mkdir -p extracted-results
           find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
 
-      - name: Process combined results
-        run: |
-          set -euo pipefail
-          RESULTS_ROOT="extracted-results/results"
-          if [ ! -d "$RESULTS_ROOT" ]; then
-            echo "Results directory not found: $RESULTS_ROOT"
-            exit 1
-          fi
-
-          mapfile -t CLIENTS < <(find "$RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
-          if [ "${#CLIENTS[@]}" -eq 0 ]; then
-            echo "No client result files detected under $RESULTS_ROOT; skipping report generation."
-            mkdir -p reports
-            exit 0
-          fi
-
-          CLIENT_LIST=$(
-            printf "%s\n" "${CLIENTS[@]}" \
-              | xargs -n1 basename \
-              | sed 's/_results_.*//' \
-              | sort -u \
-              | paste -sd',' -
-          )
-
-          if [ -z "$CLIENT_LIST" ]; then
-            echo "Unable to derive client list from results; skipping report generation."
-            mkdir -p reports
-            exit 0
-          fi
-
-          rm -rf reports
-          mkdir -p reports
-
-          RUNS="${{ github.event.inputs.runs }}"
-          TESTS="${{ github.event.inputs.test }}"
-          IMAGES='${{ github.event.inputs.images }}'
-
-          python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
-          python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
-
-      - name: Generate Report
-        if: ${{ github.event.inputs.txt_report == 'true' }}
-        run: |
-          python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} 
-
-      - name: Zip the results folder
-        run: |
-          zip -r reports.zip reports
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: reports
-          path: reports.zip
-
-  populate-db:
-    needs: combine-results
-    runs-on: ubuntu-latest
-    env:
-      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
-      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
-      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
-      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install python dependencies for submodule
-        run: |
-          pip install -r requirements.txt
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: combined-results # Download artifacts from previous jobs
-          merge-multiple: true
-
-      - name: Extract all result files
-        run: |
-          mkdir -p extracted-results
-          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
-
       - name: Populate Benchmark DB
         run: |
           python fill_postgres_db.py \
@@ -270,7 +184,6 @@ jobs:
             --db-port ${{ env.DB_PORT }} \
             --db-user ${{ env.DB_USER }} \
             --db-name monitoring \
-            --table-name gas_benchmarks_ci \
             --db-password "${{ env.DB_PASSWORD }}" \
             --log-level DEBUG \
-            --reports-dir 'extracted-results/reports/'
+            --results-dir 'extracted-results/results/'

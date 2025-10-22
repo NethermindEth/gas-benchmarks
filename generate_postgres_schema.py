@@ -14,46 +14,42 @@ def get_sql_for_benchmark_table(table_name: str) -> str:
 
     # Note: F-string for table_name is generally safe here as it's controlled by our script's argparser,
     # not direct user SQL input for this part. For other parameters, always use query parameterization.
-    benchmark_data_table_sql = f"""
-CREATE TABLE IF NOT EXISTS {table_name} (
+    benchmark_runs_table_sql = """
+CREATE TABLE IF NOT EXISTS benchmark_runs (
     id SERIAL PRIMARY KEY,
     client_name TEXT NOT NULL,
-    ingestion_timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    client_version TEXT NULL,
-
-    -- Test case identification and aggregated stats (primarily from output_{"{client}"}.csv)
-    test_title TEXT,                 -- Corresponds to 'Title' in output_*.csv and 'Test Case' in raw_*.csv
-    max_mgas_s REAL NULL,          -- Aggregated Max from output_*.csv
-    p50_mgas_s REAL NULL,          -- Aggregated p50 from output_*.csv
-    p95_mgas_s REAL NULL,          -- Aggregated p95 from output_*.csv
-    p99_mgas_s REAL NULL,          -- Aggregated p99 from output_*.csv
-    min_mgas_s REAL NULL,          -- Aggregated Min from output_*.csv
-    n_samples INTEGER NULL,          -- Aggregated N (number of samples) from output_*.csv
-    test_description TEXT NULL,      -- Description associated with the test case from output_*.csv
-
-    -- Individual run details (primarily from raw_results_{"{client}"}.csv)
-    raw_gas_value TEXT NULL,         -- 'Gas' value from raw_*.csv, specific to this individual run
-    raw_run_mgas_s REAL NULL,        -- The MGas/s for this specific individual run
-    raw_run_duration_ms REAL NULL,   -- Execution duration in milliseconds for this specific run
-    raw_run_description TEXT NULL,   -- Description from the raw_*.csv row, potentially more specific
-
-    -- Test execution timestamps
-    start_time TIMESTAMP WITH TIME ZONE NULL,  -- Test start timestamp
-
-    -- Computer Specifications (parsed from system info, repeated per row, all nullable)
-    spec_processor_type TEXT NULL,
-    spec_system_os TEXT NULL,
-    spec_kernel_release TEXT NULL,
-    spec_kernel_version TEXT NULL,
-    spec_machine_arch TEXT NULL,
-    spec_processor_arch TEXT NULL,
-    spec_ram_gb REAL NULL,
-    spec_cpu_model TEXT NULL,
-    spec_num_cpus INTEGER NULL,
-    spec_cpu_ghz REAL NULL
+    run_number INTEGER NOT NULL,
+    test_title TEXT NOT NULL,
+    gas_value TEXT NULL,
+    scenario_identifier TEXT NULL,
+    payload_status TEXT NULL,
+    latest_valid_hash TEXT NULL,
+    validation_error TEXT NULL,
+    ingestion_timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-    """
-    return benchmark_data_table_sql
+"""
+
+    benchmark_metrics_table_sql = """
+CREATE TABLE IF NOT EXISTS benchmark_metrics (
+    id SERIAL PRIMARY KEY,
+    run_id INTEGER NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+    measurement TEXT NOT NULL,
+    unit TEXT NULL,
+    unit_duration TEXT NULL,
+    count INTEGER NULL,
+    minimum DOUBLE PRECISION NULL,
+    maximum DOUBLE PRECISION NULL,
+    mean DOUBLE PRECISION NULL,
+    median DOUBLE PRECISION NULL,
+    stddev DOUBLE PRECISION NULL,
+    p99 DOUBLE PRECISION NULL,
+    p95 DOUBLE PRECISION NULL,
+    p75 DOUBLE PRECISION NULL,
+    total DOUBLE PRECISION NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+"""
+    return benchmark_runs_table_sql + benchmark_metrics_table_sql
 
 def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
     """
@@ -72,50 +68,29 @@ def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
         logging.info("Database connection successful.")
 
         with conn.cursor() as cur:
-            # 1. Check if table exists
-            cur.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s);", (table_name,))
-            table_exists = cur.fetchone()
-            if table_exists is None or not table_exists[0]: # Ensure fetchone result is checked properly
-                logging.info(f"Table '{table_name}' does not exist. Creating it now.")
-                create_table_sql = get_sql_for_benchmark_table(table_name)
-                logging.debug(f"Executing CREATE TABLE statement:\n{create_table_sql}")
-                cur.execute(create_table_sql)
-                logging.info(f"Table '{table_name}' created successfully.")
-            else:
-                logging.info(f"Table '{table_name}' already exists. Checking for missing columns...")
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'benchmark_runs'
+                );
+            """)
+            runs_exists = cur.fetchone()[0]
 
-                # Migration: columns to check and add if they don't exist
-                # Format: (column_name, column_definition_for_add_column)
-                columns_to_ensure: List[Tuple[str, str]] = [
-                    ("client_version", "TEXT NULL"),
-                    ("start_time", "TIMESTAMP WITH TIME ZONE NULL"),
-                    ("raw_run_duration_ms", "REAL NULL"),
-                    # Add other columns here in the future for schema evolution
-                    # e.g., ("new_feature_flag", "BOOLEAN DEFAULT FALSE")
-                ]
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = 'benchmark_metrics'
+                );
+            """)
+            metrics_exists = cur.fetchone()[0]
 
-                for col_name, col_definition in columns_to_ensure:
-                    cur.execute("""
-                        SELECT EXISTS (
-                            SELECT FROM information_schema.columns
-                            WHERE table_schema = 'public' AND table_name = %s AND column_name = %s
-                        );
-                    """, (table_name, col_name))
-                    column_exists_result = cur.fetchone()
-                    column_exists = column_exists_result[0] if column_exists_result else False
-
-                    if not column_exists:
-                        logging.info(f"Column '{col_name}' does not exist in table '{table_name}'. Adding it.")
-                        # Note: F-strings for SQL construction are generally discouraged if inputs are not controlled.
-                        # Here, col_name and col_definition are from the hardcoded 'columns_to_ensure' list, so it's acceptable.
-                        alter_sql = f"ALTER TABLE public.{table_name} ADD COLUMN {col_name} {col_definition};"
-                        logging.debug(f"Executing ALTER TABLE statement: {alter_sql}")
-                        cur.execute(alter_sql)
-                        logging.info(f"Column '{col_name}' added to table '{table_name}'.")
-                    else:
-                        logging.debug(f"Column '{col_name}' already exists in table '{table_name}'.")
+            if not runs_exists or not metrics_exists:
+                logging.info("Creating benchmark_runs and benchmark_metrics tables.")
+                create_sql = get_sql_for_benchmark_table(table_name)
+                cur.execute(create_sql)
+                logging.info("Tables created successfully.")
             conn.commit()
-            logging.info(f"Database schema for table '{table_name}' is up to date.")
+            logging.info("Database schema for benchmark tables is up to date.")
     except psycopg2.OperationalError as error:
         logging.error(f"Error connecting to PostgreSQL: {error}")
         # No rollback needed if connection itself failed.
