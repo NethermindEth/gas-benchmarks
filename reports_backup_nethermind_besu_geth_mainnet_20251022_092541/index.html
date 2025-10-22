@@ -1,0 +1,3812 @@
+<!DOCTYPE html\>
+<html lang="en">
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>
+   Benchmarking Report
+  </title>
+  <style>
+   body {            font-family: Arial, sans-serif;        }        table {            border-collapse: collapse;            margin-bottom: 20px;        }        th, td {            border: 1px solid #ddd;            padding: 8px;            text-align: center;        }        th {            background-color: #f2f2f2;        }        .title {            text-align: left;        }        .preserve-newlines {            white-space: pre-wrap;        }
+  </style>
+ </head>
+ <body>
+  <h2>
+   Computer Specs
+  </h2>
+  <pre">
+   Processor: x86_64
+System: Linux
+Release: 6.8.0-79-generic
+Version: #79-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 14:42:46 UTC 2025
+Machine: x86_64
+Processor Architecture: 64bit
+RAM: 62.41 GB
+CPU: AMD EPYC 4344P 8-Core Processor
+Numbers of CPU: 16
+CPU GHz: 545.0000 MHz
+Computer Specs:
+Processor: x86_64
+System: Linux
+Release: 6.8.0-79-generic
+Version: #79-Ubuntu SMP PREEMPT_DYNAMIC Tue Aug 12 14:42:46 UTC 2025
+Machine: x86_64
+Processor Architecture: 64bit
+RAM: 62.41 GB
+CPU: AMD EPYC 4344P 8-Core Processor
+Numbers of CPU: 16
+CPU GHz: 545.0000 MHz
+   <h1>
+    Nethermind - ethpandaops/nethermind:performance-57df2eb - Benchmarking Report
+   </h1>
+   <table id="table_nethermind">
+    <thread>
+     <tr>
+      <th class="title" onclick="sortTable(0, 'table_nethermind', false)" style="cursor: pointer;">
+       Title ↑ ↓
+      </th>
+      <th onclick="sortTable(1, 'table_nethermind', true)" style="cursor: pointer;">
+       Max (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(2, 'table_nethermind', true)" style="cursor: pointer;">
+       p50 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(3, 'table_nethermind', true)" style="cursor: pointer;">
+       p95 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(4, 'table_nethermind', true)" style="cursor: pointer;">
+       p99 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(5, 'table_nethermind', true)" style="cursor: pointer;">
+       Min (MGas/s) ↑ ↓
+      </th>
+      <th>
+       N
+      </th>
+      <th class="title">
+       Description
+      </th>
+      <th>
+       Start Time
+      </th>
+     </tr>
+    </thread>
+    <tbody>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value]
+      </td>
+      <td>
+       7089.88
+      </td>
+      <td>
+       7089.88
+      </td>
+      <td>
+       7089.88
+      </td>
+      <td>
+       7089.88
+      </td>
+      <td>
+       7089.88
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:57.138962+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_EXTCODEHASH]
+      </td>
+      <td>
+       5938.57
+      </td>
+      <td>
+       5938.57
+      </td>
+      <td>
+       5938.57
+      </td>
+      <td>
+       5938.57
+      </td>
+      <td>
+       5938.57
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:51.337158+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_created[fork_Prague-benchmark-state_test-value_bearing_False]
+      </td>
+      <td>
+       100.04
+      </td>
+      <td>
+       100.04
+      </td>
+      <td>
+       100.04
+      </td>
+      <td>
+       100.04
+      </td>
+      <td>
+       100.04
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:39.719803+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_cold[fork_Prague-benchmark-benchmark_test-absent_accounts_True-opcode_BALANCE]
+      </td>
+      <td>
+       5.35
+      </td>
+      <td>
+       5.35
+      </td>
+      <td>
+       5.35
+      </td>
+      <td>
+       5.35
+      </td>
+      <td>
+       5.35
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:16.922394+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_initcode[fork_Prague-benchmark-state_test-value_bearing_False]
+      </td>
+      <td>
+       110.07
+      </td>
+      <td>
+       110.07
+      </td>
+      <td>
+       110.07
+      </td>
+      <td>
+       110.07
+      </td>
+      <td>
+       110.07
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:44.220955+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_CALL]
+      </td>
+      <td>
+       1903.34
+      </td>
+      <td>
+       1903.34
+      </td>
+      <td>
+       1903.34
+      </td>
+      <td>
+       1903.34
+      </td>
+      <td>
+       1903.34
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:52.319595+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value, revert]
+      </td>
+      <td>
+       3881.27
+      </td>
+      <td>
+       3881.27
+      </td>
+      <td>
+       3881.27
+      </td>
+      <td>
+       3881.27
+      </td>
+      <td>
+       3881.27
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:08.215248+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_blockhash[fork_Prague-benchmark-benchmark_test]
+      </td>
+      <td>
+       629.83
+      </td>
+      <td>
+       629.83
+      </td>
+      <td>
+       629.83
+      </td>
+      <td>
+       629.83
+      </td>
+      <td>
+       629.83
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:12.343681+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_BALANCE]
+      </td>
+      <td>
+       5677.99
+      </td>
+      <td>
+       5677.99
+      </td>
+      <td>
+       5677.99
+      </td>
+      <td>
+       5677.99
+      </td>
+      <td>
+       5677.99
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:42.701424+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_cold[fork_Prague-benchmark-benchmark_test-absent_accounts_False-opcode_BALANCE]
+      </td>
+      <td>
+       1831.20
+      </td>
+      <td>
+       1831.20
+      </td>
+      <td>
+       1831.20
+      </td>
+      <td>
+       1831.20
+      </td>
+      <td>
+       1831.20
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:41.778351+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value, out of gas]
+      </td>
+      <td>
+       9703.47
+      </td>
+      <td>
+       9703.47
+      </td>
+      <td>
+       9703.47
+      </td>
+      <td>
+       9703.47
+      </td>
+      <td>
+       9703.47
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:01.772957+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_DELEGATECALL]
+      </td>
+      <td>
+       2242.39
+      </td>
+      <td>
+       2242.39
+      </td>
+      <td>
+       2242.39
+      </td>
+      <td>
+       2242.39
+      </td>
+      <td>
+       2242.39
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:47.526970+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-512]
+      </td>
+      <td>
+       1183.82
+      </td>
+      <td>
+       1183.82
+      </td>
+      <td>
+       1183.82
+      </td>
+      <td>
+       1183.82
+      </td>
+      <td>
+       1183.82
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:15.367958+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_EXTCODESIZE]
+      </td>
+      <td>
+       4603.60
+      </td>
+      <td>
+       4603.60
+      </td>
+      <td>
+       4603.60
+      </td>
+      <td>
+       4603.60
+      </td>
+      <td>
+       4603.60
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:50.391396+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSLOAD]
+      </td>
+      <td>
+       1866.84
+      </td>
+      <td>
+       1866.84
+      </td>
+      <td>
+       1866.84
+      </td>
+      <td>
+       1866.84
+      </td>
+      <td>
+       1866.84
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:02.875999+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value, out of gas]
+      </td>
+      <td>
+       1685.92
+      </td>
+      <td>
+       1685.92
+      </td>
+      <td>
+       1685.92
+      </td>
+      <td>
+       1685.92
+      </td>
+      <td>
+       1685.92
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:06.187798+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfbalance[fork_Prague-benchmark_test-contract_balance_1]
+      </td>
+      <td>
+       2280.61
+      </td>
+      <td>
+       2280.61
+      </td>
+      <td>
+       2280.61
+      </td>
+      <td>
+       2280.61
+      </td>
+      <td>
+       2280.61
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:14.339554+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value, revert]
+      </td>
+      <td>
+       1660.63
+      </td>
+      <td>
+       1660.63
+      </td>
+      <td>
+       1660.63
+      </td>
+      <td>
+       1660.63
+      </td>
+      <td>
+       1660.63
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:05.095612+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_STATICCALL]
+      </td>
+      <td>
+       2594.07
+      </td>
+      <td>
+       2594.07
+      </td>
+      <td>
+       2594.07
+      </td>
+      <td>
+       2594.07
+      </td>
+      <td>
+       2594.07
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:48.540939+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_DELEGATECALL]
+      </td>
+      <td>
+       1895.00
+      </td>
+      <td>
+       1895.00
+      </td>
+      <td>
+       1895.00
+      </td>
+      <td>
+       1895.00
+      </td>
+      <td>
+       1895.00
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:54.295998+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value, revert]
+      </td>
+      <td>
+       10372.11
+      </td>
+      <td>
+       10372.11
+      </td>
+      <td>
+       10372.11
+      </td>
+      <td>
+       10372.11
+      </td>
+      <td>
+       10372.11
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:58.055099+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfbalance[fork_Prague-benchmark_test-contract_balance_0]
+      </td>
+      <td>
+       2464.77
+      </td>
+      <td>
+       2464.77
+      </td>
+      <td>
+       2464.77
+      </td>
+      <td>
+       2464.77
+      </td>
+      <td>
+       2464.77
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:13.363579+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSLOAD]
+      </td>
+      <td>
+       2992.80
+      </td>
+      <td>
+       2992.80
+      </td>
+      <td>
+       2992.80
+      </td>
+      <td>
+       2992.80
+      </td>
+      <td>
+       2992.80
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:56.211395+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_EXTCODEHASH]
+      </td>
+      <td>
+       6014.88
+      </td>
+      <td>
+       6014.88
+      </td>
+      <td>
+       6014.88
+      </td>
+      <td>
+       6014.88
+      </td>
+      <td>
+       6014.88
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:44.564972+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value]
+      </td>
+      <td>
+       1906.38
+      </td>
+      <td>
+       1906.38
+      </td>
+      <td>
+       1906.38
+      </td>
+      <td>
+       1906.38
+      </td>
+      <td>
+       1906.38
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:03.982796+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_BALANCE]
+      </td>
+      <td>
+       6387.63
+      </td>
+      <td>
+       6387.63
+      </td>
+      <td>
+       6387.63
+      </td>
+      <td>
+       6387.63
+      </td>
+      <td>
+       6387.63
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:49.465942+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-5KiB]
+      </td>
+      <td>
+       2715.70
+      </td>
+      <td>
+       2715.70
+      </td>
+      <td>
+       2715.70
+      </td>
+      <td>
+       2715.70
+      </td>
+      <td>
+       2715.70
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:17.410233+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value, out of gas]
+      </td>
+      <td>
+       3621.48
+      </td>
+      <td>
+       3621.48
+      </td>
+      <td>
+       3621.48
+      </td>
+      <td>
+       3621.48
+      </td>
+      <td>
+       3621.48
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:09.191124+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_existing[fork_Prague-benchmark-benchmark_test-value_bearing_True]
+      </td>
+      <td>
+       1640.45
+      </td>
+      <td>
+       1640.45
+      </td>
+      <td>
+       1640.45
+      </td>
+      <td>
+       1640.45
+      </td>
+      <td>
+       1640.45
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:26.215141+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value]
+      </td>
+      <td>
+       7941.99
+      </td>
+      <td>
+       7941.99
+      </td>
+      <td>
+       7941.99
+      </td>
+      <td>
+       7941.99
+      </td>
+      <td>
+       7941.99
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:59.916039+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value]
+      </td>
+      <td>
+       2749.48
+      </td>
+      <td>
+       2749.48
+      </td>
+      <td>
+       2749.48
+      </td>
+      <td>
+       2749.48
+      </td>
+      <td>
+       2749.48
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:07.241234+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_CALLCODE]
+      </td>
+      <td>
+       1526.70
+      </td>
+      <td>
+       1526.70
+      </td>
+      <td>
+       1526.70
+      </td>
+      <td>
+       1526.70
+      </td>
+      <td>
+       1526.70
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:53.316170+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_created[fork_Prague-benchmark-state_test-value_bearing_True]
+      </td>
+      <td>
+       96.82
+      </td>
+      <td>
+       96.82
+      </td>
+      <td>
+       96.82
+      </td>
+      <td>
+       96.82
+      </td>
+      <td>
+       96.82
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:37.306946+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value, out of gas]
+      </td>
+      <td>
+       9459.82
+      </td>
+      <td>
+       9459.82
+      </td>
+      <td>
+       9459.82
+      </td>
+      <td>
+       9459.82
+      </td>
+      <td>
+       9459.82
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:59.001007+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_CALL]
+      </td>
+      <td>
+       3039.31
+      </td>
+      <td>
+       3039.31
+      </td>
+      <td>
+       3039.31
+      </td>
+      <td>
+       3039.31
+      </td>
+      <td>
+       3039.31
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:45.594162+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_CALLCODE]
+      </td>
+      <td>
+       2511.95
+      </td>
+      <td>
+       2511.95
+      </td>
+      <td>
+       2511.95
+      </td>
+      <td>
+       2511.95
+      </td>
+      <td>
+       2511.95
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:46.560585+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_EXTCODESIZE]
+      </td>
+      <td>
+       4802.02
+      </td>
+      <td>
+       4802.02
+      </td>
+      <td>
+       4802.02
+      </td>
+      <td>
+       4802.02
+      </td>
+      <td>
+       4802.02
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:43.639946+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-1KiB]
+      </td>
+      <td>
+       1145.50
+      </td>
+      <td>
+       1145.50
+      </td>
+      <td>
+       1145.50
+      </td>
+      <td>
+       1145.50
+      </td>
+      <td>
+       1145.50
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:16.434181+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_STATICCALL]
+      </td>
+      <td>
+       1965.10
+      </td>
+      <td>
+       1965.10
+      </td>
+      <td>
+       1965.10
+      </td>
+      <td>
+       1965.10
+      </td>
+      <td>
+       1965.10
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:19:55.276474+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value, revert]
+      </td>
+      <td>
+       9827.41
+      </td>
+      <td>
+       9827.41
+      </td>
+      <td>
+       9827.41
+      </td>
+      <td>
+       9827.41
+      </td>
+      <td>
+       9827.41
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:00.843147+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_existing[fork_Prague-benchmark-benchmark_test-value_bearing_False]
+      </td>
+      <td>
+       3027.78
+      </td>
+      <td>
+       3027.78
+      </td>
+      <td>
+       3027.78
+      </td>
+      <td>
+       3027.78
+      </td>
+      <td>
+       3027.78
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:34.854004+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_initcode[fork_Prague-benchmark-state_test-value_bearing_True]
+      </td>
+      <td>
+       113.69
+      </td>
+      <td>
+       113.69
+      </td>
+      <td>
+       113.69
+      </td>
+      <td>
+       113.69
+      </td>
+      <td>
+       113.69
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:20:41.946991+00
+      </td>
+     </tr>
+    </tbody>
+   </table>
+   <h1>
+    Besu - ethpandaops/besu:performance-9208e59 - Benchmarking Report
+   </h1>
+   <table id="table_besu">
+    <thread>
+     <tr>
+      <th class="title" onclick="sortTable(0, 'table_besu', false)" style="cursor: pointer;">
+       Title ↑ ↓
+      </th>
+      <th onclick="sortTable(1, 'table_besu', true)" style="cursor: pointer;">
+       Max (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(2, 'table_besu', true)" style="cursor: pointer;">
+       p50 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(3, 'table_besu', true)" style="cursor: pointer;">
+       p95 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(4, 'table_besu', true)" style="cursor: pointer;">
+       p99 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(5, 'table_besu', true)" style="cursor: pointer;">
+       Min (MGas/s) ↑ ↓
+      </th>
+      <th>
+       N
+      </th>
+      <th class="title">
+       Description
+      </th>
+      <th>
+       Start Time
+      </th>
+     </tr>
+    </thread>
+    <tbody>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value]
+      </td>
+      <td>
+       1243.21
+      </td>
+      <td>
+       1243.21
+      </td>
+      <td>
+       1243.21
+      </td>
+      <td>
+       1243.21
+      </td>
+      <td>
+       1243.21
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:58.779907+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_EXTCODEHASH]
+      </td>
+      <td>
+       1910.04
+      </td>
+      <td>
+       1910.04
+      </td>
+      <td>
+       1910.04
+      </td>
+      <td>
+       1910.04
+      </td>
+      <td>
+       1910.04
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:51.680145+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_created[fork_Prague-benchmark-state_test-value_bearing_False]
+      </td>
+      <td>
+       76.79
+      </td>
+      <td>
+       76.79
+      </td>
+      <td>
+       76.79
+      </td>
+      <td>
+       76.79
+      </td>
+      <td>
+       76.79
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:23:30.704529+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_cold[fork_Prague-benchmark-benchmark_test-absent_accounts_True-opcode_BALANCE]
+      </td>
+      <td>
+       28.82
+      </td>
+      <td>
+       28.82
+      </td>
+      <td>
+       28.82
+      </td>
+      <td>
+       28.82
+      </td>
+      <td>
+       28.82
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:26.006630+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_initcode[fork_Prague-benchmark-state_test-value_bearing_False]
+      </td>
+      <td>
+       132.49
+      </td>
+      <td>
+       132.49
+      </td>
+      <td>
+       132.49
+      </td>
+      <td>
+       132.49
+      </td>
+      <td>
+       132.49
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:23:34.795547+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_CALL]
+      </td>
+      <td>
+       642.38
+      </td>
+      <td>
+       642.38
+      </td>
+      <td>
+       642.38
+      </td>
+      <td>
+       642.38
+      </td>
+      <td>
+       642.38
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:52.846359+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value, revert]
+      </td>
+      <td>
+       477.41
+      </td>
+      <td>
+       477.41
+      </td>
+      <td>
+       477.41
+      </td>
+      <td>
+       477.41
+      </td>
+      <td>
+       477.41
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:22.007462+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_blockhash[fork_Prague-benchmark-benchmark_test]
+      </td>
+      <td>
+       482.62
+      </td>
+      <td>
+       482.62
+      </td>
+      <td>
+       482.62
+      </td>
+      <td>
+       482.62
+      </td>
+      <td>
+       482.62
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:28.317078+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_BALANCE]
+      </td>
+      <td>
+       1606.24
+      </td>
+      <td>
+       1606.24
+      </td>
+      <td>
+       1606.24
+      </td>
+      <td>
+       1606.24
+      </td>
+      <td>
+       1606.24
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:41.962440+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_cold[fork_Prague-benchmark-benchmark_test-absent_accounts_False-opcode_BALANCE]
+      </td>
+      <td>
+       65.87
+      </td>
+      <td>
+       65.87
+      </td>
+      <td>
+       65.87
+      </td>
+      <td>
+       65.87
+      </td>
+      <td>
+       65.87
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:40.931473+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value, out of gas]
+      </td>
+      <td>
+       2138.51
+      </td>
+      <td>
+       2138.51
+      </td>
+      <td>
+       2138.51
+      </td>
+      <td>
+       2138.51
+      </td>
+      <td>
+       2138.51
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:03.919693+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_DELEGATECALL]
+      </td>
+      <td>
+       650.25
+      </td>
+      <td>
+       650.25
+      </td>
+      <td>
+       650.25
+      </td>
+      <td>
+       650.25
+      </td>
+      <td>
+       650.25
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:47.558907+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-512]
+      </td>
+      <td>
+       402.77
+      </td>
+      <td>
+       402.77
+      </td>
+      <td>
+       402.77
+      </td>
+      <td>
+       402.77
+      </td>
+      <td>
+       402.77
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:31.727257+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_EXTCODESIZE]
+      </td>
+      <td>
+       1981.71
+      </td>
+      <td>
+       1981.71
+      </td>
+      <td>
+       1981.71
+      </td>
+      <td>
+       1981.71
+      </td>
+      <td>
+       1981.71
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:50.702263+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSLOAD]
+      </td>
+      <td>
+       220.37
+      </td>
+      <td>
+       220.37
+      </td>
+      <td>
+       220.37
+      </td>
+      <td>
+       220.37
+      </td>
+      <td>
+       220.37
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:07.227539+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value, out of gas]
+      </td>
+      <td>
+       196.67
+      </td>
+      <td>
+       196.67
+      </td>
+      <td>
+       196.67
+      </td>
+      <td>
+       196.67
+      </td>
+      <td>
+       196.67
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:17.553032+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfbalance[fork_Prague-benchmark_test-contract_balance_1]
+      </td>
+      <td>
+       1169.31
+      </td>
+      <td>
+       1169.31
+      </td>
+      <td>
+       1169.31
+      </td>
+      <td>
+       1169.31
+      </td>
+      <td>
+       1169.31
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:30.409874+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value, revert]
+      </td>
+      <td>
+       192.82
+      </td>
+      <td>
+       192.82
+      </td>
+      <td>
+       192.82
+      </td>
+      <td>
+       192.82
+      </td>
+      <td>
+       192.82
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:14.068932+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_STATICCALL]
+      </td>
+      <td>
+       624.39
+      </td>
+      <td>
+       624.39
+      </td>
+      <td>
+       624.39
+      </td>
+      <td>
+       624.39
+      </td>
+      <td>
+       624.39
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:48.725098+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_DELEGATECALL]
+      </td>
+      <td>
+       614.84
+      </td>
+      <td>
+       614.84
+      </td>
+      <td>
+       614.84
+      </td>
+      <td>
+       614.84
+      </td>
+      <td>
+       614.84
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:55.188400+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value, revert]
+      </td>
+      <td>
+       1885.15
+      </td>
+      <td>
+       1885.15
+      </td>
+      <td>
+       1885.15
+      </td>
+      <td>
+       1885.15
+      </td>
+      <td>
+       1885.15
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:59.792648+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfbalance[fork_Prague-benchmark_test-contract_balance_0]
+      </td>
+      <td>
+       1154.15
+      </td>
+      <td>
+       1154.15
+      </td>
+      <td>
+       1154.15
+      </td>
+      <td>
+       1154.15
+      </td>
+      <td>
+       1154.15
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:29.368668+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSLOAD]
+      </td>
+      <td>
+       364.40
+      </td>
+      <td>
+       364.40
+      </td>
+      <td>
+       364.40
+      </td>
+      <td>
+       364.40
+      </td>
+      <td>
+       364.40
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:57.651703+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_EXTCODEHASH]
+      </td>
+      <td>
+       2706.49
+      </td>
+      <td>
+       2706.49
+      </td>
+      <td>
+       2706.49
+      </td>
+      <td>
+       2706.49
+      </td>
+      <td>
+       2706.49
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:43.928696+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value]
+      </td>
+      <td>
+       158.20
+      </td>
+      <td>
+       158.20
+      </td>
+      <td>
+       158.20
+      </td>
+      <td>
+       158.20
+      </td>
+      <td>
+       158.20
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:10.711990+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_BALANCE]
+      </td>
+      <td>
+       2059.43
+      </td>
+      <td>
+       2059.43
+      </td>
+      <td>
+       2059.43
+      </td>
+      <td>
+       2059.43
+      </td>
+      <td>
+       2059.43
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:49.711815+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-5KiB]
+      </td>
+      <td>
+       939.47
+      </td>
+      <td>
+       939.47
+      </td>
+      <td>
+       939.47
+      </td>
+      <td>
+       939.47
+      </td>
+      <td>
+       939.47
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:34.040169+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value, out of gas]
+      </td>
+      <td>
+       503.61
+      </td>
+      <td>
+       503.61
+      </td>
+      <td>
+       503.61
+      </td>
+      <td>
+       503.61
+      </td>
+      <td>
+       503.61
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:23.915375+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_existing[fork_Prague-benchmark-benchmark_test-value_bearing_True]
+      </td>
+      <td>
+       215.25
+      </td>
+      <td>
+       215.25
+      </td>
+      <td>
+       215.25
+      </td>
+      <td>
+       215.25
+      </td>
+      <td>
+       215.25
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:23:00.603905+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value]
+      </td>
+      <td>
+       1223.13
+      </td>
+      <td>
+       1223.13
+      </td>
+      <td>
+       1223.13
+      </td>
+      <td>
+       1223.13
+      </td>
+      <td>
+       1223.13
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:01.911285+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value]
+      </td>
+      <td>
+       364.56
+      </td>
+      <td>
+       364.56
+      </td>
+      <td>
+       364.56
+      </td>
+      <td>
+       364.56
+      </td>
+      <td>
+       364.56
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:20.028839+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_CALLCODE]
+      </td>
+      <td>
+       640.92
+      </td>
+      <td>
+       640.92
+      </td>
+      <td>
+       640.92
+      </td>
+      <td>
+       640.92
+      </td>
+      <td>
+       640.92
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:54.027519+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_created[fork_Prague-benchmark-state_test-value_bearing_True]
+      </td>
+      <td>
+       74.21
+      </td>
+      <td>
+       74.21
+      </td>
+      <td>
+       74.21
+      </td>
+      <td>
+       74.21
+      </td>
+      <td>
+       74.21
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:23:27.838341+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value, out of gas]
+      </td>
+      <td>
+       1927.46
+      </td>
+      <td>
+       1927.46
+      </td>
+      <td>
+       1927.46
+      </td>
+      <td>
+       1927.46
+      </td>
+      <td>
+       1927.46
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:00.787117+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_CALL]
+      </td>
+      <td>
+       430.73
+      </td>
+      <td>
+       430.73
+      </td>
+      <td>
+       430.73
+      </td>
+      <td>
+       430.73
+      </td>
+      <td>
+       430.73
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:45.196976+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_CALLCODE]
+      </td>
+      <td>
+       576.10
+      </td>
+      <td>
+       576.10
+      </td>
+      <td>
+       576.10
+      </td>
+      <td>
+       576.10
+      </td>
+      <td>
+       576.10
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:46.395630+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_EXTCODESIZE]
+      </td>
+      <td>
+       2469.28
+      </td>
+      <td>
+       2469.28
+      </td>
+      <td>
+       2469.28
+      </td>
+      <td>
+       2469.28
+      </td>
+      <td>
+       2469.28
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:42.951355+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-1KiB]
+      </td>
+      <td>
+       494.68
+      </td>
+      <td>
+       494.68
+      </td>
+      <td>
+       494.68
+      </td>
+      <td>
+       494.68
+      </td>
+      <td>
+       494.68
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:32.965935+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_STATICCALL]
+      </td>
+      <td>
+       736.89
+      </td>
+      <td>
+       736.89
+      </td>
+      <td>
+       736.89
+      </td>
+      <td>
+       736.89
+      </td>
+      <td>
+       736.89
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:21:56.315193+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value, revert]
+      </td>
+      <td>
+       1901.09
+      </td>
+      <td>
+       1901.09
+      </td>
+      <td>
+       1901.09
+      </td>
+      <td>
+       1901.09
+      </td>
+      <td>
+       1901.09
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:22:02.916115+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_existing[fork_Prague-benchmark-benchmark_test-value_bearing_False]
+      </td>
+      <td>
+       245.47
+      </td>
+      <td>
+       245.47
+      </td>
+      <td>
+       245.47
+      </td>
+      <td>
+       245.47
+      </td>
+      <td>
+       245.47
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:23:24.886826+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_initcode[fork_Prague-benchmark-state_test-value_bearing_True]
+      </td>
+      <td>
+       137.59
+      </td>
+      <td>
+       137.59
+      </td>
+      <td>
+       137.59
+      </td>
+      <td>
+       137.59
+      </td>
+      <td>
+       137.59
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:23:32.727951+00
+      </td>
+     </tr>
+    </tbody>
+   </table>
+   <h1>
+    Geth - ethpandaops/geth:performance-98d653c - Benchmarking Report
+   </h1>
+   <table id="table_geth">
+    <thread>
+     <tr>
+      <th class="title" onclick="sortTable(0, 'table_geth', false)" style="cursor: pointer;">
+       Title ↑ ↓
+      </th>
+      <th onclick="sortTable(1, 'table_geth', true)" style="cursor: pointer;">
+       Max (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(2, 'table_geth', true)" style="cursor: pointer;">
+       p50 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(3, 'table_geth', true)" style="cursor: pointer;">
+       p95 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(4, 'table_geth', true)" style="cursor: pointer;">
+       p99 (MGas/s) ↑ ↓
+      </th>
+      <th onclick="sortTable(5, 'table_geth', true)" style="cursor: pointer;">
+       Min (MGas/s) ↑ ↓
+      </th>
+      <th>
+       N
+      </th>
+      <th class="title">
+       Description
+      </th>
+      <th>
+       Start Time
+      </th>
+     </tr>
+    </thread>
+    <tbody>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value]
+      </td>
+      <td>
+       1934.77
+      </td>
+      <td>
+       1934.77
+      </td>
+      <td>
+       1934.77
+      </td>
+      <td>
+       1934.77
+      </td>
+      <td>
+       1934.77
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:48.905266+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_EXTCODEHASH]
+      </td>
+      <td>
+       4061.17
+      </td>
+      <td>
+       4061.17
+      </td>
+      <td>
+       4061.17
+      </td>
+      <td>
+       4061.17
+      </td>
+      <td>
+       4061.17
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:42.662315+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_created[fork_Prague-benchmark-state_test-value_bearing_False]
+      </td>
+      <td>
+       321.44
+      </td>
+      <td>
+       321.44
+      </td>
+      <td>
+       321.44
+      </td>
+      <td>
+       321.44
+      </td>
+      <td>
+       321.44
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:22.799568+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_cold[fork_Prague-benchmark-benchmark_test-absent_accounts_True-opcode_BALANCE]
+      </td>
+      <td>
+       22.70
+      </td>
+      <td>
+       22.70
+      </td>
+      <td>
+       22.70
+      </td>
+      <td>
+       22.70
+      </td>
+      <td>
+       22.70
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:24.758018+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_initcode[fork_Prague-benchmark-state_test-value_bearing_False]
+      </td>
+      <td>
+       321.34
+      </td>
+      <td>
+       321.34
+      </td>
+      <td>
+       321.34
+      </td>
+      <td>
+       321.34
+      </td>
+      <td>
+       321.34
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:25.499619+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_CALL]
+      </td>
+      <td>
+       1294.68
+      </td>
+      <td>
+       1294.68
+      </td>
+      <td>
+       1294.68
+      </td>
+      <td>
+       1294.68
+      </td>
+      <td>
+       1294.68
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:43.661079+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value, revert]
+      </td>
+      <td>
+       1085.40
+      </td>
+      <td>
+       1085.40
+      </td>
+      <td>
+       1085.40
+      </td>
+      <td>
+       1085.40
+      </td>
+      <td>
+       1085.40
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:03.588936+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_blockhash[fork_Prague-benchmark-benchmark_test]
+      </td>
+      <td>
+       1679.95
+      </td>
+      <td>
+       1679.95
+      </td>
+      <td>
+       1679.95
+      </td>
+      <td>
+       1679.95
+      </td>
+      <td>
+       1679.95
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:08.291214+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_BALANCE]
+      </td>
+      <td>
+       2986.18
+      </td>
+      <td>
+       2986.18
+      </td>
+      <td>
+       2986.18
+      </td>
+      <td>
+       2986.18
+      </td>
+      <td>
+       2986.18
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:33.981552+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_cold[fork_Prague-benchmark-benchmark_test-absent_accounts_False-opcode_BALANCE]
+      </td>
+      <td>
+       722.81
+      </td>
+      <td>
+       722.81
+      </td>
+      <td>
+       722.81
+      </td>
+      <td>
+       722.81
+      </td>
+      <td>
+       722.81
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:33.048515+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value, out of gas]
+      </td>
+      <td>
+       2222.44
+      </td>
+      <td>
+       2222.44
+      </td>
+      <td>
+       2222.44
+      </td>
+      <td>
+       2222.44
+      </td>
+      <td>
+       2222.44
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:53.634758+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_DELEGATECALL]
+      </td>
+      <td>
+       995.44
+      </td>
+      <td>
+       995.44
+      </td>
+      <td>
+       995.44
+      </td>
+      <td>
+       995.44
+      </td>
+      <td>
+       995.44
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:38.879295+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-512]
+      </td>
+      <td>
+       1213.17
+      </td>
+      <td>
+       1213.17
+      </td>
+      <td>
+       1213.17
+      </td>
+      <td>
+       1213.17
+      </td>
+      <td>
+       1213.17
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:11.344032+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_EXTCODESIZE]
+      </td>
+      <td>
+       2223.73
+      </td>
+      <td>
+       2223.73
+      </td>
+      <td>
+       2223.73
+      </td>
+      <td>
+       2223.73
+      </td>
+      <td>
+       2223.73
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:41.748734+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSLOAD]
+      </td>
+      <td>
+       664.28
+      </td>
+      <td>
+       664.28
+      </td>
+      <td>
+       664.28
+      </td>
+      <td>
+       664.28
+      </td>
+      <td>
+       664.28
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:55.479828+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value, out of gas]
+      </td>
+      <td>
+       608.91
+      </td>
+      <td>
+       608.91
+      </td>
+      <td>
+       608.91
+      </td>
+      <td>
+       608.91
+      </td>
+      <td>
+       608.91
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:00.879242+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfbalance[fork_Prague-benchmark_test-contract_balance_1]
+      </td>
+      <td>
+       1418.24
+      </td>
+      <td>
+       1418.24
+      </td>
+      <td>
+       1418.24
+      </td>
+      <td>
+       1418.24
+      </td>
+      <td>
+       1418.24
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:10.264687+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value, revert]
+      </td>
+      <td>
+       609.87
+      </td>
+      <td>
+       609.87
+      </td>
+      <td>
+       609.87
+      </td>
+      <td>
+       609.87
+      </td>
+      <td>
+       609.87
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:59.056610+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_STATICCALL]
+      </td>
+      <td>
+       1307.00
+      </td>
+      <td>
+       1307.00
+      </td>
+      <td>
+       1307.00
+      </td>
+      <td>
+       1307.00
+      </td>
+      <td>
+       1307.00
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:39.878372+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_DELEGATECALL]
+      </td>
+      <td>
+       1555.83
+      </td>
+      <td>
+       1555.83
+      </td>
+      <td>
+       1555.83
+      </td>
+      <td>
+       1555.83
+      </td>
+      <td>
+       1555.83
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:45.612877+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value, revert]
+      </td>
+      <td>
+       2506.09
+      </td>
+      <td>
+       2506.09
+      </td>
+      <td>
+       2506.09
+      </td>
+      <td>
+       2506.09
+      </td>
+      <td>
+       2506.09
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:49.843903+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfbalance[fork_Prague-benchmark_test-contract_balance_0]
+      </td>
+      <td>
+       1422.70
+      </td>
+      <td>
+       1422.70
+      </td>
+      <td>
+       1422.70
+      </td>
+      <td>
+       1422.70
+      </td>
+      <td>
+       1422.70
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:09.280151+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSLOAD]
+      </td>
+      <td>
+       316.94
+      </td>
+      <td>
+       316.94
+      </td>
+      <td>
+       316.94
+      </td>
+      <td>
+       316.94
+      </td>
+      <td>
+       316.94
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:47.947250+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_EXTCODEHASH]
+      </td>
+      <td>
+       3275.74
+      </td>
+      <td>
+       3275.74
+      </td>
+      <td>
+       3275.74
+      </td>
+      <td>
+       3275.74
+      </td>
+      <td>
+       3275.74
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:35.837776+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE same value]
+      </td>
+      <td>
+       646.74
+      </td>
+      <td>
+       646.74
+      </td>
+      <td>
+       646.74
+      </td>
+      <td>
+       646.74
+      </td>
+      <td>
+       646.74
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:57.269791+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_BALANCE]
+      </td>
+      <td>
+       4462.24
+      </td>
+      <td>
+       4462.24
+      </td>
+      <td>
+       4462.24
+      </td>
+      <td>
+       4462.24
+      </td>
+      <td>
+       4462.24
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:40.792114+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-5KiB]
+      </td>
+      <td>
+       2915.33
+      </td>
+      <td>
+       2915.33
+      </td>
+      <td>
+       2915.33
+      </td>
+      <td>
+       2915.33
+      </td>
+      <td>
+       2915.33
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:13.255302+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value, out of gas]
+      </td>
+      <td>
+       1141.09
+      </td>
+      <td>
+       1141.09
+      </td>
+      <td>
+       1141.09
+      </td>
+      <td>
+       1141.09
+      </td>
+      <td>
+       1141.09
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:04.877419+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_existing[fork_Prague-benchmark-benchmark_test-value_bearing_True]
+      </td>
+      <td>
+       574.87
+      </td>
+      <td>
+       574.87
+      </td>
+      <td>
+       574.87
+      </td>
+      <td>
+       574.87
+      </td>
+      <td>
+       574.87
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:16.776199+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value]
+      </td>
+      <td>
+       1963.76
+      </td>
+      <td>
+       1963.76
+      </td>
+      <td>
+       1963.76
+      </td>
+      <td>
+       1963.76
+      </td>
+      <td>
+       1963.76
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:51.743240+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_False-SSTORE new value]
+      </td>
+      <td>
+       659.88
+      </td>
+      <td>
+       659.88
+      </td>
+      <td>
+       659.88
+      </td>
+      <td>
+       659.88
+      </td>
+      <td>
+       659.88
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:02.278679+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_CALLCODE]
+      </td>
+      <td>
+       1617.43
+      </td>
+      <td>
+       1617.43
+      </td>
+      <td>
+       1617.43
+      </td>
+      <td>
+       1617.43
+      </td>
+      <td>
+       1617.43
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:44.630692+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_created[fork_Prague-benchmark-state_test-value_bearing_True]
+      </td>
+      <td>
+       325.61
+      </td>
+      <td>
+       325.61
+      </td>
+      <td>
+       325.61
+      </td>
+      <td>
+       325.61
+      </td>
+      <td>
+       325.61
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:21.454514+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE same value, out of gas]
+      </td>
+      <td>
+       2534.41
+      </td>
+      <td>
+       2534.41
+      </td>
+      <td>
+       2534.41
+      </td>
+      <td>
+       2534.41
+      </td>
+      <td>
+       2534.41
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:50.791451+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_CALL]
+      </td>
+      <td>
+       1503.31
+      </td>
+      <td>
+       1503.31
+      </td>
+      <td>
+       1503.31
+      </td>
+      <td>
+       1503.31
+      </td>
+      <td>
+       1503.31
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:36.821602+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_CALLCODE]
+      </td>
+      <td>
+       976.67
+      </td>
+      <td>
+       976.67
+      </td>
+      <td>
+       976.67
+      </td>
+      <td>
+       976.67
+      </td>
+      <td>
+       976.67
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:37.850464+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_True-opcode_EXTCODESIZE]
+      </td>
+      <td>
+       2885.87
+      </td>
+      <td>
+       2885.87
+      </td>
+      <td>
+       2885.87
+      </td>
+      <td>
+       2885.87
+      </td>
+      <td>
+       2885.87
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:34.908012+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_extcodecopy_warm[fork_Prague-benchmark-benchmark_test-1KiB]
+      </td>
+      <td>
+       1432.22
+      </td>
+      <td>
+       1432.22
+      </td>
+      <td>
+       1432.22
+      </td>
+      <td>
+       1432.22
+      </td>
+      <td>
+       1432.22
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:12.323418+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_address_state_warm[fork_Prague-benchmark_test-absent_target_False-opcode_STATICCALL]
+      </td>
+      <td>
+       1452.11
+      </td>
+      <td>
+       1452.11
+      </td>
+      <td>
+       1452.11
+      </td>
+      <td>
+       1452.11
+      </td>
+      <td>
+       1452.11
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:46.596764+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_storage_access_cold[fork_Prague-benchmark-benchmark_test-absent_slots_True-SSTORE new value, revert]
+      </td>
+      <td>
+       2427.41
+      </td>
+      <td>
+       2427.41
+      </td>
+      <td>
+       2427.41
+      </td>
+      <td>
+       2427.41
+      </td>
+      <td>
+       2427.41
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:24:52.684486+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_existing[fork_Prague-benchmark-benchmark_test-value_bearing_False]
+      </td>
+      <td>
+       1361.59
+      </td>
+      <td>
+       1361.59
+      </td>
+      <td>
+       1361.59
+      </td>
+      <td>
+       1361.59
+      </td>
+      <td>
+       1361.59
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:20.114937+00
+      </td>
+     </tr>
+     <tr>
+      <td class="title">
+       test_worst_stateful_opcodes.py__test_worst_selfdestruct_initcode[fork_Prague-benchmark-state_test-value_bearing_True]
+      </td>
+      <td>
+       310.47
+      </td>
+      <td>
+       310.47
+      </td>
+      <td>
+       310.47
+      </td>
+      <td>
+       310.47
+      </td>
+      <td>
+       310.47
+      </td>
+      <td>
+       1
+      </td>
+      <td style="text-align:left;">
+       Description not found on metadata file
+      </td>
+      <td>
+       2025-10-22 09:25:24.154175+00
+      </td>
+     </tr>
+    </tbody>
+   </table>
+   <script>
+    function sortTable(n, table_name, nm) {  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;  table = document.getElementById(table_name);  switching = true;  dir = "asc";  while (switching) {    switching = false;    rows = table.rows;    for (i = 1; i < (rows.length - 1); i++) {      shouldSwitch = false;      x = rows[i].getElementsByTagName("TD")[n];      y = rows[i + 1].getElementsByTagName("TD")[n];      if (dir == "asc") {        if (nm) {          if (Number(x.innerHTML) > Number(y.innerHTML)) {            shouldSwitch = true;            break;          }        } else {          if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {            shouldSwitch = true;            break;          }        }      } else if (dir == "desc") {        if (nm) {          if (Number(x.innerHTML) < Number(y.innerHTML)) {            shouldSwitch = true;            break;          }        } else {          if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {            shouldSwitch = true;            break;          }        }      }    }    if (shouldSwitch) {      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);      switching = true;      switchcount ++;    } else {      if (switchcount == 0 && dir == "asc") {        dir = "desc";        switching = true;      }    }  }}
+   </script>
+  </pre">
+ </body>
+</html>
