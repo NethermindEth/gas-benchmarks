@@ -124,8 +124,8 @@ def iter_cases(data, default_name: str) -> Iterable[Tuple[str, dict]]:
             yield name, case
 
 
-def extract_new_payloads(case: dict) -> list[str]:
-    payloads: list[str] = []
+def extract_new_payloads(case: dict) -> list[tuple[str, str]]:
+    payload_pairs: list[tuple[str, str]] = []
     ZERO32 = "0x" + ("00" * 32)
     anchor_hash: str | None = None
 
@@ -139,7 +139,7 @@ def extract_new_payloads(case: dict) -> list[str]:
             "method": method,
             "params": params,
         }
-        payloads.append(json.dumps(payload, separators=(",", ":")))
+        np_json = json.dumps(payload, separators=(",", ":"))
 
         block = params[0] if params and isinstance(params[0], dict) else {}
         block_hash = block.get("blockHash")
@@ -178,24 +178,23 @@ def extract_new_payloads(case: dict) -> list[str]:
                 fcu_params.append(None)
         except ValueError:
             fcu_params.append(None)
-        payloads.append(
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": fcu_method,
-                    "params": fcu_params,
-                },
-                separators=(",", ":"),
-            )
+        fcu_json = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": fcu_method,
+                "params": fcu_params,
+            },
+            separators=(",", ":"),
         )
-    return payloads
+        payload_pairs.append((np_json, fcu_json))
+    return payload_pairs
 
 
 def write_payloads(
     output_dir: Path,
     scenario_name: str,
-    payload_lines: list[str],
+    payload_pairs: list[tuple[str, str]],
 ) -> None:
     index = assign_index(scenario_name)
     setup_dir, testing_dir, cleanup_dir = ensure_phase_dirs(output_dir, index)
@@ -203,27 +202,30 @@ def write_payloads(
     base, suffix = normalize_name(scenario_name)
     filename = safe_filename(f"{base}{suffix}.txt")
 
-    if len(payload_lines) > 1:
+    if len(payload_pairs) > 1:
         setup_path = setup_dir / filename
         with setup_path.open("w", encoding="utf-8") as f:
-            for line in payload_lines[:-1]:
-                f.write(line + "\n")
-        print(f"→ Wrote setup payloads: {setup_path}")
+            for np_line, fcu_line in payload_pairs[:-1]:
+                f.write(np_line + "\\n")
+                f.write(fcu_line + "\\n")
+        print(f"[INFO] Wrote setup payloads: {setup_path}")
     else:
         setup_path = setup_dir / filename
         if setup_path.exists():
             setup_path.unlink()
 
     testing_path = testing_dir / filename
+    last_np, last_fcu = payload_pairs[-1]
     with testing_path.open("w", encoding="utf-8") as f:
-        f.write(payload_lines[-1] + "\n")
-    print(f"→ Wrote testing payload: {testing_path}")
+        f.write(last_np + "\\n")
+        f.write(last_fcu + "\\n")
+    print(f"[INFO] Wrote testing payload: {testing_path}")
 
     cleanup_path = cleanup_dir / filename
     with cleanup_path.open("w", encoding="utf-8") as f:
-        f.write(payload_lines[-1] + "\n")
-    print(f"→ Wrote cleanup payload: {cleanup_path}")
-
+        f.write(last_np + "\\n")
+        f.write(last_fcu + "\\n")
+    print(f"[INFO] Wrote cleanup payload: {cleanup_path}\n")
 
 def process_fixture_dir(root: Path, outdir: Path, excludes: list[str]) -> None:
     for path in sorted(root.rglob("*.json")):
