@@ -125,7 +125,10 @@ def iter_cases(data, default_name: str) -> Iterable[Tuple[str, dict]]:
 
 
 def extract_new_payloads(case: dict) -> list[str]:
-    payloads = []
+    payloads: list[str] = []
+    ZERO32 = "0x" + ("00" * 32)
+    anchor_hash: str | None = None
+
     for entry in case.get("engineNewPayloads", []):
         params = entry.get("params", [])
         version = entry.get("newPayloadVersion") or "1"
@@ -137,6 +140,55 @@ def extract_new_payloads(case: dict) -> list[str]:
             "params": params,
         }
         payloads.append(json.dumps(payload, separators=(",", ":")))
+
+        block = params[0] if params and isinstance(params[0], dict) else {}
+        block_hash = block.get("blockHash")
+        if not isinstance(block_hash, str) or not block_hash.startswith("0x"):
+            block_hash = ZERO32
+
+        if anchor_hash is None:
+            parent_hash = block.get("parentHash")
+            if isinstance(parent_hash, str) and parent_hash.startswith("0x") and parent_hash != ZERO32:
+                anchor_hash = parent_hash
+            else:
+                anchor_hash = block_hash if block_hash != ZERO32 else ZERO32
+
+        forkchoice_version = entry.get("forkchoiceVersion")
+        if not forkchoice_version:
+            try:
+                np_version = int(version)
+            except (TypeError, ValueError):
+                np_version = 3
+            if np_version >= 3:
+                forkchoice_version = "3"
+            elif np_version == 2:
+                forkchoice_version = "2"
+            else:
+                forkchoice_version = "1"
+
+        fcu_method = f"engine_forkchoiceUpdatedV{forkchoice_version}"
+        state = {
+            "headBlockHash": block_hash,
+            "safeBlockHash": anchor_hash or ZERO32,
+            "finalizedBlockHash": anchor_hash or ZERO32,
+        }
+        fcu_params: list = [state]
+        try:
+            if int(forkchoice_version) >= 2:
+                fcu_params.append(None)
+        except ValueError:
+            fcu_params.append(None)
+        payloads.append(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": fcu_method,
+                    "params": fcu_params,
+                },
+                separators=(",", ":"),
+            )
+        )
     return payloads
 
 
