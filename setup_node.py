@@ -64,8 +64,6 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
             {
                 "env": "GETH_INIT_COMMAND",                
                 "custom": "geth init --datadir=/var/lib/goethereum /tmp/genesis/genesis.json",
-                "custom": "",
-                "network": "true",
             },
         ],
         "extra_env": {},
