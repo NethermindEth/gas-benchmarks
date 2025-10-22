@@ -8,6 +8,7 @@ services:
       - gas
     volumes:
       - ${EC_DATA_DIR}:/var/lib/erigon
+      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     entrypoint:
