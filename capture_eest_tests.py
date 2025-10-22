@@ -127,7 +127,6 @@ def iter_cases(data, default_name: str) -> Iterable[Tuple[str, dict]]:
 def extract_new_payloads(case: dict) -> list[tuple[str, str]]:
     payload_pairs: list[tuple[str, str]] = []
     ZERO32 = "0x" + ("00" * 32)
-    anchor_hash: str | None = None
 
     for entry in case.get("engineNewPayloads", []):
         params = entry.get("params", [])
@@ -146,13 +145,6 @@ def extract_new_payloads(case: dict) -> list[tuple[str, str]]:
         if not isinstance(block_hash, str) or not block_hash.startswith("0x"):
             block_hash = ZERO32
 
-        if anchor_hash is None:
-            parent_hash = block.get("parentHash")
-            if isinstance(parent_hash, str) and parent_hash.startswith("0x") and parent_hash != ZERO32:
-                anchor_hash = parent_hash
-            else:
-                anchor_hash = block_hash if block_hash != ZERO32 else ZERO32
-
         forkchoice_version = entry.get("forkchoiceVersion")
         if not forkchoice_version:
             try:
@@ -169,8 +161,8 @@ def extract_new_payloads(case: dict) -> list[tuple[str, str]]:
         fcu_method = f"engine_forkchoiceUpdatedV{forkchoice_version}"
         state = {
             "headBlockHash": block_hash,
-            "safeBlockHash": anchor_hash or ZERO32,
-            "finalizedBlockHash": anchor_hash or ZERO32,
+            "safeBlockHash": ZERO32,
+            "finalizedBlockHash": ZERO32,
         }
         fcu_params: list = [state]
         try:
@@ -206,8 +198,10 @@ def write_payloads(
         setup_path = setup_dir / filename
         with setup_path.open("w", encoding="utf-8") as f:
             for np_line, fcu_line in payload_pairs[:-1]:
-                f.write(np_line + "\\n")
-                f.write(fcu_line + "\\n")
+                f.write(np_line)
+                f.write("\n")
+                f.write(fcu_line)
+                f.write("\n")
         print(f"[INFO] Wrote setup payloads: {setup_path}")
     else:
         setup_path = setup_dir / filename
@@ -217,15 +211,19 @@ def write_payloads(
     testing_path = testing_dir / filename
     last_np, last_fcu = payload_pairs[-1]
     with testing_path.open("w", encoding="utf-8") as f:
-        f.write(last_np + "\\n")
-        f.write(last_fcu + "\\n")
+        f.write(last_np)
+        f.write("\n")
+        f.write(last_fcu)
+        f.write("\n")
     print(f"[INFO] Wrote testing payload: {testing_path}")
 
     cleanup_path = cleanup_dir / filename
     with cleanup_path.open("w", encoding="utf-8") as f:
-        f.write(last_np + "\\n")
-        f.write(last_fcu + "\\n")
-    print(f"[INFO] Wrote cleanup payload: {cleanup_path}\n")
+        f.write(last_np)
+        f.write("\n")
+        f.write(last_fcu)
+        f.write("\n")
+    print(f"[INFO] Wrote cleanup payload: {cleanup_path}")
 
 def process_fixture_dir(root: Path, outdir: Path, excludes: list[str]) -> None:
     for path in sorted(root.rglob("*.json")):
