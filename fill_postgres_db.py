@@ -464,14 +464,10 @@ def populate_data_for_client(
                         raw_run_duration_ms = run_value
                         if gas_value_float is not None and raw_run_duration_ms > 0:
                             raw_run_mgas_s = (gas_value_float / raw_run_duration_ms) * 1000.0
-                        elif gas_value_float is not None:
-                            logging.debug(f"Non-positive run duration ({raw_run_duration_ms}) for {test_case_name_raw}; cannot compute MGas/s.")
                     else:
                         raw_run_mgas_s = run_value
                         if gas_value_float is not None and raw_run_mgas_s > 0:
                             raw_run_duration_ms = (gas_value_float / raw_run_mgas_s) * 1000.0
-                        elif gas_value_float is not None:
-                            logging.debug(f"Non-positive run MGas/s ({raw_run_mgas_s}) for {test_case_name_raw}; cannot estimate duration.")
 
                     start_time = agg_stats.get('start_time')
                     if start_time in (0, "0", "", None):

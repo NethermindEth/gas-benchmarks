@@ -37,6 +37,8 @@ services:
       - 8551
     command:
       - --syncmode=full
+      - --gcmode=archive
+      - --snapshot=false
       - --nat=none
       - --http
       - --http.addr=0.0.0.0
