@@ -15,6 +15,7 @@ services:
       - ${EC_DATA_DIR}:/nethermind/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
+      - /home/ubuntu/diagfiles:/nethermind/diag
     ports:
       - "8009:8009"
       - "8545:8545"
@@ -22,6 +23,11 @@ services:
     expose:
       - 8545
       - 8551
+    cap_add: [SYS_PTRACE]
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+
     command:
       - ${NETHERMIND_CONFIG_FLAG}
       - --datadir=/nethermind/data
@@ -41,6 +47,7 @@ services:
       - --Sync.MaxAttemptsToUpdatePivot=0
       - --Init.AutoDump=None
       #- --Pruning.PruningBoundary=2000
+      - --Merge.NewPayloadBlockProcessingTimeout=70000
       - --Merge.TerminalTotalDifficulty=0
       - --Init.LogRules=Consensus.Processing.ProcessingStats:Debug
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
