@@ -12,10 +12,21 @@ import yaml
 from utils import print_computer_specs
 
 
+GENESIS_FILES: Dict[str, Path] = {
+    "nethermind": Path("scripts/genesisfiles/nethermind/zkevmgenesis.json"),
+    "besu": Path("scripts/genesisfiles/besu/zkevmgenesis.json"),
+    "geth": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
+    "reth": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
+    "erigon": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
+    "nimbus": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
+    "ethrex": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
+}
+DEFAULT_GENESIS = GENESIS_FILES["geth"]
+
 CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     "nethermind": {
         "env_key": "CHAINSPEC_PATH",
-        "default_source": Path("scripts/genesisfiles/nethermind/chainspec.json"),
+        "default_source": GENESIS_FILES["nethermind"],
         "target": Path("/tmp/chainspec.json"),
         "flags": [
             {
@@ -33,7 +44,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     },
     "besu": {
         "env_key": "CHAINSPEC_PATH",
-        "default_source": Path("scripts/genesisfiles/besu/besu.json"),
+        "default_source": GENESIS_FILES["besu"],
         "target": Path("/tmp/besu.json"),
         "flags": [
             {
@@ -53,7 +64,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     },
     "geth": {
         "env_key": "GENESIS_PATH",
-        "default_source": Path("scripts/genesisfiles/geth/genesis.json"),
+        "default_source": GENESIS_FILES["geth"],
         "target": Path("/tmp/genesis.json"),
         "flags": [
             {
@@ -71,7 +82,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     },
     "reth": {
         "env_key": "GENESIS_PATH",
-        "default_source": Path("scripts/genesisfiles/geth/genesis.json"),
+        "default_source": GENESIS_FILES["reth"],
         "target": Path("/tmp/genesis.json"),
         "flags": [
             {
@@ -89,7 +100,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     },
     "erigon": {
         "env_key": "GENESIS_PATH",
-        "default_source": Path("scripts/genesisfiles/geth/genesis.json"),
+        "default_source": GENESIS_FILES["erigon"],
         "target": Path("/tmp/genesis.json"),
         "flags": [
             {
@@ -107,7 +118,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     },
     "nimbus": {
         "env_key": "GENESIS_PATH",
-        "default_source": Path("scripts/genesisfiles/geth/genesis.json"),
+        "default_source": GENESIS_FILES["nimbus"],
         "target": Path("/tmp/genesis.json"),
         "flags": [
             {
@@ -120,7 +131,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     },
     "ethrex": {
         "env_key": "GENESIS_PATH",
-        "default_source": Path("scripts/genesisfiles/geth/genesis.json"),
+        "default_source": GENESIS_FILES["ethrex"],
         "target": Path("/tmp/genesis.json"),
         "flags": [
             {
@@ -135,7 +146,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
 
 DEFAULT_CLIENT_METADATA: Dict[str, Any] = {
     "env_key": "GENESIS_PATH",
-    "default_source": Path("scripts/genesisfiles/geth/genesis.json"),
+    "default_source": DEFAULT_GENESIS,
     "target": Path("/tmp/genesis.json"),
     "flags": [],
     "extra_env": {},
