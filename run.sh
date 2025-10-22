@@ -851,6 +851,7 @@ for run in $(seq 1 $RUNS); do
 
     RUNNING_CLIENTS["$client_base"]=1
 
+    echo "[INFO] Running setup_node command: ${setup_cmd[*]}"
     "${setup_cmd[@]}"
 
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
@@ -862,6 +863,7 @@ for run in $(seq 1 $RUNS); do
     if [ "$warmed" = false ] && [ -n "$WARMUP_FILE" ]; then
       start_timer "warmup_${client}_run_${run}"
       if [ -f "$WARMUP_FILE" ]; then
+        echo "[INFO] Running warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$WARMUP_FILE\" --jwtPath /tmp/jwtsecret --client $client --run $run"
         python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
       else
         echo "[WARN] Warmup file '$WARMUP_FILE' not found; skipping warmup."
@@ -917,6 +919,7 @@ for run in $(seq 1 $RUNS); do
 
       if [ "$measured" = false ]; then
         echo "Executing preparation script (not measured): $filename"
+        echo "[INFO] Running preparation run_kute command: python3 run_kute.py --output \"$PREPARATION_RESULTS_DIR\" --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run"
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
         echo ""
         continue
@@ -941,6 +944,7 @@ for run in $(seq 1 $RUNS); do
         else
           for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
             test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
+            echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'"
             python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'
             warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
           done
@@ -951,6 +955,7 @@ for run in $(seq 1 $RUNS); do
       # Actual measured run
       start_test_timer "test_run_${client}_${filename}"
       test_debug_log "Running test: $filename"
+      echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
       end_test_timer "test_run_${client}_${filename}"
       echo "" # Line break after each test for logs clarity
