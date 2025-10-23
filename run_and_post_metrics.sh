@@ -25,9 +25,9 @@
 #
 # Default warmup file is set to "warmup/warmup-1000bl-16wi-24tx.txt"
 
-# Default warmup file
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
-TEST_PATHS_JSON='[{\"path\": \"eest_tests\", \"genesis\":\"zkevmgenesis.json\"}]'  # default test path
+# Default warmup file (empty means skip warmup)
+WARMUP_FILE=""
+TEST_PATHS_JSON='[{"path":"eest_tests","genesis":"zkevmgenesis.json"}]'  # default test path
 DEBUG_ARGS=()
 DEBUG=false
 DEBUG_FILE=""
@@ -38,7 +38,6 @@ SNAPSHOT_TEMPLATE=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
-
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -246,6 +245,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+
+
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
 echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
   exit 1
@@ -300,7 +301,14 @@ while true; do
   
   start_timer "benchmark_testing"
   # Run the benchmark testing using specified warmup file
-  RUN_CMD=(bash run.sh -T "$TEST_PATHS_JSON" -w "$WARMUP_FILE" -r 1)
+  RUN_CMD=(bash run.sh -T "$TEST_PATHS_JSON" -r 1)
+  if [ -n "$WARMUP_FILE" ]; then
+    if [ -f "$WARMUP_FILE" ]; then
+      RUN_CMD+=(-w "$WARMUP_FILE")
+    else
+      echo "[WARN] Requested warmup file '$WARMUP_FILE' not found; skipping warmup."
+    fi
+  fi
   if [ -n "$NETWORK" ]; then
     RUN_CMD+=(-n "$NETWORK")
   fi
@@ -329,6 +337,7 @@ while true; do
     RUN_CMD+=("${DEBUG_ARGS[@]}")
   fi
 
+  echo "[INFO] Executing benchmark command: ${RUN_CMD[*]}"
   PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" \
   PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" \
   PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
@@ -379,3 +388,4 @@ while true; do
   debug_log "Loop iteration completed"
   echo "--- End of loop iteration ---"
 done
+
