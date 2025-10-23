@@ -27,7 +27,7 @@
 
 # Default warmup file (empty means skip warmup)
 WARMUP_FILE=""
-TEST_PATHS_JSON='[{\"path\": \"eest_tests\", \"genesis\":\"zkevmgenesis.json\"}]'  # default test path
+TEST_PATHS_JSON='[{"path":"eest_tests","genesis":"zkevmgenesis.json"}]'  # default test path
 DEBUG_ARGS=()
 DEBUG=false
 DEBUG_FILE=""
