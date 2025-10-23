@@ -562,11 +562,11 @@ docker_compose_down_for_client() {
   fi
 
   if [ -f "$compose_dir/docker-compose.yaml" ]; then
-    docker compose -f "$compose_dir/docker-compose.yaml" down >/dev/null 2>&1 || \
-      docker compose -f "$compose_dir/docker-compose.yaml" down
+    docker compose -f "$compose_dir/docker-compose.yaml" stop >/dev/null 2>&1 || \
+      docker compose -f "$compose_dir/docker-compose.yaml" stop
   elif [ -d "$compose_dir" ]; then
     (
-      cd "$compose_dir" && docker compose down >/dev/null 2>&1 || docker compose down
+      cd "$compose_dir" && docker compose stop >/dev/null 2>&1 || docker compose stop
     )
   fi
 }
