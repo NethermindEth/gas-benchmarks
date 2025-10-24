@@ -603,16 +603,20 @@ cleanup_stale_overlay_mounts() {
       continue
     fi
 
+    if [[ ! "$mount_point" =~ /merged$ ]]; then
+      continue
+    fi
+
     if ! umount "$mount_point" 2>/dev/null; then
       if command -v sudo >/dev/null 2>&1; then
-        sudo -n umount "$mount_point" >/dev/null 2>&1 || sudo -n umount "$mount_point"
+        sudo umount "$mount_point" >/dev/null 2>&1 || sudo umount "$mount_point"
       fi
     fi
 
     if is_mounted "$mount_point"; then
       if ! umount -l "$mount_point" 2>/dev/null; then
         if command -v sudo >/dev/null 2>&1; then
-          sudo -n umount -l "$mount_point" >/dev/null 2>&1 || sudo -n umount -l "$mount_point"
+          sudo umount -l "$mount_point" >/dev/null 2>&1 || sudo umount -l "$mount_point"
         fi
       fi
     fi
@@ -620,15 +624,30 @@ cleanup_stale_overlay_mounts() {
     if is_mounted "$mount_point" && command -v fuser >/dev/null 2>&1; then
       fuser -km "$mount_point" >/dev/null 2>&1 || true
       if command -v sudo >/dev/null 2>&1; then
-        sudo -n fuser -km "$mount_point" >/dev/null 2>&1 || true
+        sudo fuser -km "$mount_point" >/dev/null 2>&1 || true
       fi
       sleep 1
       if is_mounted "$mount_point"; then
         umount "$mount_point" 2>/dev/null || true
-        if command -v sudo >/dev/null 2>&1; then
-          sudo -n umount "$mount_point" >/dev/null 2>&1 || sudo -n umount -l "$mount_point" >/dev/null 2>&1 || true
+        if is_mounted "$mount_point" && command -v sudo >/dev/null 2>&1; then
+          sudo umount "$mount_point" >/dev/null 2>&1 || sudo umount -l "$mount_point" >/dev/null 2>&1 || true
         fi
       fi
+    fi
+
+    if is_mounted "$mount_point"; then
+      echo "⚠️  Unable to unmount stale overlay mount $mount_point" >&2
+      continue
+    fi
+
+    local run_dir
+    run_dir=$(dirname "$mount_point")
+    rm -rf "$run_dir" 2>/dev/null || true
+
+    local client_dir
+    client_dir=$(dirname "$run_dir")
+    if [ -d "$client_dir" ] && [ -z "$(ls -A "$client_dir" 2>/dev/null)" ]; then
+      rmdir "$client_dir" 2>/dev/null || true
     fi
   done
 
