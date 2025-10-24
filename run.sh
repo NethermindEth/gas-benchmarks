@@ -506,6 +506,7 @@ cleanup_overlay_for_client() {
   local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
   local work="${ACTIVE_OVERLAY_WORKS[$client]}"
   local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
+  local base_dir
 
   if [ -n "$merged" ] && is_mounted "$merged"; then
     # Try regular unmount first
@@ -550,6 +551,18 @@ cleanup_overlay_for_client() {
   [ -n "$work" ] && rm -rf "$work"
   [ -n "$root" ] && rm -rf "$root"
 
+  if [ -n "$root" ]; then
+    local client_root
+    client_root=$(dirname "$root")
+    if [ -d "$client_root" ] && [ -z "$(ls -A "$client_root" 2>/dev/null)" ]; then
+      rmdir "$client_root" 2>/dev/null || true
+    fi
+    base_dir=$(dirname "$client_root")
+    if [ -d "$base_dir" ] && [ -z "$(ls -A "$base_dir" 2>/dev/null)" ]; then
+      rmdir "$base_dir" 2>/dev/null || true
+    fi
+  fi
+
   unset ACTIVE_OVERLAY_MOUNTS["$client"]
   unset ACTIVE_OVERLAY_UPPERS["$client"]
   unset ACTIVE_OVERLAY_WORKS["$client"]
@@ -562,6 +575,43 @@ cleanup_all_overlays() {
   for client in "${!ACTIVE_OVERLAY_CLIENTS[@]}"; do
     cleanup_overlay_for_client "$client"
   done
+}
+
+cleanup_stale_overlay_mounts() {
+  local base="$OVERLAY_TMP_ROOT"
+  if [ -z "$base" ]; then
+    return
+  fi
+
+  if [[ "$base" != /* ]]; then
+    base=$(abspath "$base")
+  fi
+
+  if [ ! -d "$base" ]; then
+    return
+  fi
+
+  mapfile -t stale_mounts < <(mount | awk -v base="$base" '$3 ~ "^" base {print $3}' | sort -r)
+
+  local mount_point
+  for mount_point in "${stale_mounts[@]}"; do
+    if [ -z "$mount_point" ]; then
+      continue
+    fi
+
+    if ! umount "$mount_point" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo umount "$mount_point" >/dev/null 2>&1 || sudo umount -l "$mount_point" >/dev/null 2>&1 || true
+      fi
+    fi
+
+    if is_mounted "$mount_point" && command -v sudo >/dev/null 2>&1; then
+      sudo fuser -km "$mount_point" >/dev/null 2>&1 || true
+      sudo umount "$mount_point" >/dev/null 2>&1 || sudo umount -l "$mount_point" >/dev/null 2>&1 || true
+    fi
+  done
+
+  find "$base" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
 }
 
 drop_host_caches() {
@@ -644,6 +694,10 @@ cleanup_on_exit() {
 
   if declare -F cleanup_all_overlays >/dev/null 2>&1; then
     cleanup_all_overlays
+  fi
+
+  if declare -F cleanup_stale_overlay_mounts >/dev/null 2>&1; then
+    cleanup_stale_overlay_mounts
   fi
 
   exit $exit_status
@@ -777,8 +831,11 @@ if [ -n "$DEBUG_FILE" ]; then
   fi
 fi
 
-if [ "$USE_OVERLAY" = true ] && [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
-  mkdir -p "$OVERLAY_TMP_ROOT"
+if [ "$USE_OVERLAY" = true ]; then
+  cleanup_stale_overlay_mounts
+  if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
+    mkdir -p "$OVERLAY_TMP_ROOT"
+  fi
 fi
 
 # Set up environment
