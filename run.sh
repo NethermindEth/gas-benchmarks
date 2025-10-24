@@ -32,6 +32,7 @@ declare -A STEP_TIMES
 declare -A ACTIVE_OVERLAY_MOUNTS
 declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
+declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
 declare -A RUNNING_CLIENTS
 SCRIPT_START_TIME=$(date +%s.%N)
@@ -449,7 +450,13 @@ prepare_overlay_for_client() {
 
   mkdir -p "$overlay_base"
 
-  local overlay_root="$overlay_base/$client"
+  local client_root="$overlay_base/$client"
+  mkdir -p "$client_root"
+
+  local overlay_id
+  overlay_id="$(date +%s%N)_$RANDOM"
+
+  local overlay_root="$client_root/$overlay_id"
   local merged="$overlay_root/merged"
   local upper="$overlay_root/upper"
   local work="$overlay_root/work"
@@ -487,6 +494,7 @@ prepare_overlay_for_client() {
   ACTIVE_OVERLAY_MOUNTS["$client"]="$merged"
   ACTIVE_OVERLAY_UPPERS["$client"]="$upper"
   ACTIVE_OVERLAY_WORKS["$client"]="$work"
+  ACTIVE_OVERLAY_ROOTS["$client"]="$overlay_root"
   ACTIVE_OVERLAY_CLIENTS["$client"]=1
 
   echo "$merged"
@@ -497,6 +505,7 @@ cleanup_overlay_for_client() {
   local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
   local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
   local work="${ACTIVE_OVERLAY_WORKS[$client]}"
+  local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
 
   if [ -n "$merged" ] && is_mounted "$merged"; then
     # Try regular unmount first
@@ -539,10 +548,12 @@ cleanup_overlay_for_client() {
   [ -n "$merged" ] && rm -rf "$merged"
   [ -n "$upper" ] && rm -rf "$upper"
   [ -n "$work" ] && rm -rf "$work"
+  [ -n "$root" ] && rm -rf "$root"
 
   unset ACTIVE_OVERLAY_MOUNTS["$client"]
   unset ACTIVE_OVERLAY_UPPERS["$client"]
   unset ACTIVE_OVERLAY_WORKS["$client"]
+  unset ACTIVE_OVERLAY_ROOTS["$client"]
   unset ACTIVE_OVERLAY_CLIENTS["$client"]
 }
 
