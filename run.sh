@@ -508,11 +508,13 @@ cleanup_overlay_for_client() {
   local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
   local base_dir
 
+  local unmounted=true
+
   if [ -n "$merged" ] && is_mounted "$merged"; then
     # Try regular unmount first
     if ! umount "$merged" 2>/dev/null; then
       if command -v sudo >/dev/null 2>&1; then
-        sudo umount "$merged" >/dev/null 2>&1 || sudo umount "$merged"
+        sudo -n umount "$merged" >/dev/null 2>&1 || sudo -n umount "$merged"
       fi
     fi
 
@@ -520,7 +522,7 @@ cleanup_overlay_for_client() {
     if is_mounted "$merged"; then
       if ! umount -l "$merged" 2>/dev/null; then
         if command -v sudo >/dev/null 2>&1; then
-          sudo umount -l "$merged" >/dev/null 2>&1 || sudo umount -l "$merged"
+          sudo -n umount -l "$merged" >/dev/null 2>&1 || sudo -n umount -l "$merged"
         fi
       fi
     fi
@@ -529,29 +531,31 @@ cleanup_overlay_for_client() {
     if is_mounted "$merged" && command -v fuser >/dev/null 2>&1; then
       fuser -km "$merged" >/dev/null 2>&1 || true
       if is_mounted "$merged" && command -v sudo >/dev/null 2>&1; then
-        sudo fuser -km "$merged" >/dev/null 2>&1 || true
+        sudo -n fuser -km "$merged" >/dev/null 2>&1 || true
       fi
       sleep 1
       if is_mounted "$merged"; then
         umount "$merged" 2>/dev/null || true
         if is_mounted "$merged" && command -v sudo >/dev/null 2>&1; then
-          sudo umount "$merged" >/dev/null 2>&1 || true
+          sudo -n umount "$merged" >/dev/null 2>&1 || true
         fi
       fi
     fi
 
     if is_mounted "$merged"; then
       echo "⚠️  Unable to unmount overlay for $client ($merged); leaving mount in place" >&2
-      return
+      unmounted=false
     fi
   fi
 
-  [ -n "$merged" ] && rm -rf "$merged"
-  [ -n "$upper" ] && rm -rf "$upper"
-  [ -n "$work" ] && rm -rf "$work"
-  [ -n "$root" ] && rm -rf "$root"
+  if [ "$unmounted" = true ]; then
+    [ -n "$merged" ] && rm -rf "$merged"
+    [ -n "$upper" ] && rm -rf "$upper"
+    [ -n "$work" ] && rm -rf "$work"
+    [ -n "$root" ] && rm -rf "$root"
+  fi
 
-  if [ -n "$root" ]; then
+  if [ "$unmounted" = true ] && [ -n "$root" ]; then
     local client_root
     client_root=$(dirname "$root")
     if [ -d "$client_root" ] && [ -z "$(ls -A "$client_root" 2>/dev/null)" ]; then
@@ -601,17 +605,34 @@ cleanup_stale_overlay_mounts() {
 
     if ! umount "$mount_point" 2>/dev/null; then
       if command -v sudo >/dev/null 2>&1; then
-        sudo umount "$mount_point" >/dev/null 2>&1 || sudo umount -l "$mount_point" >/dev/null 2>&1 || true
+        sudo -n umount "$mount_point" >/dev/null 2>&1 || sudo -n umount "$mount_point"
       fi
     fi
 
-    if is_mounted "$mount_point" && command -v sudo >/dev/null 2>&1; then
-      sudo fuser -km "$mount_point" >/dev/null 2>&1 || true
-      sudo umount "$mount_point" >/dev/null 2>&1 || sudo umount -l "$mount_point" >/dev/null 2>&1 || true
+    if is_mounted "$mount_point"; then
+      if ! umount -l "$mount_point" 2>/dev/null; then
+        if command -v sudo >/dev/null 2>&1; then
+          sudo -n umount -l "$mount_point" >/dev/null 2>&1 || sudo -n umount -l "$mount_point"
+        fi
+      fi
+    fi
+
+    if is_mounted "$mount_point" && command -v fuser >/dev/null 2>&1; then
+      fuser -km "$mount_point" >/dev/null 2>&1 || true
+      if command -v sudo >/dev/null 2>&1; then
+        sudo -n fuser -km "$mount_point" >/dev/null 2>&1 || true
+      fi
+      sleep 1
+      if is_mounted "$mount_point"; then
+        umount "$mount_point" 2>/dev/null || true
+        if command -v sudo >/dev/null 2>&1; then
+          sudo -n umount "$mount_point" >/dev/null 2>&1 || sudo -n umount -l "$mount_point" >/dev/null 2>&1 || true
+        fi
+      fi
     fi
   done
 
-  find "$base" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
+  find "$base" -mindepth 1 -type d -empty -delete 2>/dev/null || true
 }
 
 drop_host_caches() {
@@ -1067,6 +1088,7 @@ for run in $(seq 1 $RUNS); do
 
     if [ "$USE_OVERLAY" = true ]; then
       cleanup_overlay_for_client "$client_base"
+      cleanup_stale_overlay_mounts
     fi
     end_timer "teardown_${client}"
 
