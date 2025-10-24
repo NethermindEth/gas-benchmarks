@@ -4,6 +4,7 @@ services:
     environment:
       - TERM=xterm-256color
       - COLORTERM=truecolor
+    stop_signal: SIGINT 
     stop_grace_period: 30s
     container_name: gas-execution-client
     restart: unless-stopped
@@ -23,10 +24,6 @@ services:
     expose:
       - 8545
       - 8551
-    cap_add: [SYS_PTRACE]
-    security_opt:
-      - seccomp=unconfined
-      - apparmor=unconfined
 
     command:
       - ${NETHERMIND_CONFIG_FLAG}

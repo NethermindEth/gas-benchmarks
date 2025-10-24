@@ -20,7 +20,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "NETHERMIND_CONFIG_FLAG",
-                "custom": "--config=holesky",
+                "custom": "",
                 "network": lambda net: f"--config={net}",
             },
             {
