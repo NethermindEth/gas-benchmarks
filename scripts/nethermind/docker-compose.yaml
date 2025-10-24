@@ -13,7 +13,7 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/nethermind/data
+      - execution_data:/nethermind/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
       - /home/ubuntu/diagfiles:/nethermind/diag
@@ -67,3 +67,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}

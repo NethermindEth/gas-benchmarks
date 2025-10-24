@@ -564,6 +564,26 @@ cleanup_all_overlays() {
   done
 }
 
+drop_host_caches() {
+  local status=0
+
+  if command -v sync >/dev/null 2>&1; then
+    sync || status=$?
+  fi
+
+  if [ -w /proc/sys/vm/drop_caches ]; then
+    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || status=$?
+    return $status
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || status=$?
+    return $status
+  fi
+
+  return 1
+}
+
 docker_compose_down_for_client() {
   local client_base="$1"
   local compose_dir="scripts/$client_base"
@@ -573,11 +593,11 @@ docker_compose_down_for_client() {
   fi
 
   if [ -f "$compose_dir/docker-compose.yaml" ]; then
-    docker compose -f "$compose_dir/docker-compose.yaml" down >/dev/null 2>&1 || \
-      docker compose -f "$compose_dir/docker-compose.yaml" down
+    docker compose -f "$compose_dir/docker-compose.yaml" down --volumes >/dev/null 2>&1 || \
+      docker compose -f "$compose_dir/docker-compose.yaml" down --volumes
   elif [ -d "$compose_dir" ]; then
     (
-      cd "$compose_dir" && docker compose down >/dev/null 2>&1 || docker compose down
+      cd "$compose_dir" && docker compose down --volumes >/dev/null 2>&1 || docker compose down --volumes
     )
   fi
 }
@@ -847,6 +867,19 @@ for run in $(seq 1 $RUNS); do
       mkdir -p "$data_dir"
     fi
 
+    volume_name="${client_base}_$(date +%s)_$RANDOM"
+    if [ "$USE_OVERLAY" = true ]; then
+      overlay_root="${ACTIVE_OVERLAY_ROOTS[$client_base]}"
+      if [ -n "$overlay_root" ]; then
+        overlay_token=$(basename "$overlay_root")
+        volume_name="${client_base}_${overlay_token}_$(date +%s)_$RANDOM"
+      fi
+    fi
+    volume_name=$(echo "$volume_name" | tr -cd '[:alnum:]._-')
+    if [ -z "$volume_name" ]; then
+      volume_name="${client_base}_volume"
+    fi
+
     end_timer "setup_node_${client}"
 
     setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
@@ -857,6 +890,7 @@ for run in $(seq 1 $RUNS); do
       echo "Using custom genesis for $client: $genesis_path"
       setup_cmd+=(--genesisPath "$genesis_path")
     fi
+    setup_cmd+=(--volumeName "$volume_name")
 
     RUNNING_CLIENTS["$client_base"]=1
 
@@ -975,6 +1009,12 @@ for run in $(seq 1 $RUNS); do
     end_timer "teardown_${client}"
 
     unset RUNNING_CLIENTS["$client_base"]
+
+    if drop_host_caches; then
+      debug_log "Dropped host caches"
+    else
+      debug_log "Skipped host cache drop (insufficient permissions)"
+    fi
 
     update_execution_time "$client"
     end_timer "client_${client}_run_${run}"
