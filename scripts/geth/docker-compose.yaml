@@ -6,7 +6,7 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/goethereum
+      - execution_data:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     entrypoint:
@@ -25,7 +25,7 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/goethereum
+      - execution_data:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
       - "8008:8008/tcp"
@@ -84,3 +84,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}

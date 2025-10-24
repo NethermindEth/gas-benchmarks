@@ -7,12 +7,11 @@ files following the stateful test directory layout:
   <output>/
     setup/000001/<scenario>.txt
     testing/000001/<scenario>.txt
-    cleanup/000001/<scenario>.txt
 
 If a scenario produces multiple engine_newPayload calls, every payload except the
 last is written to the setup file (each as a newline-delimited JSON object) and
-the final payload is written to the testing and cleanup files. Single-payload
-scenarios are written only to testing/cleanup.
+the final payload is written to the testing file. Single-payload scenarios are
+written only to testing.
 """
 
 from __future__ import annotations
@@ -97,14 +96,13 @@ def assign_index(raw: str) -> int:
     return SCENARIO_INDICES[key]
 
 
-def ensure_phase_dirs(base_dir: Path, index: int) -> Tuple[Path, Path, Path]:
+def ensure_phase_dirs(base_dir: Path, index: int) -> Tuple[Path, Path]:
     dir_name = f"{index:06d}"
     setup_dir = base_dir / "setup" / dir_name
     testing_dir = base_dir / "testing" / dir_name
-    cleanup_dir = base_dir / "cleanup" / dir_name
-    for directory in (setup_dir, testing_dir, cleanup_dir):
+    for directory in (setup_dir, testing_dir):
         directory.mkdir(parents=True, exist_ok=True)
-    return setup_dir, testing_dir, cleanup_dir
+    return setup_dir, testing_dir
 
 
 def should_exclude(raw: str, exclude_patterns: Iterable[str]) -> bool:
@@ -189,7 +187,7 @@ def write_payloads(
     payload_pairs: list[tuple[str, str]],
 ) -> None:
     index = assign_index(scenario_name)
-    setup_dir, testing_dir, cleanup_dir = ensure_phase_dirs(output_dir, index)
+    setup_dir, testing_dir = ensure_phase_dirs(output_dir, index)
 
     base, suffix = normalize_name(scenario_name)
     filename = safe_filename(f"{base}{suffix}.txt")
@@ -216,14 +214,6 @@ def write_payloads(
         f.write(last_fcu)
         f.write("\n")
     print(f"[INFO] Wrote testing payload: {testing_path}")
-
-    cleanup_path = cleanup_dir / filename
-    with cleanup_path.open("w", encoding="utf-8") as f:
-        f.write(last_np)
-        f.write("\n")
-        f.write(last_fcu)
-        f.write("\n")
-    print(f"[INFO] Wrote cleanup payload: {cleanup_path}")
 
 def process_fixture_dir(root: Path, outdir: Path, excludes: list[str]) -> None:
     for path in sorted(root.rglob("*.json")):

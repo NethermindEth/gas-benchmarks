@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -31,7 +32,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "NETHERMIND_CONFIG_FLAG",
-                "custom": "--config=holesky",
+                "custom": "--config=none",
                 "network": lambda net: f"--config={net}",
             },
             {
@@ -153,6 +154,11 @@ DEFAULT_CLIENT_METADATA: Dict[str, Any] = {
 }
 
 
+def sanitize_volume_name(name: str) -> str:
+    sanitized = re.sub(r"[^a-zA-Z0-9_.-]", "_", name)
+    return sanitized or "gasbench_volume"
+
+
 def run_command(client, run_path):
     command = f"{run_path}/run.sh"
     print(
@@ -200,6 +206,7 @@ def set_env(
     use_custom_genesis: bool,
     genesis_host_path: Path,
     metadata: Dict[str, Any],
+    volume_name: Optional[str],
 ):
     resolved_data_dir = Path(data_dir or Path(run_path) / "execution-data").resolve()
 
@@ -211,6 +218,11 @@ def set_env(
         "USE_CUSTOM_GENESIS": "true" if use_custom_genesis else "false",
         "NETWORK_NAME": network or "",
     }
+
+    sanitized_volume = sanitize_volume_name(volume_name) if volume_name else sanitize_volume_name(
+        f"{client}_{int(time.time())}"
+    )
+    env_map["EC_VOLUME_NAME"] = sanitized_volume
 
     for flag_entry in metadata.get("flags", []):
         env_key = flag_entry.get("env")
@@ -269,6 +281,11 @@ def main():
         type=str,
         help="Host directory to bind into the client as data dir",
     )
+    parser.add_argument(
+        "--volumeName",
+        type=str,
+        help="Docker volume name override",
+    )
 
     args = parser.parse_args()
 
@@ -280,6 +297,7 @@ def main():
     genesis_path = args.genesisPath
     network = args.network
     data_dir = args.dataDir
+    volume_name = args.volumeName
 
     with open("images.yaml", "r") as f:
         el_images = yaml.safe_load(f)["images"]
@@ -325,6 +343,7 @@ def main():
         use_custom_genesis=use_custom_genesis,
         genesis_host_path=genesis_target,
         metadata=metadata,
+        volume_name=volume_name,
     )
 
     # Start client
