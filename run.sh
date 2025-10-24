@@ -984,12 +984,17 @@ for run in $(seq 1 $RUNS); do
             warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
           done
           end_test_timer "opcodes_warmup_${client}_${filename}"
-        fi
       fi
+    fi
 
-      # Actual measured run
-      start_test_timer "test_run_${client}_${filename}"
-      test_debug_log "Running test: $filename"
+    # Actual measured run
+    if drop_host_caches; then
+      test_debug_log "Dropped host caches before scenario $filename"
+    else
+      test_debug_log "Skipped host cache drop before scenario $filename (insufficient permissions)"
+    fi
+    start_test_timer "test_run_${client}_${filename}"
+    test_debug_log "Running test: $filename"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
       end_test_timer "test_run_${client}_${filename}"
       echo "" # Line break after each test for logs clarity
