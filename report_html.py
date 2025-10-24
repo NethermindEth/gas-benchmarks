@@ -1,266 +1,251 @@
 import argparse
+import csv
 import json
-import os
+from pathlib import Path
+from typing import Dict, Iterable, Sequence
 
 import yaml
 from bs4 import BeautifulSoup
-import utils
-import csv
+
+from gas_benchmarks.reporting import get_gas_table
+from gas_benchmarks.results import get_test_cases, load_results_matrix
 
 
-def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
-    # Load the computer specs
-    with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
-        text = file.read()
-        computer_spec = text
+def resolve_client_image(
+    client: str, overrides: Dict[str, str], default_images: Dict[str, str]
+) -> str:
+    override = overrides.get(client, "")
+    if override and override != "default":
+        return override
+    base_name = client.split("_", 1)[0]
+    return default_images.get(base_name, "")
 
-    results_to_print = ('<!DOCTYPE html\>' +
-                        '<html lang="en">' +
-                        '<head>' +
-                        '    <meta charset=\"UTF-8\">' +
-                        '    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">' +
-                        '    <title>Benchmarking Report</title>' +
-                        '    <style>' +
-                        '        body {' +
-                        '            font-family: Arial, sans-serif;' +
-                        '        }' +
-                        '        table {' +
-                        # '            width: 100%;' +
-                        '            border-collapse: collapse;' +
-                        '            margin-bottom: 20px;' +
-                        '        }' +
-                        '        th, td {' +
-                        '            border: 1px solid #ddd;' +
-                        '            padding: 8px;' +
-                        '            text-align: center;' +
-                        '        }' +
-                        '        th {' +
-                        '            background-color: #f2f2f2;' +
-                        # '            cursor: pointer;' +
-                        '        }' +
-                        '        .title {' +
-                        '            text-align: left;' +
-                        '        }' +
-                        '        .preserve-newlines {' +
-                        '            white-space: pre-wrap;' +
-                        '        }' +
-                        '    </style>' +
-                        '</head>' +
-                        '<body>'
-                        '<h2>Computer Specs</h2>'
-                        '<pre">' + computer_spec + '</pre>')
-    csv_table = {}
+
+def build_html_report(
+    reports_dir: Path,
+    computer_spec: str,
+    clients: Sequence[str],
+    client_results: Dict[str, Dict],
+    test_cases: Dict[str, Sequence[int]],
+    gas_values: Iterable[int],
+    metadata: Dict[str, Dict[str, str]],
+    image_overrides: Dict[str, str],
+    default_images: Dict[str, str],
+    method: str,
+) -> Dict[str, Dict[str, list[str]]]:
+    parts = [
+        "<!DOCTYPE html>",
+        '<html lang="en">',
+        "<head>",
+        '    <meta charset="UTF-8">',
+        '    <meta name="viewport" content="width=device-width, initial-scale=1.0">',
+        "    <title>Benchmarking Report</title>",
+        "    <style>",
+        "        body { font-family: Arial, sans-serif; }",
+        "        table { border-collapse: collapse; margin-bottom: 20px; }",
+        "        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }",
+        "        th { background-color: #f2f2f2; }",
+        "        .title { text-align: left; }",
+        "        .preserve-newlines { white-space: pre-wrap; }",
+        "    </style>",
+        "</head>",
+        "<body>",
+        "<h2>Computer Specs</h2>",
+        f"<pre>{computer_spec}</pre>",
+    ]
+
+    csv_tables: Dict[str, Dict[str, list[str]]] = {}
     for client in clients:
-        image_to_print = ''
-        image_json = json.loads(images)
-        if client in image_json:
-            if image_json[client] != 'default' and image_json[client] != '':
-                image_to_print = image_json[client]
-        if image_to_print == '':
-            with open('images.yaml', 'r') as f:
-                el_images = yaml.safe_load(f)["images"]
-            client_without_tag = client.split("_")[0]
-            image_to_print = el_images[client_without_tag]
-        results_to_print += f'<h1>{client.capitalize()} - {image_to_print} - Benchmarking Report</h1>' + '\n'
-        results_to_print += f'<table id="table_{client}">'
-        results_to_print += ('<thread>\n'
-                             '<tr>\n'
-                             f'<th class=\"title\" onclick="sortTable(0, \'table_{client}\', false)" style="cursor: pointer;">Title &uarr; &darr;</th>\n'
-                             f'<th onclick="sortTable(1, \'table_{client}\', true)" style="cursor: pointer;">Max (MGas/s) &uarr; &darr;</th>\n'
-                             f'<th onclick="sortTable(2, \'table_{client}\', true)" style="cursor: pointer;">p50 (MGas/s) &uarr; &darr;</th>\n'
-                             f'<th onclick="sortTable(3, \'table_{client}\', true)" style="cursor: pointer;">p95 (MGas/s) &uarr; &darr;</th>\n'
-                             f'<th onclick="sortTable(4, \'table_{client}\', true)" style="cursor: pointer;">p99 (MGas/s) &uarr; &darr;</th>\n'
-                             f'<th onclick="sortTable(5, \'table_{client}\', true)" style="cursor: pointer;">Min (MGas/s) &uarr; &darr;</th>\n'
-                             '<th>N</th>\n'
-                             '<th class=\"title\">Description</th>\n'
-                             '<th>Start Time</th>\n'
-                             '</tr>\n'
-                             '</thread>\n'
-                             '<tbody>\n')
-        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
-        csv_table[client] = gas_table_norm
-        for test_case, data in gas_table_norm.items():
-            results_to_print += (f'<tr>\n<td class="title">{data[0]}</td>\n'
-                                 f'<td>{data[2]}</td>\n'
-                                 f'<td>{data[3]}</td>\n'
-                                 f'<td>{data[4]}</td>\n'
-                                 f'<td>{data[5]}</td>\n'
-                                 f'<td>{data[1]}</td>\n'
-                                 f'<td>{data[6]}</td>\n'
-                                 f'<td style="text-align:left;" >{data[7]}</td>\n'
-                                 f'<td>{data[8]}</td>\n</tr>\n')
-        results_to_print += '\n'
-        results_to_print += ('</table>\n'
-                             '</tbody>\n')
+        image_label = resolve_client_image(client, image_overrides, default_images)
+        parts.append(f"<h1>{client.capitalize()} - {image_label} - Benchmarking Report</h1>")
+        parts.append(f'<table id="table_{client}">')
+        parts.append("<thead>")
+        parts.append("<tr>")
+        headers = [
+            ("Title", False),
+            ("Max (MGas/s)", True),
+            ("p50 (MGas/s)", True),
+            ("p95 (MGas/s)", True),
+            ("p99 (MGas/s)", True),
+            ("Min (MGas/s)", True),
+            ("N", True),
+            ("Description", False),
+            ("Start Time", True),
+        ]
+        for idx, (label, sortable) in enumerate(headers):
+            cursor = ' style="cursor: pointer;"' if sortable else ""
+            parts.append(
+                f'<th class="title" onclick="sortTable({idx}, \'table_{client}\', {str(sortable).lower()})"{cursor}>{label} &uarr; &darr;</th>'
+                if sortable or idx == 0
+                else f'<th class="title">{label}</th>'
+            )
+        parts.append("</tr>")
+        parts.append("</thead>")
+        parts.append("<tbody>")
 
-    results_to_print += ('    <script>'
-                         'function sortTable(n, table_name, nm) {'
-                         '  var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;'
-                         '  table = document.getElementById(table_name);'
-                         '  switching = true;'
-                         '  dir = "asc";'
-                         '  while (switching) {'
-                         '    switching = false;'
-                         '    rows = table.rows;'
-                         '    for (i = 1; i < (rows.length - 1); i++) {'
-                         '      shouldSwitch = false;'
-                         '      x = rows[i].getElementsByTagName("TD")[n];'
-                         '      y = rows[i + 1].getElementsByTagName("TD")[n];'
-                         '      if (dir == "asc") {'
-                         '        if (nm) {'
-                         '          if (Number(x.innerHTML) > Number(y.innerHTML)) {'
-                         '            shouldSwitch = true;'
-                         '            break;'
-                         '          }'
-                         '        } else {'
-                         '          if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {'
-                         '            shouldSwitch = true;'
-                         '            break;'
-                         '          }'
-                         '        }'
-                         '      } else if (dir == "desc") {'
-                         '        if (nm) {'
-                         '          if (Number(x.innerHTML) < Number(y.innerHTML)) {'
-                         '            shouldSwitch = true;'
-                         '            break;'
-                         '          }'
-                         '        } else {'
-                         '          if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {'
-                         '            shouldSwitch = true;'
-                         '            break;'
-                         '          }'
-                         '        }'
-                         '      }'
-                         '    }'
-                         '    if (shouldSwitch) {'
-                         '      rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);'
-                         '      switching = true;'
-                         '      switchcount ++;'
-                         '    } else {'
-                         '      if (switchcount == 0 && dir == "asc") {'
-                         '        dir = "desc";'
-                         '        switching = true;'
-                         '      }'
-                         '    }'
-                         '  }'
-                         '}'
-                         '</script>'
-                         '</body>'
-                         '</html>')
+        gas_table = get_gas_table(client_results, client, test_cases, gas_values, method, metadata)
+        csv_tables[client] = gas_table
+        for data in gas_table.values():
+            parts.append("<tr>")
+            parts.append(f'<td class="title">{data[0]}</td>')
+            parts.append(f"<td>{data[2]}</td>")
+            parts.append(f"<td>{data[3]}</td>")
+            parts.append(f"<td>{data[4]}</td>")
+            parts.append(f"<td>{data[5]}</td>")
+            parts.append(f"<td>{data[1]}</td>")
+            parts.append(f"<td>{data[6]}</td>")
+            parts.append(f'<td style="text-align:left;">{data[7]}</td>')
+            parts.append(f"<td>{data[8]}</td>")
+            parts.append("</tr>")
 
-    soup = BeautifulSoup(results_to_print, 'lxml')
-    formatted_html = soup.prettify()
-    print(formatted_html)
-    if not os.path.exists('reports'):
-        os.mkdir('reports')
-    with open(f'reports/index.html', 'w') as file:
-        file.write(formatted_html)
+        parts.append("</tbody>")
+        parts.append("</table>")
 
-    for client, gas_table in csv_table.items():
-        with open(f'reports/output_{client}.csv', 'w', newline='') as csvfile:
-            # Create a CSV writer object
-            csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(
-                ['Title', 'Max (MGas/s)', 'p50 (MGas/s)', 'p95 (MGas/s)', 'p99 (MGas/s)', 'Min (MGas/s)', 'N',
-                 'Description', "Start Time"])
-            for test_case, data in gas_table.items():
-                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8]])
+    parts.extend(
+        [
+            "<script>",
+            "function sortTable(columnIndex, tableId, numeric) {",
+            "  const table = document.getElementById(tableId);",
+            "  const tbody = table.getElementsByTagName('tbody')[0];",
+            "  const rows = Array.from(tbody.rows);",
+            "  const direction = table.dataset.sortDirection === 'asc' ? 'desc' : 'asc';",
+            "  table.dataset.sortDirection = direction;",
+            "  rows.sort((a, b) => {",
+            "    const cellA = a.cells[columnIndex].innerText;",
+            "    const cellB = b.cells[columnIndex].innerText;",
+            "    if (numeric) {",
+            "      return direction === 'asc'",
+            "        ? parseFloat(cellA) - parseFloat(cellB)",
+            "        : parseFloat(cellB) - parseFloat(cellA);",
+            "    }",
+            "    return direction === 'asc'",
+            "      ? cellA.localeCompare(cellB)",
+            "      : cellB.localeCompare(cellA);",
+            "  });",
+            "  rows.forEach(row => tbody.appendChild(row));",
+            "}",
+            "</script>",
+            "</body>",
+            "</html>",
+        ]
+    )
+
+    html = "".join(parts)
+    formatted_html = BeautifulSoup(html, "lxml").prettify()
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "index.html").write_text(formatted_html, encoding="utf-8")
+    return csv_tables
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Benchmark script')
-    parser.add_argument('--resultsPath', type=str, help='Path to gather the results', default='results/results')
-    parser.add_argument('--testsPath', type=str, help='results', default='tests/')
-    parser.add_argument('--clients', type=str, help='Client we want to gather the metrics, if you want to compare, '
-                                                    'split them by comma, ex: nethermind,geth',
-                        default='nethermind,geth,reth,erigon,besu,nimbus,ethrex')
-    parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
-    parser.add_argument('--images', type=str, help='Image values per each client',
-                        default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}')
+def write_raw_results_csv(
+    reports_dir: Path,
+    client_results: Dict[str, Dict],
+    test_cases: Dict[str, Sequence[int]],
+    runs: int,
+    metadata: Dict[str, Dict[str, str]],
+    method: str,
+) -> None:
+    headers = ["Test Case", "Gas"] + [f"Run {i} Duration (ms)" for i in range(1, runs + 1)] + ["Description"]
 
-    # Parse command-line arguments
+    for client, case_map in client_results.items():
+        csv_path = reports_dir / f"raw_results_{client}.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(headers)
+            for test_case, gas_values in test_cases.items():
+                for gas in gas_values:
+                    runs_values = list(case_map.get(test_case, {}).get(gas, {}).get(method, []))
+                    if len(runs_values) < runs:
+                        runs_values.extend("" for _ in range(runs - len(runs_values)))
+                    description = metadata.get(test_case, {}).get("Description", "Description not found on metadata file")
+                    title = metadata.get(test_case, {}).get("Title", test_case)
+                    writer.writerow([title, gas, *runs_values, description])
+
+
+def write_summary_csv(reports_dir: Path, csv_tables: Dict[str, Dict[str, list[str]]]) -> None:
+    headers = ["Title", "Max (MGas/s)", "p50 (MGas/s)", "p95 (MGas/s)", "p99 (MGas/s)", "Min (MGas/s)", "N", "Description", "Start Time"]
+    for client, table in csv_tables.items():
+        csv_path = reports_dir / f"output_{client}.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(headers)
+            for data in table.values():
+                writer.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8]])
+
+
+def load_metadata(tests_path: Path) -> Dict[str, Dict[str, str]]:
+    metadata_path = tests_path / "metadata.json"
+    if not metadata_path.is_file():
+        return {}
+    with metadata_path.open("r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    return {item["Name"]: item for item in data}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Generate HTML benchmarking report")
+    parser.add_argument("--resultsPath", type=Path, default=Path("results/results"))
+    parser.add_argument("--testsPath", type=Path, default=Path("tests/"))
+    parser.add_argument(
+        "--clients",
+        type=str,
+        default="nethermind,geth,reth,erigon,besu,nimbus,ethrex",
+        help="Comma-separated list of clients",
+    )
+    parser.add_argument("--runs", type=int, default=8, help="Number of runs per test case")
+    parser.add_argument(
+        "--images",
+        type=str,
+        default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}',
+        help="JSON map of client -> docker image label",
+    )
     args = parser.parse_args()
 
-    # Get client name and test case folder from command-line arguments
-    results_paths = args.resultsPath
-    clients = args.clients
-    tests_path = args.testsPath
+    results_path: Path = args.resultsPath
+    tests_path: Path = args.testsPath
+    clients = [client.strip() for client in args.clients.split(",") if client.strip()]
     runs = args.runs
-    images = args.images
+    image_overrides = json.loads(args.images)
 
-    # Get the computer spec
-    with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
-        text = file.read()
-        computer_spec = text
-    print(computer_spec)
+    computer_spec_path = results_path / "computer_specs.txt"
+    computer_spec = computer_spec_path.read_text(encoding="utf-8") if computer_spec_path.exists() else ""
+    if computer_spec:
+        print(computer_spec)
 
-    client_results = {}
-    failed_tests = {}
-    methods = ['engine_newPayloadV4']
-    fields = 'max'
+    test_cases = get_test_cases(tests_path)
+    gas_values = sorted({gas for gases in test_cases.values() for gas in gases})
 
-    test_cases = utils.get_test_cases(tests_path)
-    for client in clients.split(','):
-        client_results[client] = {}
-        failed_tests[client] = {}
-        for test_case_name, test_case_gas in test_cases.items():
-            client_results[client][test_case_name] = {}
-            failed_tests[client][test_case_name] = {}
-            for gas in test_case_gas:
-                client_results[client][test_case_name][gas] = {}
-                failed_tests[client][test_case_name][gas] = {}
-                for method in methods:
-                    client_results[client][test_case_name][gas][method] = []
-                    failed_tests[client][test_case_name][gas][method] = []
-                    for run in range(1, runs + 1):
-                        responses, results, timestamp = utils.extract_response_and_result(results_paths, client, test_case_name,
-                                                                               gas, run, method, fields)
-                        client_results[client][test_case_name][gas][method].append(results)
-                        failed_tests[client][test_case_name][gas][method].append(not responses)
-                        # print(test_case_name + " : " + str(timestamp))
-                        if str(timestamp) != "0":
-                            client_results[client][test_case_name]["timestamp"] = utils.convert_dotnet_ticks_to_utc(timestamp)
-                        else:
-                            if "timestamp" not in str(client_results[client][test_case_name]):
-                                client_results[client][test_case_name]["timestamp"] = 0
+    method = "engine_newPayloadV4"
+    field = "max"
+    client_results, _ = load_results_matrix(results_path, clients, test_cases, runs, method, field)
 
-    gas_set = set()
-    for test_case_name, test_case_gas in test_cases.items():
-        for gas in test_case_gas:
-            if gas not in gas_set:
-                gas_set.add(gas)
+    metadata = load_metadata(tests_path)
 
-    if not os.path.exists(f'{results_paths}/reports'):
-        os.makedirs(f'{results_paths}/reports')
+    reports_dir = results_path / "reports"
 
-    metadata = {}
-    if os.path.exists(f'{tests_path}/metadata.json'):
-        data = json.load(open(f'{tests_path}/metadata.json', 'r'))
-        for item in data:
-            metadata[item['Name']] = item
+    images_config_path = Path("images.yaml")
+    default_images = {}
+    if images_config_path.is_file():
+        with images_config_path.open("r", encoding="utf-8") as fh:
+            default_images = yaml.safe_load(fh).get("images", {})
 
-    # Create .csv with raw results per client
-    for client in client_results:
-        with open(f'reports/raw_results_{client}.csv', 'w', newline='') as csvfile:
-            # Create a CSV writer object
-            csvwriter = csv.writer(csvfile)
-            rows = ['Test Case', 'Gas'] + [f'Run {i} Duration (ms)' for i in range(1, runs + 1)] + ['Description']
-            csvwriter.writerow(rows)
-            for test_case_name, test_case_gas in test_cases.items():
-                for gas in test_case_gas:
-                    name = test_case_name
-                    description = 'Description not found on metadata file'
-                    if test_case_name in metadata:
-                        name = metadata[test_case_name]['Title']
-                        description = metadata[test_case_name]['Description']
+    csv_tables = build_html_report(
+        reports_dir,
+        computer_spec,
+        clients,
+        client_results,
+        test_cases,
+        gas_values,
+        metadata,
+        image_overrides,
+        default_images,
+        method,
+    )
 
-                    rows = [name, gas] + client_results[client][test_case_name][gas][methods[0]] + [description]
-                    csvwriter.writerow(rows)
-
-    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
-
-    print('Done!')
+    write_raw_results_csv(reports_dir, client_results, test_cases, runs, metadata, method)
+    write_summary_csv(reports_dir, csv_tables)
+    print(f"Report written to {reports_dir}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

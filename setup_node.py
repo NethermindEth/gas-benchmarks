@@ -239,16 +239,16 @@ def set_env(
 
 def copy_genesis_file(source: Path, target: Path) -> None:
     if not source.is_file():
-        print(f"⚠️  Genesis file not found at: {source}, skipping copy")
+        print(f"[WARN] Genesis file not found at: {source}, skipping copy")
         return
 
     target.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         shutil.copy(source, target)
-        print(f"✅ Copied genesis file: {source} → {target}")
+        print(f"[OK] Copied genesis file: {source} -> {target}")
     except Exception as exc:
-        print(f"❌ Failed to copy genesis file from {source} to {target}: {exc}")
+        print(f"[ERROR] Failed to copy genesis file from {source} to {target}: {exc}")
         exit(1)
 
 
@@ -285,7 +285,7 @@ def main():
         el_images = yaml.safe_load(f)["images"]
 
     if client_without_tag not in el_images:
-        print("❌ Client not supported:", client_without_tag)
+        print("[ERROR] Client not supported:", client_without_tag)
         return
 
     # Override image from bulk if needed
@@ -304,7 +304,7 @@ def main():
     use_custom_genesis = network is None
 
     if network and genesis_path:
-        print("⚠️  Ignoring --genesisPath because --network was provided")
+        print("[WARN] Ignoring --genesisPath because --network was provided")
         genesis_path = None
 
     genesis_target: Path = metadata["target"]

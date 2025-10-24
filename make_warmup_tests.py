@@ -45,7 +45,7 @@ def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
     replaced_files = 0
     print("[debug] blockHash mapping:")
     for got, want in mapping.items():
-        print(f"  {got!r} → {want!r}")
+        print(f"  {got!r} -> {want!r}")
 
     for txt in tests_root.rglob(pattern):
         text = txt.read_text()
@@ -56,7 +56,7 @@ def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
             after = f'"blockHash": "{want}"'
             if before in new_text:
                 file_changed = True
-                print(f"[debug] {txt}: replacing {before} → {after}")
+                print(f"[debug] {txt}: replacing {before} -> {after}")
                 new_text = new_text.replace(before, after)
         if file_changed:
             txt.write_text(new_text)
@@ -110,14 +110,14 @@ def main():
             with open(args.genesisPath, 'r') as gf:
                 gen_data = json.load(gf)
             if 'stateRoot' not in gen_data:
-                print(f"❌ Genesis file '{args.genesisPath}' missing 'stateRoot' field.")
+                print(f"[ERROR] Genesis file '{args.genesisPath}' missing 'stateRoot' field.")
                 sys.exit(1)
             global GENESIS_ROOT
             print(f"[debug] Overriding GENESIS_ROOT:\n  before: {GENESIS_ROOT}")
             GENESIS_ROOT = gen_data['stateRoot']
             print(f"  after: {GENESIS_ROOT}")
         except Exception as e:
-            print(f"❌ Error reading genesis file '{args.genesisPath}': {e}")
+            print(f"[ERROR] Error reading genesis file '{args.genesisPath}': {e}")
             sys.exit(1)
 
     test_sources = []
@@ -128,7 +128,7 @@ def main():
             if not isinstance(test_sources, list):
                 raise ValueError("sourceJson must be a list")
         except Exception as e:
-            print(f"❌ Invalid JSON for --sourceJson: {e}")
+            print(f"[ERROR] Invalid JSON for --sourceJson: {e}")
             sys.exit(1)
     elif args.source:
         for src in args.source:
@@ -138,7 +138,7 @@ def main():
                 "changeForAll": args.changeForAll
             })
     else:
-        print("❌ You must provide either --sourceJson or --source")
+        print("[ERROR] You must provide either --sourceJson or --source")
         sys.exit(1)
 
     dst_root = Path(args.dest)
@@ -191,7 +191,7 @@ def main():
         if genesis_path:
             setup_node_cmd += ["--genesisPath", genesis_path]
 
-        print(f"🔧 Setting up node for {relative_subdir} with genesis: {genesis_path or 'default'}")
+        print(f"[INFO] Setting up node for {relative_subdir} with genesis: {genesis_path or 'default'}")
         subprocess.run(setup_node_cmd, check=True)
 
         subprocess.run(
@@ -208,15 +208,15 @@ def main():
 
         mapping = collect_mismatches("gas-execution-client")
         if not mapping:
-            print(f"⚠️  No blockhash mismatches found in {relative_subdir}; skipping fix.")
+            print(f"[WARN] No blockhash mismatches found in {relative_subdir}; skipping fix.")
             teardown("geth")
             continue
 
-        print(f"🔍 Found blockHash mismatches in {relative_subdir}:")
+        print(f"[INFO] Found blockHash mismatches in {relative_subdir}:")
         print(json.dumps(mapping, indent=2))
 
         fixed = fix_blockhashes(pattern, Path(tests_path), mapping)
-        print(f"✅ Replaced blockHash in {fixed} file(s) for {relative_subdir}.")
+        print(f"[OK] Replaced blockHash in {fixed} file(s) for {relative_subdir}.")
 
         teardown("geth")
 
@@ -228,7 +228,7 @@ def main():
         for f in sub.rglob("*.txt"):
             target = dst_root / f.name
             if target.exists():
-                print(f"⚠️ File already exists in root: {target}, skipping move.")
+                print(f"[WARN] File already exists in root: {target}, skipping move.")
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
             f.rename(target)

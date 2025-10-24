@@ -1,86 +1,84 @@
-# This file will merge the results from different runs and test cases into a single file based only on the information
-# on the folder structure.
-
 import argparse
-import os
-
-import yaml
-from bs4 import BeautifulSoup
-import utils
 import csv
+import shutil
+from pathlib import Path
+from typing import Set
+
+from gas_benchmarks.merge import merge_csv, merge_html
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Benchmark script')
-    parser.add_argument('--first', type=str, help='Path to gather the results', default='merge5/')
-    parser.add_argument('--second', type=str, help='results', default='reports8/')
-    parser.add_argument('--output', type=str, help='Number of runs the program will process', default='merge6/')
+def collect_filenames(*directories: Path) -> Set[str]:
+    names: Set[str] = set()
+    for directory in directories:
+        if not directory.is_dir():
+            continue
+        for path in directory.iterdir():
+            if path.is_file():
+                names.add(path.name)
+    return names
 
-    # Parse command-line arguments
+
+def copy_file(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+
+def merge_files(first: Path, second: Path, output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if first.suffix.lower() == ".csv":
+        with first.open("r", encoding="utf-8", newline="") as fh:
+            first_data = list(csv.reader(fh))
+        with second.open("r", encoding="utf-8", newline="") as fh:
+            second_data = list(csv.reader(fh))
+        merged = merge_csv(first_data, second_data)
+        with output.open("w", encoding="utf-8", newline="") as fh:
+            writer = csv.writer(fh)
+            writer.writerows(merged)
+    elif first.name == "index.html":
+        with first.open("r", encoding="utf-8") as fh:
+            first_html = fh.read()
+        with second.open("r", encoding="utf-8") as fh:
+            second_html = fh.read()
+        output.write_text(merge_html(first_html, second_html), encoding="utf-8")
+    else:
+        raise ValueError(f"Unsupported file type for merge: {first.name}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Merge benchmarking report artefacts")
+    parser.add_argument("--first", type=Path, default=Path("merge5/"), help="First reports directory")
+    parser.add_argument("--second", type=Path, default=Path("reports8/"), help="Second reports directory")
+    parser.add_argument("--output", type=Path, default=Path("merge6/"), help="Output directory")
     args = parser.parse_args()
-    first = args.first
-    second = args.second
-    output = args.output
 
-    # Get the list of files from both folders, and merge them into a single set without duplicates
-    first_files = set(os.listdir(first))
-    second_files = set(os.listdir(second))
-    files = first_files.union(second_files)
+    first_dir: Path = args.first
+    second_dir: Path = args.second
+    output_dir: Path = args.output
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create the output folder if it doesn't exist
-    if not os.path.exists(output):
-        os.makedirs(output)
+    file_names = collect_filenames(first_dir, second_dir)
 
-    # Iterate over the files and merge them
-    for file in files:
-        first_file = os.path.join(first, file)
-        second_file = os.path.join(second, file)
-        output_file = os.path.join(output, file)
+    for name in sorted(file_names):
+        first_file = first_dir / name
+        second_file = second_dir / name
+        destination = output_dir / name
 
-        # If the file is not in the first folder, copy it from the second folder
-        if not os.path.exists(first_file):
-            os.system(f'cp {second_file} {output_file}')
-            continue
-
-        # If the file is not in the second folder, copy it from the first folder
-        if not os.path.exists(second_file):
-            os.system(f'cp {first_file} {output_file}')
-            continue
-
-        # If the file is in both folders, merge them
-        # Check if the file is a CSV file
-        if file.endswith('.csv'):
-            with open(first_file, 'r') as f:
-                first_data = list(csv.reader(f))
-            with open(second_file, 'r') as f:
-                second_data = list(csv.reader(f))
-
-            # Merge the data
-            result = utils.merge_csv(first_data, second_data)
-
-            # Save the result
-            with open(output_file, 'w') as f:
-                writer = csv.writer(f)
-                writer.writerows(result)
-            continue
-        elif file.endswith('index.html'):
-            with open(first_file, 'r') as f:
-                first_data = f.read()
-            with open(second_file, 'r') as f:
-                second_data = f.read()
-
-            # Merge the data
-            result = utils.merge_html(first_data, second_data)
-
-            # Save the result
-            with open(output_file, 'w') as f:
-                f.write(result)
+        if first_file.exists() and not second_file.exists():
+            copy_file(first_file, destination)
+        elif second_file.exists() and not first_file.exists():
+            copy_file(second_file, destination)
+        elif first_file.exists() and second_file.exists():
+            try:
+                merge_files(first_file, second_file, destination)
+            except ValueError as exc:
+                print(f"[WARN] {exc}. Copying first file instead.")
+                copy_file(first_file, destination)
         else:
-            print(f'File type not supported: {file}')
+            print(f"[WARN] Neither input contains {name}")
 
-    print('Done!')
+    print(f"Merged reports written to {output_dir}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 

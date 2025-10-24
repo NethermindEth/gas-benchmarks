@@ -3,7 +3,7 @@ import json
 import os
 import statistics
 
-import utils
+from utils import PayloadResponse, RPCResponse, read_results
 
 # Processed responses will be accessed globally
 processed_responses = {}
@@ -44,49 +44,14 @@ def read_responses(text):
                 continue
             data = json.loads(line)
             if "result" in data and isinstance(data["result"], dict) and "payloadStatus" in data["result"]:
-                response = utils.PayloadResponse.from_dict(data)
+                response = PayloadResponse.from_dict(data)
                 responses.append(response)
             else:
-                response = utils.RPCResponse.from_dict(data)
+                response = RPCResponse.from_dict(data)
                 responses.append(response)
         except json.JSONDecodeError as e:
             print(f"Error parsing JSON: {e}")
     return responses
-
-
-def read_results(text):
-    sections = {}
-    for sections_text in text.split('--------------------------------------------------------------'):
-        timestamp = None
-        measurement = None
-        tags = {}
-        fields = {}
-        for full_lines in sections_text.split('#'):
-            if not full_lines:
-                continue
-
-            if full_lines.startswith(' TIMESTAMP:'):
-                timestamp = int(full_lines.split(':')[1])
-            elif full_lines.startswith(' MEASUREMENT:'):
-                measurement = full_lines.split(' ')[3].strip()
-            elif full_lines.startswith(' TAGS:'):
-                for line in full_lines.split('\n')[1:]:
-                    if not line:
-                        continue
-                    data = line.strip().split(' = ')
-                    tags[data[0]] = data[1]
-                pass
-            elif full_lines.startswith(' FIELDS:'):
-                for line in full_lines.split('\n')[1:]:
-                    if not line:
-                        continue
-                    data = line.strip().split(' = ')
-                    fields[data[0]] = data[1]
-
-        if timestamp is not None and measurement is not None:
-            sections[measurement] = utils.SectionData(timestamp, measurement, tags, fields)
-
-    return sections
 
 
 def extract_data_per_client(client, results_paths, test_case):

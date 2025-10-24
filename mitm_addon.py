@@ -409,14 +409,14 @@ def _dump_pair_to_phase(phase: str, scenario: str, np_body: Dict[str, Any], fcu_
         setup_path = _scenario_file_path("setup", scenario)
         _append_line(setup_path, np_line)
         _append_line(setup_path, fcu_line)
-        _log(f"setup append → {setup_path}")
+        _log(f"setup append -> {setup_path}")
         return
 
     if phase == "cleanup":
         cleanup_path = _scenario_file_path("cleanup", scenario)
         _append_line(cleanup_path, np_line)
         _append_line(cleanup_path, fcu_line)
-        _log(f"cleanup append → {cleanup_path}")
+        _log(f"cleanup append -> {cleanup_path}")
         return
 
     # testing
@@ -426,7 +426,7 @@ def _dump_pair_to_phase(phase: str, scenario: str, np_body: Dict[str, Any], fcu_
 
     if count == 0:
         _overwrite_with_lines(testing_path, [np_line, fcu_line])
-        _log(f"testing write (first) → {testing_path}")
+        _log(f"testing write (first) -> {testing_path}")
     else:
         if testing_path.exists():
             try:
@@ -434,11 +434,11 @@ def _dump_pair_to_phase(phase: str, scenario: str, np_body: Dict[str, Any], fcu_
                     prev_lines = [ln.rstrip("\n") for ln in f if ln.strip() != ""]
                 for ln in prev_lines:
                     _append_line(setup_path, ln)
-                _log(f"testing migrate {len(prev_lines)} line(s) → {setup_path}")
+                _log(f"testing migrate {len(prev_lines)} line(s) -> {setup_path}")
             except Exception as e:
-                _log(f"migrate testing→setup failed: {e}")
+                _log(f"migrate testing->setup failed: {e}")
         _overwrite_with_lines(testing_path, [np_line, fcu_line])
-        _log(f"testing overwrite (latest) → {testing_path}")
+        _log(f"testing overwrite (latest) -> {testing_path}")
 
     _TESTING_SEEN_COUNT[scenario] = count + 1
 
@@ -463,9 +463,9 @@ def _migrate_current_last_to_middle() -> None:
             for ln in lines:
                 _append_line(_MIDDLE_GLOBAL_FILE, ln)
             _truncate(_CURRENT_LAST_FILE)
-            _log(f"migrated {len(lines)} line(s) current-last → { _MIDDLE_GLOBAL_FILE }")
+            _log(f"migrated {len(lines)} line(s) current-last -> { _MIDDLE_GLOBAL_FILE }")
         except Exception as e:
-            _log(f"migrate current-last→middle failed: {e}")
+            _log(f"migrate current-last->middle failed: {e}")
 
 def _cleanup_empty_txt_files() -> None:
     try:
@@ -496,8 +496,8 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
     try:
         first = txrlps[0]
         last = txrlps[-1]
-        preview_first = (first[:18] + "…" + first[-10:]) if isinstance(first, str) else str(first)[:32]
-        preview_last = (last[:18] + "…" + last[-10:]) if isinstance(last, str) else str(last)[:32]
+        preview_first = (first[:18] + "..." + first[-10:]) if isinstance(first, str) else str(first)[:32]
+        preview_last = (last[:18] + "..." + last[-10:]) if isinstance(last, str) else str(last)[:32]
 
         file_base, test_name, phase = grp or ("unknown", "unknown", "unknown")
         scenario = _scenario_name(file_base, test_name)
@@ -532,7 +532,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             _globals = globals()
             _globals["_DYN_FINALIZED"] = exec_payload.get("blockHash") or old
             if _globals["_DYN_FINALIZED"] != old:
-                _log(f"FINALIZED anchor updated by global-setup → {_globals['_DYN_FINALIZED']}")
+                _log(f"FINALIZED anchor updated by global-setup -> {_globals['_DYN_FINALIZED']}")
 
         dyn_final = _DYN_FINALIZED or FINALIZED_BLOCK or exec_payload.get("blockHash")
         fcs = {
@@ -859,7 +859,7 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
     elif meta:
         grp = _derive_group_from_meta(meta)
         _log(f"intercept sendraw id={item.get('id')} grp={grp} via={src}")
-        # If phase is literally "unknown" → also append raw request to unknown.txt
+        # If phase is literally "unknown" -> also append raw request to unknown.txt
         if (meta.get("phase") or "").lower() == "unknown":
             _ensure_dirs_and_cleanup_old()
             _append_raw_request_line(_UNKNOWN_FILE, item)
@@ -870,9 +870,9 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
                 _TESTS_STARTED = True
                 _log("tests lifecycle: STARTED")
     else:
-        # Missing metadata → treat like global no-phase lifecycle (we'll route via setup/middle/teardown)
+        # Missing metadata -> treat like global no-phase lifecycle (we'll route via setup/middle/teardown)
         grp = ("global-nophase", "global-nophase", "global-nophase")
-        _log(f"intercept sendraw fallback→global-nophase id={item.get('id', 'noid')}")
+        _log(f"intercept sendraw fallback->global-nophase id={item.get('id', 'noid')}")
 
     force_prev: Optional[Tuple[Tuple[str, str, str], List[Tuple[str, Any]]]] = None
     with _GROUP_LOCK:
@@ -888,7 +888,7 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
 
     if force_prev:
         prev_grp, prev_buf = force_prev
-        _log(f"group switch → force flush prev={prev_grp} size={len(prev_buf)}")
+        _log(f"group switch -> force flush prev={prev_grp} size={len(prev_buf)}")
         _flush_group(prev_grp, [x[0] for x in prev_buf])
 
 

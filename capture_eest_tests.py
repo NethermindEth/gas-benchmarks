@@ -275,7 +275,7 @@ def main() -> None:
             if pattern:
                 flat_excludes.append(pattern)
     args.exclude = flat_excludes
-    print(f"ℹ️ excluding patterns: {args.exclude}")
+    print(f"[INFO] Excluding patterns: {args.exclude}")
 
     args.temp_dir.mkdir(exist_ok=True)
     if args.output_dir.exists():
