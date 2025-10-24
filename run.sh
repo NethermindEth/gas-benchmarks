@@ -32,6 +32,7 @@ declare -A STEP_TIMES
 declare -A ACTIVE_OVERLAY_MOUNTS
 declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
+declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
 declare -A RUNNING_CLIENTS
 SCRIPT_START_TIME=$(date +%s.%N)
@@ -449,7 +450,13 @@ prepare_overlay_for_client() {
 
   mkdir -p "$overlay_base"
 
-  local overlay_root="$overlay_base/$client"
+  local client_root="$overlay_base/$client"
+  mkdir -p "$client_root"
+
+  local overlay_id
+  overlay_id="$(date +%s%N)_$RANDOM"
+
+  local overlay_root="$client_root/$overlay_id"
   local merged="$overlay_root/merged"
   local upper="$overlay_root/upper"
   local work="$overlay_root/work"
@@ -487,6 +494,7 @@ prepare_overlay_for_client() {
   ACTIVE_OVERLAY_MOUNTS["$client"]="$merged"
   ACTIVE_OVERLAY_UPPERS["$client"]="$upper"
   ACTIVE_OVERLAY_WORKS["$client"]="$work"
+  ACTIVE_OVERLAY_ROOTS["$client"]="$overlay_root"
   ACTIVE_OVERLAY_CLIENTS["$client"]=1
 
   echo "$merged"
@@ -497,12 +505,16 @@ cleanup_overlay_for_client() {
   local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
   local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
   local work="${ACTIVE_OVERLAY_WORKS[$client]}"
+  local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
+  local base_dir
+
+  local unmounted=true
 
   if [ -n "$merged" ] && is_mounted "$merged"; then
     # Try regular unmount first
     if ! umount "$merged" 2>/dev/null; then
       if command -v sudo >/dev/null 2>&1; then
-        sudo umount "$merged" >/dev/null 2>&1 || sudo umount "$merged"
+        sudo -n umount "$merged" >/dev/null 2>&1 || sudo -n umount "$merged"
       fi
     fi
 
@@ -510,7 +522,7 @@ cleanup_overlay_for_client() {
     if is_mounted "$merged"; then
       if ! umount -l "$merged" 2>/dev/null; then
         if command -v sudo >/dev/null 2>&1; then
-          sudo umount -l "$merged" >/dev/null 2>&1 || sudo umount -l "$merged"
+          sudo -n umount -l "$merged" >/dev/null 2>&1 || sudo -n umount -l "$merged"
         fi
       fi
     fi
@@ -519,30 +531,46 @@ cleanup_overlay_for_client() {
     if is_mounted "$merged" && command -v fuser >/dev/null 2>&1; then
       fuser -km "$merged" >/dev/null 2>&1 || true
       if is_mounted "$merged" && command -v sudo >/dev/null 2>&1; then
-        sudo fuser -km "$merged" >/dev/null 2>&1 || true
+        sudo -n fuser -km "$merged" >/dev/null 2>&1 || true
       fi
       sleep 1
       if is_mounted "$merged"; then
         umount "$merged" 2>/dev/null || true
         if is_mounted "$merged" && command -v sudo >/dev/null 2>&1; then
-          sudo umount "$merged" >/dev/null 2>&1 || true
+          sudo -n umount "$merged" >/dev/null 2>&1 || true
         fi
       fi
     fi
 
     if is_mounted "$merged"; then
       echo "⚠️  Unable to unmount overlay for $client ($merged); leaving mount in place" >&2
-      return
+      unmounted=false
     fi
   fi
 
-  [ -n "$merged" ] && rm -rf "$merged"
-  [ -n "$upper" ] && rm -rf "$upper"
-  [ -n "$work" ] && rm -rf "$work"
+  if [ "$unmounted" = true ]; then
+    [ -n "$merged" ] && rm -rf "$merged"
+    [ -n "$upper" ] && rm -rf "$upper"
+    [ -n "$work" ] && rm -rf "$work"
+    [ -n "$root" ] && rm -rf "$root"
+  fi
+
+  if [ "$unmounted" = true ] && [ -n "$root" ]; then
+    local client_root
+    client_root=$(dirname "$root")
+    if [ -d "$client_root" ] && [ -z "$(ls -A "$client_root" 2>/dev/null)" ]; then
+      rmdir "$client_root" 2>/dev/null || true
+    fi
+    base_dir=$(dirname "$client_root")
+    if [ -d "$base_dir" ] && [ -z "$(ls -A "$base_dir" 2>/dev/null)" ]; then
+      rmdir "$base_dir" 2>/dev/null || true
+    fi
+  fi
 
   unset ACTIVE_OVERLAY_MOUNTS["$client"]
   unset ACTIVE_OVERLAY_UPPERS["$client"]
   unset ACTIVE_OVERLAY_WORKS["$client"]
+  unset ACTIVE_OVERLAY_ROOTS["$client"]
   unset ACTIVE_OVERLAY_CLIENTS["$client"]
 }
 
@@ -551,6 +579,99 @@ cleanup_all_overlays() {
   for client in "${!ACTIVE_OVERLAY_CLIENTS[@]}"; do
     cleanup_overlay_for_client "$client"
   done
+}
+
+cleanup_stale_overlay_mounts() {
+  local base="$OVERLAY_TMP_ROOT"
+  if [ -z "$base" ]; then
+    return
+  fi
+
+  if [[ "$base" != /* ]]; then
+    base=$(abspath "$base")
+  fi
+
+  if [ ! -d "$base" ]; then
+    return
+  fi
+
+  mapfile -t stale_mounts < <(mount | awk -v base="$base" '$3 ~ "^" base {print $3}' | sort -r)
+
+  local mount_point
+  for mount_point in "${stale_mounts[@]}"; do
+    if [ -z "$mount_point" ]; then
+      continue
+    fi
+
+    if [[ ! "$mount_point" =~ /merged$ ]]; then
+      continue
+    fi
+
+    if ! umount "$mount_point" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo umount "$mount_point" >/dev/null 2>&1 || sudo umount "$mount_point"
+      fi
+    fi
+
+    if is_mounted "$mount_point"; then
+      if ! umount -l "$mount_point" 2>/dev/null; then
+        if command -v sudo >/dev/null 2>&1; then
+          sudo umount -l "$mount_point" >/dev/null 2>&1 || sudo umount -l "$mount_point"
+        fi
+      fi
+    fi
+
+    if is_mounted "$mount_point" && command -v fuser >/dev/null 2>&1; then
+      fuser -km "$mount_point" >/dev/null 2>&1 || true
+      if command -v sudo >/dev/null 2>&1; then
+        sudo fuser -km "$mount_point" >/dev/null 2>&1 || true
+      fi
+      sleep 1
+      if is_mounted "$mount_point"; then
+        umount "$mount_point" 2>/dev/null || true
+        if is_mounted "$mount_point" && command -v sudo >/dev/null 2>&1; then
+          sudo umount "$mount_point" >/dev/null 2>&1 || sudo umount -l "$mount_point" >/dev/null 2>&1 || true
+        fi
+      fi
+    fi
+
+    if is_mounted "$mount_point"; then
+      echo "⚠️  Unable to unmount stale overlay mount $mount_point" >&2
+      continue
+    fi
+
+    local run_dir
+    run_dir=$(dirname "$mount_point")
+    rm -rf "$run_dir" 2>/dev/null || true
+
+    local client_dir
+    client_dir=$(dirname "$run_dir")
+    if [ -d "$client_dir" ] && [ -z "$(ls -A "$client_dir" 2>/dev/null)" ]; then
+      rmdir "$client_dir" 2>/dev/null || true
+    fi
+  done
+
+  find "$base" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+}
+
+drop_host_caches() {
+  local status=0
+
+  if command -v sync >/dev/null 2>&1; then
+    sync || status=$?
+  fi
+
+  if [ -w /proc/sys/vm/drop_caches ]; then
+    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || status=$?
+    return $status
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || status=$?
+    return $status
+  fi
+
+  return 1
 }
 
 docker_compose_down_for_client() {
@@ -562,11 +683,11 @@ docker_compose_down_for_client() {
   fi
 
   if [ -f "$compose_dir/docker-compose.yaml" ]; then
-    docker compose -f "$compose_dir/docker-compose.yaml" down >/dev/null 2>&1 || \
-      docker compose -f "$compose_dir/docker-compose.yaml" down
+    docker compose -f "$compose_dir/docker-compose.yaml" down --volumes >/dev/null 2>&1 || \
+      docker compose -f "$compose_dir/docker-compose.yaml" down --volumes
   elif [ -d "$compose_dir" ]; then
     (
-      cd "$compose_dir" && docker compose down >/dev/null 2>&1 || docker compose down
+      cd "$compose_dir" && docker compose down --volumes >/dev/null 2>&1 || docker compose down --volumes
     )
   fi
 }
@@ -613,6 +734,10 @@ cleanup_on_exit() {
 
   if declare -F cleanup_all_overlays >/dev/null 2>&1; then
     cleanup_all_overlays
+  fi
+
+  if declare -F cleanup_stale_overlay_mounts >/dev/null 2>&1; then
+    cleanup_stale_overlay_mounts
   fi
 
   exit $exit_status
@@ -748,8 +873,11 @@ if [ -n "$DEBUG_FILE" ]; then
   fi
 fi
 
-if [ "$USE_OVERLAY" = true ] && [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
-  mkdir -p "$OVERLAY_TMP_ROOT"
+if [ "$USE_OVERLAY" = true ]; then
+  cleanup_stale_overlay_mounts
+  if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
+    mkdir -p "$OVERLAY_TMP_ROOT"
+  fi
 fi
 
 # Set up environment
@@ -838,6 +966,19 @@ for run in $(seq 1 $RUNS); do
       mkdir -p "$data_dir"
     fi
 
+    volume_name="${client_base}_$(date +%s)_$RANDOM"
+    if [ "$USE_OVERLAY" = true ]; then
+      overlay_root="${ACTIVE_OVERLAY_ROOTS[$client_base]}"
+      if [ -n "$overlay_root" ]; then
+        overlay_token=$(basename "$overlay_root")
+        volume_name="${client_base}_${overlay_token}_$(date +%s)_$RANDOM"
+      fi
+    fi
+    volume_name=$(echo "$volume_name" | tr -cd '[:alnum:]._-')
+    if [ -z "$volume_name" ]; then
+      volume_name="${client_base}_volume"
+    fi
+
     end_timer "setup_node_${client}"
 
     setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
@@ -848,6 +989,7 @@ for run in $(seq 1 $RUNS); do
       echo "Using custom genesis for $client: $genesis_path"
       setup_cmd+=(--genesisPath "$genesis_path")
     fi
+    setup_cmd+=(--volumeName "$volume_name")
 
     RUNNING_CLIENTS["$client_base"]=1
 
@@ -953,6 +1095,11 @@ for run in $(seq 1 $RUNS); do
       fi
 
       # Actual measured run
+      if drop_host_caches; then
+        test_debug_log "Dropped host caches before scenario $filename"
+      else
+        test_debug_log "Skipped host cache drop before scenario $filename (insufficient permissions)"
+      fi
       start_test_timer "test_run_${client}_${filename}"
       test_debug_log "Running test: $filename"
       echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run"
@@ -971,10 +1118,17 @@ for run in $(seq 1 $RUNS); do
 
     if [ "$USE_OVERLAY" = true ]; then
       cleanup_overlay_for_client "$client_base"
+      cleanup_stale_overlay_mounts
     fi
     end_timer "teardown_${client}"
 
     unset RUNNING_CLIENTS["$client_base"]
+
+    if drop_host_caches; then
+      debug_log "Dropped host caches"
+    else
+      debug_log "Skipped host cache drop (insufficient permissions)"
+    fi
 
     update_execution_time "$client"
     end_timer "client_${client}_run_${run}"
