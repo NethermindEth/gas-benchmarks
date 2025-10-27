@@ -244,7 +244,7 @@ def main():
         with open(f'reports/raw_results_{client}.csv', 'w', newline='') as csvfile:
             # Create a CSV writer object
             csvwriter = csv.writer(csvfile)
-            rows = ['Test Case', 'Gas'] + [f'Run {i} Duration (ms)' for i in range(1, runs + 1)] + ['Description']
+            rows = ['Test Case', 'Gas'] + [f'Run {i}' for i in range(1, runs + 1)] + ['Description']
             csvwriter.writerow(rows)
             for test_case_name, test_case_gas in test_cases.items():
                 for gas in test_case_gas:
