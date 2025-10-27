@@ -21,6 +21,7 @@ OVERLAY_TMP_ROOT="overlay-runtime"
 USE_OVERLAY=false
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
+SKIP_FORKCHOICE=false
 
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
@@ -644,7 +645,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:F" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -661,7 +662,8 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:" opt; do
     n) NETWORK="$OPTARG"; USE_OVERLAY=true ;;
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
     R) RESTART_BEFORE_TESTING=true;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root]" >&2
+    F) SKIP_FORKCHOICE=true;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice]" >&2
        exit 1 ;;
   esac
 done
@@ -746,6 +748,12 @@ if [ -n "$DEBUG_FILE" ]; then
   if [ "$DEBUG_FILE" != "$original_debug_file" ]; then
     echo "Debug file '$original_debug_file' already exists, using '$DEBUG_FILE' instead"
   fi
+fi
+
+if [ "$SKIP_FORKCHOICE" = true ]; then
+  SKIP_FORKCHOICE_OPT=" --skipForkchoice"
+else
+  SKIP_FORKCHOICE_OPT=""
 fi
 
 if [ "$USE_OVERLAY" = true ] && [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
@@ -863,8 +871,8 @@ for run in $(seq 1 $RUNS); do
     if [ "$warmed" = false ] && [ -n "$WARMUP_FILE" ]; then
       start_timer "warmup_${client}_run_${run}"
       if [ -f "$WARMUP_FILE" ]; then
-        echo "[INFO] Running warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$WARMUP_FILE\" --jwtPath /tmp/jwtsecret --client $client --run $run"
-        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run
+        echo "[INFO] Running warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$WARMUP_FILE\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
+        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
       else
         echo "[WARN] Warmup file '$WARMUP_FILE' not found; skipping warmup."
       fi
@@ -919,8 +927,8 @@ for run in $(seq 1 $RUNS); do
 
       if [ "$measured" = false ]; then
         echo "Executing preparation script (not measured): $filename"
-        echo "[INFO] Running preparation run_kute command: python3 run_kute.py --output \"$PREPARATION_RESULTS_DIR\" --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run"
-        python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
+        echo "[INFO] Running preparation run_kute command: python3 run_kute.py --output \"$PREPARATION_RESULTS_DIR\" --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
+        python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
         echo ""
         continue
       fi
@@ -944,8 +952,8 @@ for run in $(seq 1 $RUNS); do
         else
           for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
             test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
-            echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'"
-            python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'
+            echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+            python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
             warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
           done
           end_test_timer "opcodes_warmup_${client}_${filename}"
@@ -955,8 +963,8 @@ for run in $(seq 1 $RUNS); do
       # Actual measured run
       start_test_timer "test_run_${client}_${filename}"
       test_debug_log "Running test: $filename"
-      echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run"
-      python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run
+      echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
+      python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
       end_test_timer "test_run_${client}_${filename}"
       echo "" # Line break after each test for logs clarity
     done
