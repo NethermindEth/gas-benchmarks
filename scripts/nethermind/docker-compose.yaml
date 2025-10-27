@@ -4,6 +4,7 @@ services:
     environment:
       - TERM=xterm-256color
       - COLORTERM=truecolor
+    stop_signal: SIGINT 
     stop_grace_period: 30s
     container_name: gas-execution-client
     restart: unless-stopped
@@ -12,7 +13,7 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/nethermind/data
+      - execution_data:/nethermind/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
       - /home/ubuntu/diagfiles:/nethermind/diag
@@ -23,10 +24,6 @@ services:
     expose:
       - 8545
       - 8551
-    cap_add: [SYS_PTRACE]
-    security_opt:
-      - seccomp=unconfined
-      - apparmor=unconfined
 
     command:
       - ${NETHERMIND_CONFIG_FLAG}
@@ -70,3 +67,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}

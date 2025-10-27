@@ -6,7 +6,7 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/reth
+      - execution_data:/var/lib/reth
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     entrypoint:
       - /bin/sh
@@ -24,7 +24,7 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/reth
+      - execution_data:/var/lib/reth
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
@@ -71,3 +71,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}
