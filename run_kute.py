@@ -44,7 +44,7 @@ def run_command(
     response,
     ec_url,
     kute_extra_arguments,
-    skip_forkchoice=False,
+    skip_forkchoice=True,
 ):
     input_path = test_case_file
     temp_path = None
