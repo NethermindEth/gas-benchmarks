@@ -12,6 +12,7 @@ Make sure you have the following installed on your system:
 - Docker Compose
 - .NET 8.0.x
 - `make` (for running make commands)
+- `git lfs`, `zip` (additional tools)
 
 ## Setup
 
@@ -26,6 +27,13 @@ cd gas-benchmarks
 
 ```sh
 pip install -r requirements.txt
+```
+
+2.1.**Install additional tools:**
+
+```sh
+git lfs install
+sudo apt install zip
 ```
 
 3. **Prepare Kute dependencies (specific to Nethermind):**
@@ -62,6 +70,12 @@ Flags:
 - `--r` it's used to define the number of iterations that you want to run the benchmarks. It's a numeric value.
 - `--i` it's used to define the images that you want to use to run the benchmarks. Separate the images with a comma, and match the clients. Use `default` if you want to ignore the values.
 
+If you faced with an error, try to fix permissions and run the script as root.
+
+```sh
+sudo chmod 777 /tmp
+sudo PATH=$PATH bash run.sh -t "tests/" -w "warmup/warmup-1000bl-16wi-24tx.txt" -c "nethermind,geth,reth" -r 8
+```
 
 Now you're ready to run the benchmarks locally!
 
