@@ -77,13 +77,16 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     # Get the results from the files
     with open(result_file, 'r') as file:
         sections = read_results(file.read())
-        if method not in sections:
-            print(f"Method '{method}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
+        # Add [Application] prefix to method name if not present
+        method_key = f'[Application] {method}' if not method.startswith('[Application]') else method
+        
+        if method_key not in sections:
+            print(f"Method '{method_key}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
             # Get timestamp from first available section, or 0 if no sections exist
             timestamp = getattr(next(iter(sections.values())), 'timestamp', 0) if sections else 0
             return False, 0, timestamp, 0
-        result = sections[method].fields[field]
-        timestamp = getattr(sections[method], 'timestamp', 0)
+        result = sections[method_key].fields[field]
+        timestamp = getattr(sections[method_key], 'timestamp', 0)
         # Extract total running time if available (in milliseconds)
         total_running_time_ms = 0
         if '[Application] Total Running Time' in sections:
