@@ -23,7 +23,7 @@ def get_table_report(client_results, clients, results_paths, test_cases, methods
             image_to_print = el_images[client_without_tag]
         results_to_print += f'{client.capitalize()} - {image_to_print} - Benchmarking Report' + '\n'
         results_to_print += (center_string('Title',
-                                           68) + '| Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description | Start time\n')
+                                           68) + '| Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description | Start time | End time\n')
         gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'{align_left_string(data[0], 68)}|'
@@ -34,13 +34,14 @@ def get_table_report(client_results, clients, results_paths, test_cases, methods
                                  f'{center_string(data[5], 14)}|'
                                  f'{center_string(data[6], 7)}|'
                                  f'{align_left_string(data[7], 50)}|'
-                                 f'{data[8]}\n')
+                                 f'{data[8]}|'
+                                 f'{data[9]}\n')
         results_to_print += '\n'
 
     print(results_to_print)
     if not os.path.exists('reports'):
         os.mkdir('reports')
-    with open(f'reports/tables_norm.txt', 'w') as file:
+    with open('reports/tables_norm.txt', 'w') as file:
         file.write(results_to_print)
 
 
@@ -105,16 +106,19 @@ def main():
                     client_results[client][test_case_name][gas][method] = []
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
-                        responses, results, timestamp = utils.extract_response_and_result(results_paths, client, test_case_name,
+                        responses, results, timestamp, duration = utils.extract_response_and_result(results_paths, client, test_case_name,
                                                                                gas, run, method, fields)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
                         # print(test_case_name + " : " + str(timestamp))
                         if str(timestamp) != "0":
                             client_results[client][test_case_name]["timestamp"] = utils.convert_dotnet_ticks_to_utc(timestamp)
+                            client_results[client][test_case_name]["duration"] = duration
                         else:
                             if "timestamp" not in client_results[client][test_case_name]:
                                 client_results[client][test_case_name]["timestamp"] = 0
+                            if "duration" not in client_results[client][test_case_name]:
+                                client_results[client][test_case_name]["duration"] = 0
 
 
     gas_set = set()

@@ -56,23 +56,23 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     if not os.path.exists(result_file):
         # print("No result: " + result_file)
         print("No result")
-        return False, 0, 0
+        return False, 0, 0, 0
     if not os.path.exists(response_file):
         print("No repsonse")
-        return False, 0, 0
+        return False, 0, 0, 0
     # Get the responses from the files
     with open(response_file, 'r') as file:
         text = file.read()
         if len(text) == 0:
             print("text len 0")
-            return False, 0, 0
+            return False, 0, 0, 0
         # Get latest line
         for line in text.split('\n'):
             if len(line) < 1:
                 continue
             if not check_sync_status(line):
                 print("Invalid sync status")
-                return False, 0, 0
+                return False, 0, 0, 0
     # Get the results from the files
     with open(result_file, 'r') as file:
         sections = read_results(file.read())
@@ -80,10 +80,16 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
             print(f"Method '{method}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
             # Get timestamp from first available section, or 0 if no sections exist
             timestamp = getattr(next(iter(sections.values())), 'timestamp', 0) if sections else 0
-            return False, 0, timestamp
+            return False, 0, timestamp, 0
         result = sections[method].fields[field]
         timestamp = getattr(sections[method], 'timestamp', 0)
-    return response, float(result), timestamp
+        # Extract total running time if available
+        total_running_time = 0
+        if '[Application] Total Running Time' in sections:
+            total_running_time_section = sections['[Application] Total Running Time']
+            if 'sum' in total_running_time_section.fields:
+                total_running_time = float(total_running_time_section.fields['sum'])
+    return response, float(result), timestamp, total_running_time
 
 
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
@@ -103,11 +109,23 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
 
     for test_case, _ in test_cases.items():
         results_norm = results_per_test_case[test_case]
-        gas_table_norm[test_case] = ['' for _ in range(9)]
+        gas_table_norm[test_case] = ['' for _ in range(10)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
-        # (norm) title, description, N , max, min, p50, p95, p99
+        # (norm) title, description, N , max, min, p50, p95, p99, start_time, end_time
         timestamp = client_results[client][test_case]["timestamp"] if client_results[client][test_case] and "timestamp" in client_results[client][test_case] else 0
+        duration = client_results[client][test_case]["duration"] if client_results[client][test_case] and "duration" in client_results[client][test_case] else 0
         gas_table_norm[test_case][8] = timestamp
+        
+        # Calculate end time = start time + duration (in milliseconds)
+        if timestamp != 0 and duration != 0:
+            # Parse the start time, add duration, format back
+            start_dt = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f+00')
+            start_dt = start_dt.replace(tzinfo=datetime.timezone.utc)
+            end_dt = start_dt + datetime.timedelta(milliseconds=duration)
+            gas_table_norm[test_case][9] = end_dt.strftime('%Y-%m-%d %H:%M:%S.%f+00')
+        else:
+            gas_table_norm[test_case][9] = 0
+            
         if test_case in metadata:
             gas_table_norm[test_case][0] = metadata[test_case]['Title']
             gas_table_norm[test_case][7] = metadata[test_case]['Description']
