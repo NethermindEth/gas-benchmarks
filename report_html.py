@@ -225,12 +225,16 @@ def main():
                             client_results[client][test_case_name]["timestamp_ticks"] = timestamp
                             # Only store duration if non-zero to avoid overwriting valid values
                             if duration != 0:
+                                print(f"DEBUG STORE: {test_case_name} - storing duration={duration}")
                                 client_results[client][test_case_name]["duration"] = duration
+                            else:
+                                print(f"DEBUG STORE: {test_case_name} - duration is 0, not storing")
                         else:
                             if "timestamp_ticks" not in client_results[client][test_case_name]:
                                 client_results[client][test_case_name]["timestamp_ticks"] = 0
                         # Initialize duration to 0 only if not set yet
                         if "duration" not in client_results[client][test_case_name]:
+                            print(f"DEBUG STORE: {test_case_name} - initializing duration to 0")
                             client_results[client][test_case_name]["duration"] = 0
 
     gas_set = set()

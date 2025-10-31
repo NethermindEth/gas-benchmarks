@@ -89,6 +89,11 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
             total_running_time_section = sections['[Application] Total Running Time']
             if 'sum' in total_running_time_section.fields:
                 total_running_time_ms = float(total_running_time_section.fields['sum'])
+                print(f"DEBUG EXTRACT: file={result_file}, duration={total_running_time_ms}")
+            else:
+                print(f"DEBUG EXTRACT: No 'sum' in Total Running Time for {result_file}")
+        else:
+            print(f"DEBUG EXTRACT: No Total Running Time section in {result_file}")
     return response, float(result), timestamp, total_running_time_ms
 
 
@@ -124,8 +129,11 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
         if timestamp_ticks != 0 and duration_ms != 0:
             duration_ticks = int(duration_ms * 10_000)
             end_time_ticks = timestamp_ticks + duration_ticks
-            gas_table_norm[test_case][9] = convert_dotnet_ticks_to_utc(end_time_ticks)
+            end_time_str = convert_dotnet_ticks_to_utc(end_time_ticks)
+            print(f"DEBUG CALC: {test_case} - ticks={timestamp_ticks}, duration_ms={duration_ms}, end={end_time_str}")
+            gas_table_norm[test_case][9] = end_time_str
         else:
+            print(f"DEBUG CALC: {test_case} - ticks={timestamp_ticks}, duration={duration_ms} - setting to 0")
             gas_table_norm[test_case][9] = 0
             
         if test_case in metadata:
