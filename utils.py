@@ -27,7 +27,8 @@ def read_results(text):
             if full_lines.startswith(' TIMESTAMP:'):
                 timestamp = int(full_lines.split(':')[1])
             elif full_lines.startswith(' MEASUREMENT:'):
-                measurement = full_lines.split(' ')[3].strip()
+                # Take everything after "MEASUREMENT: " to handle multi-word measurements
+                measurement = full_lines.split('MEASUREMENT:')[1].split('\n')[0].strip()
             elif full_lines.startswith(' TAGS:'):
                 for line in full_lines.split('\n')[1:]:
                     if not line:
