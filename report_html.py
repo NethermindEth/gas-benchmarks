@@ -221,13 +221,17 @@ def main():
                         failed_tests[client][test_case_name][gas][method].append(not responses)
                         # print(test_case_name + " : " + str(timestamp))
                         if str(timestamp) != "0":
-                            client_results[client][test_case_name]["timestamp"] = utils.convert_dotnet_ticks_to_utc(timestamp)
-                            client_results[client][test_case_name]["duration"] = duration
+                            # Store raw timestamp in ticks for calculation, not converted string
+                            client_results[client][test_case_name]["timestamp_ticks"] = timestamp
+                            # Only store duration if non-zero to avoid overwriting valid values
+                            if duration != 0:
+                                client_results[client][test_case_name]["duration"] = duration
                         else:
-                            if "timestamp" not in str(client_results[client][test_case_name]):
-                                client_results[client][test_case_name]["timestamp"] = 0
-                            if "duration" not in str(client_results[client][test_case_name]):
-                                client_results[client][test_case_name]["duration"] = 0
+                            if "timestamp_ticks" not in client_results[client][test_case_name]:
+                                client_results[client][test_case_name]["timestamp_ticks"] = 0
+                        # Initialize duration to 0 only if not set yet
+                        if "duration" not in client_results[client][test_case_name]:
+                            client_results[client][test_case_name]["duration"] = 0
 
     gas_set = set()
     for test_case_name, test_case_gas in test_cases.items():

@@ -83,13 +83,13 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
             return False, 0, timestamp, 0
         result = sections[method].fields[field]
         timestamp = getattr(sections[method], 'timestamp', 0)
-        # Extract total running time if available
-        total_running_time = 0
+        # Extract total running time if available (in milliseconds)
+        total_running_time_ms = 0
         if '[Application] Total Running Time' in sections:
             total_running_time_section = sections['[Application] Total Running Time']
             if 'sum' in total_running_time_section.fields:
-                total_running_time = float(total_running_time_section.fields['sum'])
-    return response, float(result), timestamp, total_running_time
+                total_running_time_ms = float(total_running_time_section.fields['sum'])
+    return response, float(result), timestamp, total_running_time_ms
 
 
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
@@ -112,17 +112,19 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
         gas_table_norm[test_case] = ['' for _ in range(10)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
         # (norm) title, description, N , max, min, p50, p95, p99, start_time, end_time
-        timestamp = client_results[client][test_case]["timestamp"] if client_results[client][test_case] and "timestamp" in client_results[client][test_case] else 0
-        duration = client_results[client][test_case]["duration"] if client_results[client][test_case] and "duration" in client_results[client][test_case] else 0
-        gas_table_norm[test_case][8] = timestamp
+        timestamp_ticks = client_results[client][test_case]["timestamp_ticks"] if client_results[client][test_case] and "timestamp_ticks" in client_results[client][test_case] else 0
+        duration_ms = client_results[client][test_case]["duration"] if client_results[client][test_case] and "duration" in client_results[client][test_case] else 0
         
-        # Calculate end time = start time + duration (in milliseconds)
-        if timestamp != 0 and duration != 0:
-            # Parse the start time, add duration, format back
-            start_dt = datetime.datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f+00')
-            start_dt = start_dt.replace(tzinfo=datetime.timezone.utc)
-            end_dt = start_dt + datetime.timedelta(milliseconds=duration)
-            gas_table_norm[test_case][9] = end_dt.strftime('%Y-%m-%d %H:%M:%S.%f+00')
+        # Convert start timestamp to formatted string
+        start_time_str = convert_dotnet_ticks_to_utc(timestamp_ticks) if timestamp_ticks != 0 else 0
+        gas_table_norm[test_case][8] = start_time_str
+        
+        # Calculate end time using raw ticks + duration
+        # 1 ms = 10,000 ticks (since 1 tick = 100 nanoseconds)
+        if timestamp_ticks != 0 and duration_ms != 0:
+            duration_ticks = int(duration_ms * 10_000)
+            end_time_ticks = timestamp_ticks + duration_ticks
+            gas_table_norm[test_case][9] = convert_dotnet_ticks_to_utc(end_time_ticks)
         else:
             gas_table_norm[test_case][9] = 0
             
