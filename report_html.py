@@ -75,6 +75,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              '<th class=\"title\">Description</th>\n'
                              '<th>Start Time</th>\n'
                              '<th>End Time</th>\n'
+                             f'<th onclick="sortTable(10, \'table_{client}\', true)" style="cursor: pointer;">Duration (ms) &uarr; &darr;</th>\n'
                              '</tr>\n'
                              '</thread>\n'
                              '<tbody>\n')
@@ -90,7 +91,8 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                                  f'<td>{data[6]}</td>\n'
                                  f'<td style="text-align:left;" >{data[7]}</td>\n'
                                  f'<td>{data[8]}</td>\n'
-                                 f'<td>{data[9]}</td>\n</tr>\n')
+                                 f'<td>{data[9]}</td>\n'
+                                 f'<td>{data[10]}</td>\n</tr>\n')
         results_to_print += '\n'
         results_to_print += ('</table>\n'
                              '</tbody>\n')
@@ -164,9 +166,9 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(
                 ['Title', 'Max (MGas/s)', 'p50 (MGas/s)', 'p95 (MGas/s)', 'p99 (MGas/s)', 'Min (MGas/s)', 'N',
-                 'Description', "Start Time", "End Time"])
+                 'Description', "Start Time", "End Time", "Duration (ms)"])
             for test_case, data in gas_table.items():
-                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8], data[9]])
+                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8], data[9], data[10]])
 
 
 def main():
@@ -225,16 +227,12 @@ def main():
                             client_results[client][test_case_name]["timestamp_ticks"] = timestamp
                             # Only store duration if non-zero to avoid overwriting valid values
                             if duration != 0:
-                                print(f"DEBUG STORE: {test_case_name} - storing duration={duration}")
                                 client_results[client][test_case_name]["duration"] = duration
-                            else:
-                                print(f"DEBUG STORE: {test_case_name} - duration is 0, not storing")
                         else:
                             if "timestamp_ticks" not in client_results[client][test_case_name]:
                                 client_results[client][test_case_name]["timestamp_ticks"] = 0
                         # Initialize duration to 0 only if not set yet
                         if "duration" not in client_results[client][test_case_name]:
-                            print(f"DEBUG STORE: {test_case_name} - initializing duration to 0")
                             client_results[client][test_case_name]["duration"] = 0
 
     gas_set = set()
