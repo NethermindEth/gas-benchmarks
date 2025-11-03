@@ -93,11 +93,6 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
             total_running_time_section = sections['[Application] Total Running Time']
             if 'sum' in total_running_time_section.fields:
                 total_running_time_ms = float(total_running_time_section.fields['sum'])
-                print(f"DEBUG EXTRACT: file={result_file}, duration={total_running_time_ms}")
-            else:
-                print(f"DEBUG EXTRACT: No 'sum' in Total Running Time for {result_file}")
-        else:
-            print(f"DEBUG EXTRACT: No Total Running Time section in {result_file}")
     return response, float(result), timestamp, total_running_time_ms
 
 
@@ -118,9 +113,9 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
 
     for test_case, _ in test_cases.items():
         results_norm = results_per_test_case[test_case]
-        gas_table_norm[test_case] = ['' for _ in range(10)]
+        gas_table_norm[test_case] = ['' for _ in range(11)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
-        # (norm) title, description, N , max, min, p50, p95, p99, start_time, end_time
+        # (norm) title, description, N , max, min, p50, p95, p99, start_time, end_time, duration_ms
         timestamp_ticks = client_results[client][test_case]["timestamp_ticks"] if client_results[client][test_case] and "timestamp_ticks" in client_results[client][test_case] else 0
         duration_ms = client_results[client][test_case]["duration"] if client_results[client][test_case] and "duration" in client_results[client][test_case] else 0
         
@@ -134,11 +129,12 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
             duration_ticks = int(duration_ms * 10_000)
             end_time_ticks = timestamp_ticks + duration_ticks
             end_time_str = convert_dotnet_ticks_to_utc(end_time_ticks)
-            print(f"DEBUG CALC: {test_case} - ticks={timestamp_ticks}, duration_ms={duration_ms}, end={end_time_str}")
             gas_table_norm[test_case][9] = end_time_str
         else:
-            print(f"DEBUG CALC: {test_case} - ticks={timestamp_ticks}, duration={duration_ms} - setting to 0")
             gas_table_norm[test_case][9] = 0
+        
+        # Store duration in milliseconds
+        gas_table_norm[test_case][10] = f'{duration_ms:.2f}' if duration_ms != 0 else '0'
             
         if test_case in metadata:
             gas_table_norm[test_case][0] = metadata[test_case]['Title']

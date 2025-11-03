@@ -23,7 +23,7 @@ def get_table_report(client_results, clients, results_paths, test_cases, methods
             image_to_print = el_images[client_without_tag]
         results_to_print += f'{client.capitalize()} - {image_to_print} - Benchmarking Report' + '\n'
         results_to_print += (center_string('Title',
-                                           68) + '| Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description | Start time | End time\n')
+                                           68) + '| Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description | Start time | End time | Duration (ms)\n')
         gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'{align_left_string(data[0], 68)}|'
@@ -35,7 +35,8 @@ def get_table_report(client_results, clients, results_paths, test_cases, methods
                                  f'{center_string(data[6], 7)}|'
                                  f'{align_left_string(data[7], 50)}|'
                                  f'{data[8]}|'
-                                 f'{data[9]}\n')
+                                 f'{data[9]}|'
+                                 f'{center_string(data[10], 14)}\n')
         results_to_print += '\n'
 
     print(results_to_print)
