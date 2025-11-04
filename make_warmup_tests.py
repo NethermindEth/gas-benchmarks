@@ -3,7 +3,7 @@ import argparse, json, shutil, subprocess, re, sys
 from pathlib import Path
 
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
-IMAGES = '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+IMAGES = '{"nethermind":"default","geth":"ethereum/client-go:latest","reth":"default","erigon":"default","besu":"default"}'
 
 
 def process_line(line: str, counters: dict, bump: bool) -> str:
@@ -187,7 +187,19 @@ def main():
         tests_path = str(dst_root / relative_subdir)
         genesis_path = entry.get("genesis", "")
 
-        setup_node_cmd = [sys.executable, "setup_node.py", "--client", "geth", "--imageBulk", IMAGES]
+        data_dir = Path("scripts/geth/execution-data").resolve()
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+        setup_node_cmd = [
+            sys.executable,
+            "setup_node.py",
+            "--client",
+            "geth",
+            "--imageBulk",
+            IMAGES,
+            "--dataDir",
+            str(data_dir),
+        ]
         if genesis_path:
             setup_node_cmd += ["--genesisPath", genesis_path]
 
