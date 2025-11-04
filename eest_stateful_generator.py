@@ -344,6 +344,8 @@ def start_nethermind_container(
         "10000",
         "--TxPool.MaxTxSize",
         "null",
+        "--Merge.TerminalTotalDifficulty",
+        "0",
         "--Init.LogRules",
         "Consensus.Processing.ProcessingStats:Debug",
         "--Blocks.SingleBlockImprovementOfSlot",
