@@ -3,7 +3,7 @@ import argparse, json, shutil, subprocess, re, sys
 from pathlib import Path
 
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
-IMAGES = '{"nethermind":"default","geth":"ethpandaops/geth:master-739f6f4","reth":"default","erigon":"default","besu":"default"}'
+IMAGES = '{"nethermind":"default","geth":"ethereum/client-go:latest","reth":"default","erigon":"default","besu":"default"}'
 
 
 def process_line(line: str, counters: dict, bump: bool) -> str:
