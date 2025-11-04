@@ -267,34 +267,81 @@ def ensure_jwt(jwt_dir: Path) -> Path:
     if not jwt.exists(): jwt.write_text(os.urandom(32).hex())
     return jwt
 
-def start_nethermind_container(chain: str, db_dir: Path, jwt_path: Path,
-                               rpc_port=8545, engine_port=8551, name="eest-nethermind",
-                               image: str = "nethermindeth/nethermind:gp-hacked") -> str:
+def start_nethermind_container(
+    chain: str,
+    db_dir: Path,
+    jwt_path: Path,
+    rpc_port=8545,
+    engine_port=8551,
+    name="eest-nethermind",
+    image: str = "nethermindeth/nethermind:gp-hacked",
+    genesis_path: Optional[Path] = None,
+) -> str:
+    resolved_db = db_dir.resolve()
+    resolved_jwt_parent = jwt_path.parent.resolve()
     cmd = [
-        "docker", "run", "-d",
-        "--name", name,
-        "-p", f"{rpc_port}:{rpc_port}",
-        "-p", f"{engine_port}:{engine_port}",
-        "-v", f"{str(db_dir.resolve())}:/db",
-        "-v", f"{str(jwt_path.parent.resolve())}:/jwt:ro",
-        image,
-        "--config", str(chain),
-        "--JsonRpc.Enabled", "true",
-        "--JsonRpc.Host", "0.0.0.0",
-        "--JsonRpc.Port", str(rpc_port),
-        "--JsonRpc.EngineHost", "0.0.0.0",
-        "--JsonRpc.EnginePort", str(engine_port),
-        "--JsonRpc.JwtSecretFile", "/jwt/jwt.hex",
-        "--JsonRpc.UnsecureDevNoRpcAuthentication", "true",
-        "--JsonRpc.EnabledModules", "Eth,Net,Web3,Admin,Debug,Trace,TxPool",
-        "--Blocks.TargetBlockGasLimit", "1000000000000",
-        "--data-dir", "/db",
-        "--log", "INFO",
-        "--Network.MaxActivePeers", "0",
-        "--TxPool.Size", "10000",
-        "--TxPool.MaxTxSize", "null",
-        "--Init.LogRules", "Consensus.Processing.ProcessingStats:Debug",
-        "--Blocks.SingleBlockImprovementOfSlot", "0.10",
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        name,
+        "-p",
+        f"{rpc_port}:{rpc_port}",
+        "-p",
+        f"{engine_port}:{engine_port}",
+        "-v",
+        f"{str(resolved_db)}:/db",
+        "-v",
+        f"{str(resolved_jwt_parent)}:/jwt:ro",
+    ]
+    genesis_volume = None
+    if genesis_path:
+        resolved_genesis = Path(genesis_path).resolve()
+        if not resolved_genesis.is_file():
+            raise FileNotFoundError(f"Genesis file not found at {resolved_genesis}")
+        genesis_volume = ["-v", f"{str(resolved_genesis)}:/genesis/custom.json:ro"]
+        cmd += genesis_volume
+
+    cmd.append(image)
+
+    if genesis_path:
+        cmd += ["--Init.ChainSpecPath", "/genesis/custom.json"]
+    else:
+        cmd += ["--config", str(chain)]
+
+    cmd += [
+        "--JsonRpc.Enabled",
+        "true",
+        "--JsonRpc.Host",
+        "0.0.0.0",
+        "--JsonRpc.Port",
+        str(rpc_port),
+        "--JsonRpc.EngineHost",
+        "0.0.0.0",
+        "--JsonRpc.EnginePort",
+        str(engine_port),
+        "--JsonRpc.JwtSecretFile",
+        "/jwt/jwt.hex",
+        "--JsonRpc.UnsecureDevNoRpcAuthentication",
+        "true",
+        "--JsonRpc.EnabledModules",
+        "Eth,Net,Web3,Admin,Debug,Trace,TxPool",
+        "--Blocks.TargetBlockGasLimit",
+        "1000000000000",
+        "--data-dir",
+        "/db",
+        "--log",
+        "INFO",
+        "--Network.MaxActivePeers",
+        "0",
+        "--TxPool.Size",
+        "10000",
+        "--TxPool.MaxTxSize",
+        "null",
+        "--Init.LogRules",
+        "Consensus.Processing.ProcessingStats:Debug",
+        "--Blocks.SingleBlockImprovementOfSlot",
+        "0.10",
     ]
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
@@ -449,6 +496,16 @@ def main():
     parser.add_argument("--stubs-file", default=None, help="Path to address stubs JSON passed to execute remote")
     parser.add_argument("--no-snapshot", action="store_true")
     parser.add_argument("--refresh-snapshot", action="store_true")
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="Path to use for Nethermind execution data instead of overlay mounts.",
+    )
+    parser.add_argument(
+        "--genesis-path",
+        default=None,
+        help="Path to a custom genesis JSON file to mount into Nethermind.",
+    )
     parser.add_argument("--keep", action="store_true")
     parser.add_argument(
         "--payload-dir",
@@ -541,31 +598,67 @@ def main():
     run(["uv", "sync", "--all-extras"], cwd=str(repo_dir))
     run(["uv", "pip", "install", "-e", ".", "--break-system-packages"], cwd=str(repo_dir))
 
-    snapshot_dir = Path("execution-data")
-    if not args.no_snapshot:
-        if snapshot_dir.exists() and any(snapshot_dir.iterdir()) and not args.refresh_snapshot:
-            pass
+    data_dir_path: Optional[Path] = None
+    if args.data_dir:
+        data_dir_path = Path(args.data_dir).expanduser().resolve()
+        data_dir_path.mkdir(parents=True, exist_ok=True)
+
+    genesis_file: Optional[Path] = None
+    if args.genesis_path:
+        candidate = Path(args.genesis_path).expanduser()
+        resolved_candidate = candidate.resolve()
+        if not resolved_candidate.is_file():
+            raise SystemExit(f"Genesis file not found at {resolved_candidate}")
+        genesis_file = resolved_candidate
+        if data_dir_path is None:
+            data_dir_path = Path("scripts/nethermind/execution-data").resolve()
+            data_dir_path.mkdir(parents=True, exist_ok=True)
+
+    use_overlay_base = data_dir_path is None and genesis_file is None
+    base_data_dir = data_dir_path or Path("execution-data")
+
+    if genesis_file is None:
+        if not args.no_snapshot:
+            if base_data_dir.exists() and any(base_data_dir.iterdir()) and not args.refresh_snapshot:
+                pass
+            else:
+                if args.refresh_snapshot and base_data_dir.exists():
+                    shutil.rmtree(base_data_dir)
+                base_data_dir.mkdir(parents=True, exist_ok=True)
+                download_snapshot(args.chain, base_data_dir)
         else:
-            if args.refresh_snapshot and snapshot_dir.exists():
-                shutil.rmtree(snapshot_dir)
-                snapshot_dir.mkdir(parents=True, exist_ok=True)
-            download_snapshot(args.chain, snapshot_dir)
+            base_data_dir.mkdir(parents=True, exist_ok=True)
     else:
-        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        if args.refresh_snapshot and base_data_dir.exists():
+            shutil.rmtree(base_data_dir)
+        base_data_dir.mkdir(parents=True, exist_ok=True)
+
+    snapshot_dir = base_data_dir
 
     jwt_path = ensure_jwt(Path("engine-jwt"))
 
-    primary_merged = Path("overlay-merged")
-    primary_upper  = Path("overlay-upper")
-    primary_work   = Path("overlay-work")
-    CLEANUP["primary_merged"], CLEANUP["primary_upper"], CLEANUP["primary_work"] = primary_merged, primary_upper, primary_work
+    if use_overlay_base:
+        primary_merged = Path("overlay-merged")
+        primary_upper = Path("overlay-upper")
+        primary_work = Path("overlay-work")
+        CLEANUP["primary_merged"], CLEANUP["primary_upper"], CLEANUP["primary_work"] = (
+            primary_merged,
+            primary_upper,
+            primary_work,
+        )
+    else:
+        primary_merged = snapshot_dir.resolve()
+        primary_upper = primary_work = None
+        CLEANUP["primary_merged"] = CLEANUP["primary_upper"] = CLEANUP["primary_work"] = None
 
-    overlay_reorgs_enabled = args.overlay_reorgs
+    overlay_reorgs_enabled = args.overlay_reorgs and use_overlay_base
+    if args.overlay_reorgs and not use_overlay_base:
+        print("[INFO] Overlay reorgs disabled because overlay filesystem is not in use.")
 
     if overlay_reorgs_enabled:
         scenario_merged = Path("overlay-scenario-merged")
-        scenario_upper  = Path("overlay-scenario-upper")
-        scenario_work   = Path("overlay-scenario-work")
+        scenario_upper = Path("overlay-scenario-upper")
+        scenario_work = Path("overlay-scenario-work")
         CLEANUP["scenario_merged"], CLEANUP["scenario_upper"], CLEANUP["scenario_work"] = (
             scenario_merged,
             scenario_upper,
@@ -576,7 +669,8 @@ def main():
         CLEANUP["scenario_merged"] = CLEANUP["scenario_upper"] = CLEANUP["scenario_work"] = None
 
     stop_and_remove_container("eest-nethermind")
-    ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
+    if use_overlay_base:
+        ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
 
     container_name = "eest-nethermind"
     CLEANUP["container"] = container_name
@@ -593,6 +687,7 @@ def main():
             engine_port=8551,
             name=container_name,
             image=args.nethermind_image,
+            genesis_path=genesis_file,
         )
         if not wait_for_port("127.0.0.1", 8545, timeout=180):
             print("ERROR: 8545 not reachable.")
@@ -819,13 +914,16 @@ def main():
                     unmount_overlay(scenario_merged)
                 except Exception:
                     pass
-            try:
-                unmount_overlay(primary_merged)
-            except Exception:
-                pass
-            cleanup_paths = [primary_upper, primary_work, primary_merged]
-            if overlay_reorgs_enabled:
-                cleanup_paths.extend([scenario_upper, scenario_work, scenario_merged])
+            if use_overlay_base:
+                try:
+                    unmount_overlay(primary_merged)
+                except Exception:
+                    pass
+            cleanup_paths = []
+            if use_overlay_base:
+                cleanup_paths.extend([primary_upper, primary_work, primary_merged])
+                if overlay_reorgs_enabled:
+                    cleanup_paths.extend([scenario_upper, scenario_work, scenario_merged])
             for path in cleanup_paths:
                 if path:
                     shutil.rmtree(path, ignore_errors=True)
