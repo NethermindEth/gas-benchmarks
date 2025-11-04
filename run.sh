@@ -60,6 +60,118 @@ test_debug_log() {
   fi
 }
 
+hash_file() {
+  local file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+  else
+    python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$file"
+  fi
+}
+
+validate_cross_client_results() {
+  local -a requested_clients=()
+  local client
+  for client in "${CLIENT_ARRAY[@]}"; do
+    if [ -n "$client" ]; then
+      requested_clients+=("$client")
+    fi
+  done
+
+  if [ "${#requested_clients[@]}" -le 1 ]; then
+    return 0
+  fi
+
+  shopt -s nullglob
+  local -a result_files=(results/*_results_*.txt)
+  shopt -u nullglob
+
+  if [ "${#result_files[@]}" -eq 0 ]; then
+    echo "[WARN] Cross-client validation skipped: no result files found."
+    return 0
+  fi
+
+  local -A scenario_hashes=()
+  local -A scenario_clients=()
+  local -A scenario_baseline_file=()
+  local -A scenario_baseline_client=()
+  local -A clients_seen=()
+  local -a mismatches=()
+  local -a missing=()
+  local file filename scenario hash
+
+  for file in "${result_files[@]}"; do
+    filename=$(basename "$file")
+    scenario=${filename#*_results_}
+    client=${filename%%_results_*}
+    hash=$(hash_file "$file")
+
+    clients_seen["$client"]=1
+    scenario_clients["$scenario"]="${scenario_clients[$scenario]} $client"
+    if [ -z "${scenario_hashes[$scenario]}" ]; then
+      scenario_hashes["$scenario"]="$hash"
+      scenario_baseline_file["$scenario"]="$file"
+      scenario_baseline_client["$scenario"]="$client"
+    elif [ "${scenario_hashes[$scenario]}" != "$hash" ]; then
+      mismatches+=("$scenario|${scenario_baseline_client[$scenario]}|$client|${scenario_baseline_file[$scenario]}|$file")
+    fi
+  done
+
+  local -a active_clients=()
+  for client in "${!clients_seen[@]}"; do
+    active_clients+=("$client")
+  done
+
+  if [ "${#active_clients[@]}" -le 1 ]; then
+    if [ "${#active_clients[@]}" -eq 0 ]; then
+      echo "[WARN] Cross-client validation skipped: no result files were produced."
+    else
+      echo "[WARN] Cross-client validation skipped: only client '${active_clients[0]}' produced results."
+    fi
+    for client in "${requested_clients[@]}"; do
+      if [ -z "${clients_seen[$client]}" ]; then
+        echo "[WARN] No result files found for requested client '$client'."
+      fi
+    done
+    return 0
+  fi
+
+  local scenario scenario_clients_str missing_found=false
+  for scenario in "${!scenario_hashes[@]}"; do
+    scenario_clients_str=" ${scenario_clients[$scenario]} "
+    for client in "${active_clients[@]}"; do
+      if [[ "$scenario_clients_str" != *" $client "* ]]; then
+        missing+=("$scenario|$client")
+        missing_found=true
+      fi
+    done
+  done
+
+  if [ "$missing_found" = false ] && [ "${#mismatches[@]}" -eq 0 ]; then
+    echo "[INFO] Cross-client validation passed across ${#active_clients[@]} clients: ${active_clients[*]}"
+    return 0
+  fi
+
+  echo "[ERROR] Cross-client validation failed."
+  if [ "$missing_found" = true ]; then
+    for entry in "${missing[@]}"; do
+      IFS='|' read -r scenario client <<< "$entry"
+      echo "  Missing results for client '$client' in scenario '$scenario'"
+    done
+  fi
+  if [ "${#mismatches[@]}" -gt 0 ]; then
+    for entry in "${mismatches[@]}"; do
+      IFS='|' read -r scenario base_client client base_file current_file <<< "$entry"
+      echo "  Mismatch detected for scenario '$scenario' between '$base_client' and '$client'"
+      if command -v diff >/dev/null 2>&1; then
+        diff -u "$base_file" "$current_file" | sed 's/^/    /'
+      fi
+    done
+  fi
+
+  return 1
+}
+
 # Timing functions
 start_timer() {
   local step_name="$1"
@@ -1159,6 +1271,13 @@ else
   python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES"
 fi
 end_timer "results_processing"
+
+start_timer "cross_client_validation"
+if ! validate_cross_client_results; then
+  end_timer "cross_client_validation"
+  exit 1
+fi
+end_timer "cross_client_validation"
 
 # Prepare and zip the results
 start_timer "results_packaging"

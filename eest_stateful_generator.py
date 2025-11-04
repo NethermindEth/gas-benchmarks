@@ -536,13 +536,13 @@ def main():
     )
     parser.add_argument(
         "--eest-repo",
-        default="https://github.com/ethereum/execution-spec-tests",
-        help="Git repository URL for execution-spec-tests (supports forks).",
+        default="https://github.com/ethereum/execution-specs",
+        help="Git repository URL for execution-specs (supports forks).",
     )
     parser.add_argument(
         "--eest-branch",
         default="main",
-        help="Git branch of execution-spec-tests to checkout before running (default: main).",
+        help="Git branch of execution-specs to checkout before running (default: main).",
     )
     args = parser.parse_args()
 
@@ -574,7 +574,7 @@ def main():
     resume_file = control_dir / "resume.json"
 
 
-    repo_dir = Path("execution-spec-tests")
+    repo_dir = Path("execution-specs")
     repo_url = args.eest_repo
     if repo_dir.exists():
         run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
