@@ -1004,6 +1004,12 @@ for run in $(seq 1 $RUNS); do
     echo "[INFO] Running setup_node command: ${setup_cmd[*]}"
     "${setup_cmd[@]}"
 
+    if declare -f wait_for_rpc >/dev/null 2>&1; then
+      wait_for_rpc "http://127.0.0.1:8545" 300
+    else
+      sleep 5
+    fi
+
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
     cat results/computer_specs.txt
 
