@@ -84,7 +84,7 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
             print(f"Method '{method_key}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
             # Get timestamp from first available section, or 0 if no sections exist
             timestamp = getattr(next(iter(sections.values())), 'timestamp', 0) if sections else 0
-            return False, 0, timestamp, 0
+            return False, 0, timestamp, 0, 0, 0
         result = sections[method_key].fields[field]
         timestamp = getattr(sections[method_key], 'timestamp', 0)
         # Extract total running time if available (in milliseconds)
@@ -93,7 +93,22 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
             total_running_time_section = sections['[Application] Total Running Time']
             if 'sum' in total_running_time_section.fields:
                 total_running_time_ms = float(total_running_time_section.fields['sum'])
-    return response, float(result), timestamp, total_running_time_ms
+        
+        # Extract FCU (engine_forkchoiceUpdatedV3) duration
+        fcu_duration_ms = 0
+        if '[Application] engine_forkchoiceUpdatedV3' in sections:
+            fcu_section = sections['[Application] engine_forkchoiceUpdatedV3']
+            if 'sum' in fcu_section.fields:
+                fcu_duration_ms = float(fcu_section.fields['sum'])
+        
+        # Extract NP (engine_newPayloadV4) duration
+        np_duration_ms = 0
+        if '[Application] engine_newPayloadV4' in sections:
+            np_section = sections['[Application] engine_newPayloadV4']
+            if 'sum' in np_section.fields:
+                np_duration_ms = float(np_section.fields['sum'])
+    
+    return response, float(result), timestamp, total_running_time_ms, fcu_duration_ms, np_duration_ms
 
 
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
@@ -113,11 +128,13 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
 
     for test_case, _ in test_cases.items():
         results_norm = results_per_test_case[test_case]
-        gas_table_norm[test_case] = ['' for _ in range(11)]
+        gas_table_norm[test_case] = ['' for _ in range(13)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
-        # (norm) title, description, N , max, min, p50, p95, p99, start_time, end_time, duration_ms
+        # (norm) title, description, N , max, min, p50, p95, p99, start_time, end_time, duration_ms, fcu_duration_ms, np_duration_ms
         timestamp_ticks = client_results[client][test_case]["timestamp_ticks"] if client_results[client][test_case] and "timestamp_ticks" in client_results[client][test_case] else 0
         duration_ms = client_results[client][test_case]["duration"] if client_results[client][test_case] and "duration" in client_results[client][test_case] else 0
+        fcu_duration_ms = client_results[client][test_case]["fcu_duration"] if client_results[client][test_case] and "fcu_duration" in client_results[client][test_case] else 0
+        np_duration_ms = client_results[client][test_case]["np_duration"] if client_results[client][test_case] and "np_duration" in client_results[client][test_case] else 0
         
         # Convert start timestamp to formatted string
         start_time_str = convert_dotnet_ticks_to_utc(timestamp_ticks) if timestamp_ticks != 0 else 0
@@ -135,6 +152,10 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
         
         # Store duration in milliseconds
         gas_table_norm[test_case][10] = f'{duration_ms:.2f}' if duration_ms != 0 else '0'
+        
+        # Store FCU and NP durations
+        gas_table_norm[test_case][11] = f'{fcu_duration_ms:.2f}' if fcu_duration_ms != 0 else '0'
+        gas_table_norm[test_case][12] = f'{np_duration_ms:.2f}' if np_duration_ms != 0 else '0'
             
         if test_case in metadata:
             gas_table_norm[test_case][0] = metadata[test_case]['Title']
