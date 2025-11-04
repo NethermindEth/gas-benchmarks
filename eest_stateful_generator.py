@@ -174,7 +174,13 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
     try:
-        for _ in range(max(args.gas_bump_count, 1)):
+        max_count = max(args.gas_bump_count, 1)
+        last_log = time.monotonic()
+        for idx in range(max_count):
+            now = time.monotonic()
+            if idx == 0 or idx == max_count - 1 or now - last_log >= 5:
+                print(f"[DEBUG] Generating gas-bump payload {idx + 1}/{max_count}")
+                last_log = now
             preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
@@ -305,7 +311,7 @@ def start_nethermind_container(
     cmd.append(image)
 
     if genesis_path:
-        cmd += ["--Init.ChainSpecPath", "/genesis/custom.json"]
+        cmd += ["--config", "none", "--Init.ChainSpecPath", "/genesis/custom.json"]
     else:
         cmd += ["--config", str(chain)]
 
