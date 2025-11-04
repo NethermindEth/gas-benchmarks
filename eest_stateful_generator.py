@@ -802,7 +802,7 @@ def main():
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             args.test_path,
             "--",
-            "-m", "compute", "-n", "1",
+            "-m", "benchmark", "-n", "1",
         ]
         stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")
         if stubs_source:
