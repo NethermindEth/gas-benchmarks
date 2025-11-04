@@ -286,6 +286,8 @@ def load_aggregated_stats(output_csv_path: str) -> Dict[str, Dict[str, Any]]:
                             'start_time': row.get('Start Time') if row.get('Start Time') else None,
                             'end_time': row.get('End Time') if row.get('End Time') else None,
                             'test_duration': float(row['Duration (ms)']) if row.get('Duration (ms)') and row['Duration (ms)'].strip() else None,
+                            'fcu_duration': float(row['FCU time (ms)']) if row.get('FCU time (ms)') and row['FCU time (ms)'].strip() else None,
+                            'np_duration': float(row['NP time (ms)']) if row.get('NP time (ms)') and row['NP time (ms)'].strip() else None,
                             'test_description': row.get('Description')
                         }
                     except ValueError as ve:
@@ -480,6 +482,8 @@ def populate_data_for_client(
                         end_time = None
                     
                     test_duration = agg_stats.get('test_duration')
+                    fcu_duration = agg_stats.get('fcu_duration')
+                    np_duration = agg_stats.get('np_duration')
                     
                     record: Dict[str, Any] = {
                         'client_name': client_name,
@@ -499,6 +503,8 @@ def populate_data_for_client(
                         'start_time': start_time,
                         'end_time': end_time,
                         'test_duration': test_duration,
+                        'fcu_duration': fcu_duration,
+                        'np_duration': np_duration,
                         **computer_specs
                     }
                     records_to_insert.append(record)
