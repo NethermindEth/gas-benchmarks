@@ -57,23 +57,23 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     if not os.path.exists(result_file):
         # print("No result: " + result_file)
         print("No result")
-        return False, 0, 0, 0
+        return False, 0, 0, 0, 0, 0
     if not os.path.exists(response_file):
         print("No repsonse")
-        return False, 0, 0, 0
+        return False, 0, 0, 0, 0, 0
     # Get the responses from the files
     with open(response_file, 'r') as file:
         text = file.read()
         if len(text) == 0:
             print("text len 0")
-            return False, 0, 0, 0
+            return False, 0, 0, 0, 0, 0
         # Get latest line
         for line in text.split('\n'):
             if len(line) < 1:
                 continue
             if not check_sync_status(line):
                 print("Invalid sync status")
-                return False, 0, 0, 0
+                return False, 0, 0, 0, 0, 0
     # Get the results from the files
     with open(result_file, 'r') as file:
         sections = read_results(file.read())
