@@ -283,6 +283,7 @@ def start_nethermind_container(
     image: str = "nethermindeth/nethermind:gp-hacked",
     genesis_path: Optional[Path] = None,
 ) -> str:
+    subprocess.run(["docker", "pull", image], check=False)
     resolved_db = db_dir.resolve()
     resolved_jwt_parent = jwt_path.parent.resolve()
     cmd = [
