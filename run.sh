@@ -83,7 +83,7 @@ validate_cross_client_results() {
   fi
 
   shopt -s nullglob
-  local -a result_files=(results/*_results_*.txt)
+  local -a result_files=(results/*_response_*.txt)
   shopt -u nullglob
 
   if [ "${#result_files[@]}" -eq 0 ]; then
