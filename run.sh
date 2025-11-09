@@ -60,13 +60,38 @@ test_debug_log() {
   fi
 }
 
-hash_file() {
+hash_json_file() {
   local file="$1"
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" | awk '{print $1}'
-  else
-    python3 -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$file"
-  fi
+  python3 - "$file" <<'PY'
+import json, sys, hashlib
+from pathlib import Path
+
+def normalize(value):
+    if isinstance(value, dict):
+        return {k: normalize(value[k]) for k in sorted(value)}
+    if isinstance(value, list):
+        return [normalize(v) for v in value]
+    return value
+
+path = Path(sys.argv[1])
+fragments = []
+if path.exists():
+    with path.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except Exception:
+                fragments.append(line)
+                continue
+            normalized = normalize(data)
+            fragments.append(json.dumps(normalized, separators=(",", ":"), sort_keys=True))
+
+payload = "\n".join(fragments).encode("utf-8")
+print(hashlib.sha256(payload).hexdigest())
+PY
 }
 
 validate_cross_client_results() {
@@ -104,7 +129,7 @@ validate_cross_client_results() {
     filename=$(basename "$file")
     scenario=${filename#*_results_}
     client=${filename%%_results_*}
-    hash=$(hash_file "$file")
+    hash=$(hash_json_file "$file")
 
     clients_seen["$client"]=1
     scenario_clients["$scenario"]="${scenario_clients[$scenario]} $client"
