@@ -478,6 +478,12 @@ def _cleanup():
                 if d: shutil.rmtree(d, ignore_errors=True)
             except Exception:
                 pass
+        try:
+            cleanup_dir = CLEANUP.get("data_dir_cleanup")
+            if cleanup_dir:
+                shutil.rmtree(cleanup_dir, ignore_errors=True)
+        except Exception:
+            pass
 
 atexit.register(_cleanup)
 
@@ -647,6 +653,10 @@ def main():
         base_data_dir.mkdir(parents=True, exist_ok=True)
 
     snapshot_dir = base_data_dir
+    if not use_overlay_base:
+        CLEANUP["data_dir_cleanup"] = snapshot_dir
+    else:
+        CLEANUP["data_dir_cleanup"] = None
 
     jwt_path = ensure_jwt(Path("engine-jwt"))
 
@@ -943,6 +953,8 @@ def main():
             for path in cleanup_paths:
                 if path:
                     shutil.rmtree(path, ignore_errors=True)
+            if not use_overlay_base and snapshot_dir:
+                shutil.rmtree(snapshot_dir, ignore_errors=True)
         print("Done.")
 
 if __name__ == "__main__":
