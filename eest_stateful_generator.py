@@ -526,6 +526,11 @@ def main():
         help="Comma-separated gas benchmark values to pass to execute remote.",
     )
     parser.add_argument(
+        "--fixed-opcode-count",
+        action="store_true",
+        help="Use a fixed opcode count; skips passing --gas-benchmark-values to execute remote.",
+    )
+    parser.add_argument(
         "--nethermind-image",
         default="nethermindeth/nethermind:gp-hacked",
         help="Docker image to use when launching the Nethermind container.",
@@ -796,7 +801,10 @@ def main():
             f"--rpc-seed-key={args.rpc_seed_key}",
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
-            f"--gas-benchmark-values={args.gas_benchmark_values}",
+        ]
+        if not args.fixed_opcode_count and args.gas_benchmark_values:
+            uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
+        uv_cmd += [
             "--eoa-fund-amount-default", "3100000000000000000",
             "--tx-wait-timeout", "300",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
