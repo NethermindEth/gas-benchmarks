@@ -20,7 +20,7 @@ mkdir -p results
 3) Run benchmarks (example):
 
 ```sh
-bash run.sh -t "tests/" -w "warmup-tests" -c "nethermind,geth,reth" -r 3
+bash run.sh -t "eest_tests/" -w "warmup-tests" -c "nethermind,geth,reth" -r 3
 ```
 
 Outputs land in `results/` and reports in `results/reports/`.
@@ -32,20 +32,19 @@ Outputs land in `results/` and reports in `results/reports/`.
 - `run_kute.py`: Execute a single test payload against `:8551` engine endpoint with labeled environment.
 - Reporting: `report_html.py`, `report_txt.py`, `report_tables.py` consume normalized metrics to produce HTML/TXT/table outputs.
 - DB ETL: `generate_postgres_schema.py` (create/update table), `fill_postgres_db.py` (bulk insert runs/specs).
-- Test capture: `capture_eest_tests.py` to convert EEST fixtures into newline-delimited `.txt` RPC payloads.
+- Test capture: `capture_eest_tests.py` to convert Execution Layer Spec (EELS) fixtures into newline-delimited `.txt` RPC payloads.
 
 ## Writing tests (minimal, practical)
 
-- Place payload files under `tests/<Category>/` with filenames like `<TestCase>_<Gas>M.txt` (e.g., `MStore_150M.txt`).
-- Add human-facing info to `tests/metadata.json` with `Name`, `Title`, `Description` for each test case.
-- The discovery pattern is implemented by `utils.get_test_cases(tests_path)` (parses names and gas values).
-- Optionally capture upstream benchmarks with:
+- Author benchmark definitions in the [`execution-specs`](https://github.com/ethereum/execution-specs) repository under `tests/benchmark/`, following the EELS conventions for deterministic inputs.
+- Capture those tests into newline-delimited payload files with:
 
 ```sh
 python capture_eest_tests.py -o eest_tests -x "pattern_to_exclude"
 ```
 
-Then run with `-t "eest_tests/"`.
+- Generate matching warmup payloads with `make_warmup_tests.py` and run the pipeline with `-t "eest_tests/"`.
+- Filenames drive discovery (`utils.get_test_cases` parses names/gas values), so keep the `Scenario_<Gas>M.txt` pattern consistent.
 
 ## Running and validating
 
@@ -60,7 +59,7 @@ Then run with `-t "eest_tests/"`.
 
 - HTML: open `results/reports/index.html` (sortable tables; includes computer specs if present).
 - TXT/table summaries: see `results/reports/` and `reports/tables_norm.txt`.
-- The reporters use `tests/metadata.json` to print titles/descriptions and compute Min/Max/p50/p95/p99 and N.
+- Reporters derive titles from the captured filenames (you can optionally add a metadata file next to your dataset if you need friendlier labels) and compute Min/Max/p50/p95/p99 plus N.
 
 ## Contributing changes
 
@@ -68,7 +67,7 @@ Then run with `-t "eest_tests/"`.
 - Follow the adapter layout for new clients under `scripts/<client>/`:
   - `docker-compose.yaml`, `run.sh`, `jwtsecret`; add genesis under `scripts/genesisfiles/<client>/`
   - Set/override default images in `images.yaml` (or via `--i`)
-- Add a new report format by consuming `utils.get_gas_table(...)` and `tests/metadata.json`.
+- Add a new report format by consuming `utils.get_gas_table(...)` and the discovered test-case metadata (filenames or any optional metadata you provide).
 - Extend DB schema via `generate_postgres_schema.py` and map fields in `fill_postgres_db.py`.
 - Prefer explicit artifacts (files) over hidden state; it simplifies debugging and comparisons.
 
@@ -138,7 +137,7 @@ Minimal direct usage from repo root (example):
 
 ```sh
 ./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute \
-  -i tests/MStore/MStore_150M.txt \
+  -i eest_tests/testing/000001/MStore_150M.txt \
   -s engine-jwt/jwt.hex \
   -a http://localhost:8551 \
   -r results/nethermind_response_1_MStore_150M.txt \
@@ -149,45 +148,43 @@ Minimal direct usage from repo root (example):
 
 A “test” for Kute is a newline‑delimited file of JSON‑RPC requests (or batches). In this repo:
 
-- Test files live under `tests/` (grouped by category) and end with `_<Gas>M.txt` (e.g., `MStore_150M.txt`).
-- `utils.get_test_cases(tests_path)` discovers test names and gas variants by filename pattern; reporters map test names to titles/descriptions via `tests/metadata.json`.
+- Captured payloads live under `eest_tests/` (grouped into `setup/` and `testing/` directories) and end with `_<Gas>M.txt` (e.g., `MStore_150M.txt`).
+- `utils.get_test_cases(tests_path)` discovers test names and gas variants by filename pattern; reporters use those names directly (or any optional metadata you place alongside the dataset).
 - Lines must be valid JSON objects or JSON arrays (for batch). If using `--unwrapBatch`, each array item will be sent individually.
-- To record real traffic, run a client with RpcRecorderState and export logs, or use `capture_eest_tests.py` to transform EEST fixtures into `.txt` lines.
+- To record real traffic, run a client with RpcRecorderState and export logs, or use `capture_eest_tests.py` to transform Execution Layer Spec (EELS) fixtures into `.txt` lines.
 
 ### Interpreting outputs
 
 - Metrics stdout (Report|Json): per‑method durations, totals, counts; gas-benchmarks parsers convert these to MGas/s and percentiles.
 - Response trace file (`-r`): line‑delimited JSON responses, used to validate `VALID` status for aggregation.
 
-## EEST — Execution Spec Tests (Benchmark Guide)
+## EELS — Execution Layer Spec Tests (Benchmark Guide)
 
-### What is EEST?
+### What is EELS?
 
-Execution Spec Tests (EEST) is the canonical test suite and tooling for Ethereum execution clients. It can generate and run test cases across forks and exposes multiple execution modes:
+Execution Layer Spec Tests (EELS) is the canonical test suite and tooling for Ethereum execution clients. It can generate and run test cases across forks and exposes multiple execution modes:
 
 - consume direct: call a client’s test interface for fast EVM dev loops
 - consume rlp: feed RLP blocks to simulate historical sync
 - consume engine: drive the Engine API (post-merge) with payloads
 - execute remote/hive: run Python tests against a live client via RPC, or on a local Hive network
 
-In this repo, EEST is used to source benchmark scenarios and produce deterministic payloads for performance measurements.
+In this repo, EELS is used to source benchmark scenarios and produce deterministic payloads for performance measurements.
 
-### Why use EEST here?
+### Why use EELS here?
 
 - Authoritative scenarios for protocol/fork coverage
 - Deterministic inputs across clients
 - Multiple execution backends (Engine API, RLP, direct) to stress different code paths
 - Works both locally and in CI/Hive setups
 
-### Setup (vendored or standalone)
+### Setup
 
-Option A (after running `make prepare_tools`) — use the vendored tree: `execution-spec-tests/` is included in this repo.
-
-Option B — clone upstream (requires uv):
+Clone the upstream repository (requires uv):
 
 ```sh
-git clone https://github.com/ethereum/execution-spec-tests
-cd execution-spec-tests
+git clone https://github.com/ethereum/execution-specs
+cd execution-specs
 uv python install 3.11
 uv python pin 3.11
 uv sync --all-extras
@@ -237,7 +234,7 @@ Notes:
 - Remote mode needs a funded key (`--rpc-seed-key`) and `--rpc-chain-id`.
 - Use pytest filters `-k` or marks `-m benchmark` to select benchmark tests.
 
-### Writing benchmark tests (from EEST docs)
+### Writing benchmark tests (from EELS docs)
 
 - place tests under `tests/benchmark/` (fork subtrees as needed) and make them filterable with `-m benchmark`.
 - avoid randomness and time-based values; explicitly set addresses, nonces, balances, gas, and data sizes so payloads can be reproduced.
@@ -247,9 +244,9 @@ Notes:
 - choose the backend that exercises the intended path (Engine for post-merge consensus path, RLP for sync/import, direct for fast EVM-only loops). Benchmarks should state their intent.
 - ensure tests can run under `execute remote` and/or produce fixtures consumable by `consume engine/rlp`.
 
-Reference: EEST Benchmark tests guide: `https://github.com/ethereum/execution-spec-tests/blob/main/docs/writing_tests/benchmarks.md`
+Reference: EELS benchmark tests guide: `https://github.com/ethereum/execution-specs/blob/main/docs/writing_tests/benchmarks.md`
 
-### Integrating EEST with gas-benchmarks
+### Integrating EELS with gas-benchmarks
 
 - Capture/convert fixtures to payload files for Kute with the repo tool:
 
@@ -257,7 +254,7 @@ Reference: EEST Benchmark tests guide: `https://github.com/ethereum/execution-sp
 python capture_eest_tests.py -o eest_tests -x "pattern_to_exclude"
 ```
 
-This reads EEST fixtures and writes newline-delimited JSON-RPC payload `.txt` files (using `utils/make_rpc.jq`).
+This reads EELS fixtures and writes newline-delimited JSON-RPC payload `.txt` files (using `utils/make_rpc.jq`).
 
 - Run the gas-benchmarks pipeline with `-t eest_tests/` to benchmark across clients:
 
@@ -274,26 +271,26 @@ bash run.sh -t "eest_tests/" -w "warmup-tests" -c "client1,client2" -r 3
 ### CI and benchmark suites
 
 - Upstream CI target for deployed-fork benchmarks: `uvx --with=tox-uv tox -e tests-deployed-benchmark`
-- Local Hive (for execute): run Hive dev mode and point EEST to the simulator (`HIVE_SIMULATOR`)
+- Local Hive (for execute): run Hive dev mode and point EELS to the simulator (`HIVE_SIMULATOR`)
 
-### EEST vs Kute (how they differ; when to use which)
+### EELS vs Kute (how they differ; when to use which)
 
 - Purpose
-  - EEST: Full framework to generate and run protocol tests; can drive clients via Engine API, direct EVM harnesses, RLP sync, or live RPC.
+  - EELS: Full framework to generate and run protocol tests; can drive clients via Engine API, direct EVM harnesses, RLP sync, or live RPC.
   - Kute: Lightweight replayer that measures Engine API performance by sending prebuilt JSON-RPC messages.
 - Inputs
-  - EEST: Python test modules/fixtures; generates payloads/transactions, validates outcomes.
+  - EELS: Python test modules/fixtures; generates payloads/transactions, validates outcomes.
   - Kute: Newline-delimited JSON-RPC request lines or batches.
 - Execution context
-  - EEST: Can build state, deploy contracts, produce payloads; validates correctness against spec expectations.
+  - EELS: Can build state, deploy contracts, produce payloads; validates correctness against spec expectations.
   - Kute: Assumes inputs are already valid; focuses on timing/throughput and response tracing.
 - When to use
-  - Use EEST to author/capture benchmark scenarios and validate behavior.
+  - Use EELS to author/capture benchmark scenarios and validate behavior.
   - Use Kute to replay those scenarios uniformly across clients/images and compute perf metrics.
 
 ### Minimal contributor checklist
 
-- Install EEST dependencies (vendored or upstream) and confirm you can list/execute benchmark-marked tests.
+- Install EELS dependencies and confirm you can list/execute benchmark-marked tests.
 - Create/edit benchmark tests under `tests/benchmark/` with deterministic behavior.
 - Capture or transform tests into payload `.txt` files via `capture_eest_tests.py` when you want to benchmark with Kute.
 - Run gas-benchmarks (`run.sh`) over clients/images; review `results/reports/`.
