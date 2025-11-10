@@ -33,6 +33,7 @@ pip install -r requirements.txt
 
 ```sh
 git lfs install
+git lfs pull
 sudo apt install zip
 ```
 
@@ -200,6 +201,8 @@ You can use the [EELS repository](https://github.com/ethereum/execution-specs/tr
 python3 capture_eest_tests.py -o eest_tests -x 1M,worst_bytecode
 ```
 
+- The capture script downloads the latest `benchmark@v*` release from the `execution-specs` repository. Ensure your new tests are included in a published benchmark release (or pass `--release-tag benchmark@vX.Y.Z`) before attempting to capture them.
+
 3. Generate warmup payloads that match the captured tests:
 
 ```sh
@@ -239,7 +242,7 @@ uv run execute remote -v --fork=Prague --rpc-seed-key=ACCOUNT --rpc-chain-id=1 -
 
 Note: you will need an account with some ETH (native tokens) to run the tests. Specify the private key using `--rpc-seed-key`. Also, `--rpc-endpoint` should point to the node you want to test against (it may be a remote node).
 
-### EELS stateful tests generator (in progress)
+### EELS stateful tests generator
 
 The EELS stateful generator creates deterministic, reproducible execution payloads by running Execution Layer Spec tests against a local Nethermind node through a proxy. It consists of two cooperating tools:
 

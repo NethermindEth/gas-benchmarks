@@ -43,6 +43,7 @@ Outputs land in `results/` and reports in `results/reports/`.
 python capture_eest_tests.py -o eest_tests -x "pattern_to_exclude"
 ```
 
+- `capture_eest_tests.py` fetches fixture bundles from the `benchmark@v*` releases published in the `execution-specs` repository. Make sure your tests are included in such a benchmark release (or reference a specific tag via `--release-tag`) before trying to capture them, otherwise the script will not find them.
 - Generate matching warmup payloads with `make_warmup_tests.py` and run the pipeline with `-t "eest_tests/"`.
 - Filenames drive discovery (`utils.get_test_cases` parses names/gas values), so keep the `Scenario_<Gas>M.txt` pattern consistent.
 
