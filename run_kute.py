@@ -2,6 +2,7 @@
 import argparse
 import os
 import subprocess
+import tempfile
 
 LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
 PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
@@ -43,10 +44,30 @@ def run_command(
     response,
     ec_url,
     kute_extra_arguments,
+    skip_forkchoice=False,
 ):
+    input_path = test_case_file
+    temp_path = None
+    if skip_forkchoice:
+        try:
+            with open(test_case_file, "r", encoding="utf-8") as original:
+                lines = original.readlines()
+        except OSError:
+            lines = []
+        filtered_lines = [line for line in lines if "engine_forkchoiceUpdated" not in line]
+        if len(filtered_lines) != len(lines):
+            temp_file = tempfile.NamedTemporaryFile(
+                mode="w", delete=False, encoding="utf-8", suffix=".txt"
+            )
+            try:
+                temp_file.writelines(filtered_lines)
+            finally:
+                temp_file.close()
+            input_path = temp_file.name
+            temp_path = temp_file.name
     # Add logic here to run the appropriate command for each client
     command = (
-        f"{executables['kute']} -i \"{test_case_file}\" -s {jwt_secret} -r \"{response}\" -a {ec_url} "
+        f"{executables['kute']} -i \"{input_path}\" -s {jwt_secret} -r \"{response}\" -a {ec_url} "
         f"{kute_extra_arguments} "
     )
     # Prepare env variables
@@ -58,6 +79,11 @@ def run_command(
     results = subprocess.run(
         command, shell=True, capture_output=True, text=True, env=command_env
     )
+    if temp_path and os.path.exists(temp_path):
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
     print(results.stderr, end="")
     return results.stdout
 
@@ -113,6 +139,11 @@ def main():
     parser.add_argument(
         "--warmupPath", type=str, help="Set path to warm up file.", default=""
     )
+    parser.add_argument(
+        "--skipForkchoice",
+        action="store_true",
+        help="Ignore engine_forkchoiceUpdated requests contained in the test input.",
+    )
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -138,7 +169,13 @@ def main():
             output_folder, f"warmup_{client}_response_{run}.txt"
         )
         warmup_response = run_command(
-            client, warmup_file, jwt_path, warmup_response_file, execution_url, kute_arguments
+            client,
+            warmup_file,
+            jwt_path,
+            warmup_response_file,
+            execution_url,
+            kute_arguments,
+            skip_forkchoice=args.skipForkchoice,
         )
         save_to(output_folder, f"warmup_{client}_results_{run}.txt", warmup_response)
 
@@ -167,6 +204,7 @@ def main():
                 response_file,
                 execution_url,
                 kute_arguments,
+                skip_forkchoice=args.skipForkchoice,
             )
             save_to(output_folder, f"{client}_results_{run}_{name}.txt", response)
         return
@@ -174,7 +212,15 @@ def main():
         test_case_without_extension = os.path.splitext(tests_paths.split('/')[-1])[0]
         response_file = os.path.join(output_folder, f'{client}_response_{run}_{test_case_without_extension}.txt')
         print(f"Running {client} for the {run} time with test case {tests_paths}")
-        response = run_command(client, tests_paths, jwt_path, response_file, execution_url, kute_arguments)
+        response = run_command(
+            client,
+            tests_paths,
+            jwt_path,
+            response_file,
+            execution_url,
+            kute_arguments,
+            skip_forkchoice=args.skipForkchoice,
+        )
         save_to(output_folder, f'{client}_results_{run}_{test_case_without_extension}.txt',
                 response)
 

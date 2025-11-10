@@ -8,13 +8,13 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/besu/data
+      - execution_data:/var/lib/besu/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
+    environment:
+      BESU_USER_NAME: root
     user: root
     ports:
-      - 30303:30303/tcp
-      - 30303:30303/udp
       - 8008:8008/tcp
       - 8545:8545
       - 8551:8551
@@ -22,7 +22,8 @@ services:
       - 8545
       - 8551
     command:
-      - --genesis-file=/tmp/chainspec/chainspec.json
+      - ${BESU_GENESIS_FLAG}
+      - ${BESU_NETWORK_FLAG}
       - --bonsai-historical-block-limit=10000
       - --bonsai-limit-trie-logs-enabled=false
       - --data-path=/var/lib/besu/data
@@ -39,6 +40,10 @@ services:
       - --rpc-http-api=${EC_ENABLED_MODULES}
       - --rpc-http-cors-origins=*
       - --host-allowlist=*
+      - --p2p-enabled=false
+      - --sync-mode=FULL
+      - --max-peers=0
+      - --discovery-enabled=false
     logging:
       driver: json-file
       options:
@@ -58,3 +63,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}

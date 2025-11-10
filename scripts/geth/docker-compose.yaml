@@ -6,10 +6,13 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/goethereum
+      - execution_data:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-    entrypoint: geth init --datadir=/var/lib/goethereum /tmp/genesis/genesis.json
+    entrypoint:
+      - /bin/sh
+      - -c
+      - ${GETH_INIT_COMMAND}
   execution:
     stop_grace_period: 30m
     container_name: gas-execution-client
@@ -22,19 +25,20 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/goethereum
+      - execution_data:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
     ports:
-      - "30303:30303/tcp"
-      - "30303:30303/udp"
       - "8008:8008/tcp"
       - "8551:8551"
+      - "8545:8545"
     expose:
       - 8545
       - 8546
       - 8551
     command:
       - --syncmode=full
+      - --gcmode=archive
+      - --snapshot=false
       - --nat=none
       - --http
       - --http.addr=0.0.0.0
@@ -43,9 +47,12 @@ services:
       - --http.api
       - web3,eth,net
       - --datadir=/var/lib/goethereum
-      - --port=30303
+      - --port=0
       - --http.port=8545
-      - --networkid=1337
+      - ${GETH_NETWORK_FLAG:---networkid=1337}
+      - --maxpeers=0
+      - --nodiscover
+      - --bootnodes=
       - --ws
       - --ws.addr=0.0.0.0
       - --ws.port=8546
@@ -56,6 +63,7 @@ services:
       - --authrpc.vhosts=*
       - --metrics
       - --metrics.port=8008
+      - --verbosity=3
     logging:
       driver: json-file
       options:
@@ -76,3 +84,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}

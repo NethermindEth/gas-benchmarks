@@ -8,13 +8,11 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/nimbus/data
+      - execution_data:/var/lib/nimbus/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     user: root
     ports:
-      - 30303:30303/tcp
-      - 30303:30303/udp
       - 8008:8008/tcp
       - 8545:8545
       - 8551:8551
@@ -22,7 +20,7 @@ services:
       - 8545
       - 8551
     command:
-      - --custom-network=/tmp/genesis/genesis.json
+      - ${NIMBUS_NETWORK_FLAG:---custom-network=/tmp/genesis/genesis.json}
       - --data-dir=/var/lib/nimbus/data
       - --metrics=true
       - --metrics-address=0.0.0.0
@@ -44,3 +42,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}

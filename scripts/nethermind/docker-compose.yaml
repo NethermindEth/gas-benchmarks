@@ -4,6 +4,7 @@ services:
     environment:
       - TERM=xterm-256color
       - COLORTERM=truecolor
+    stop_signal: SIGINT 
     stop_grace_period: 30s
     container_name: gas-execution-client
     restart: unless-stopped
@@ -12,38 +13,42 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/nethermind/data
+      - execution_data:/nethermind/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
+      - /home/ubuntu/diagfiles:/nethermind/diag
     ports:
-      - "30304:30304/tcp"
-      - "30304:30304/udp"
       - "8009:8009"
       - "8545:8545"
       - "8551:8551"
     expose:
       - 8545
       - 8551
+
     command:
-      - --config=holesky
-      - --Init.ChainSpecPath=/tmp/chainspec/chainspec.json
+      - ${NETHERMIND_CONFIG_FLAG}
       - --datadir=/nethermind/data
-      - --log=INFO
       - --JsonRpc.Enabled=true
       - --JsonRpc.Host=0.0.0.0
       - --JsonRpc.Port=8545
       - --JsonRpc.JwtSecretFile=/tmp/jwt/jwtsecret
       - --JsonRpc.EngineHost=0.0.0.0
       - --JsonRpc.EnginePort=8551
-      - --Network.DiscoveryPort=30304
+      - --Network.DiscoveryPort=0
+      - --Network.MaxActivePeers=0
+      - --Init.DiscoveryEnabled=false
       - --HealthChecks.Enabled=true
       - --Metrics.Enabled=true
       - --Metrics.ExposePort=8008
       - --Init.GenesisHash=0x9cbea0de83b440f4462c8280a4b0b4590cdb452069757e2c510cb3456b6c98cc
       - --Sync.MaxAttemptsToUpdatePivot=0
       - --Init.AutoDump=None
-      - --Pruning.PruningBoundary=2000
+      #- --Pruning.PruningBoundary=2000
+      - --Merge.NewPayloadBlockProcessingTimeout=70000
       - --Merge.TerminalTotalDifficulty=0
+      - --Init.LogRules=Consensus.Processing.ProcessingStats:Debug
+      - --Blocks.CachePrecompilesOnBlockProcessing=false
+      - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
     logging:
       driver: json-file
       options:
@@ -63,3 +68,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}

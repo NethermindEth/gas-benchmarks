@@ -7,13 +7,11 @@ services:
     networks:
       - gas
     volumes:
-      - ${EC_DATA_DIR}:/var/lib/ethrex/data
+      - execution_data:/var/lib/ethrex/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
     user: root
     ports:
-      - 30303:30303/tcp
-      - 30303:30303/udp
       - 8008:8008/tcp
       - 8545:8545
       - 8551:8551
@@ -21,7 +19,7 @@ services:
       - 8545
       - 8551
     command:
-      - --network=/tmp/genesis/genesis.json
+      - ${ETHREX_NETWORK_FLAG}
       - --datadir=/var/lib/ethrex/data
       - --metrics.addr=0.0.0.0
       - --metrics.port=8008
@@ -29,6 +27,7 @@ services:
       - --http.addr=0.0.0.0
       - --http.port=8545
       - --authrpc.addr=0.0.0.0
+      - --syncmode=full
     logging:
       driver: json-file
       options:
@@ -37,3 +36,11 @@ services:
 networks:
   gas:
     name: gas-network
+volumes:
+  execution_data:
+    name: ${EC_VOLUME_NAME}
+    driver: local
+    driver_opts:
+      type: none
+      o: bind,rw,dirsync,noatime
+      device: ${EC_DATA_DIR}
