@@ -127,8 +127,8 @@ validate_cross_client_results() {
 
   for file in "${result_files[@]}"; do
     filename=$(basename "$file")
-    scenario=${filename#*_results_}
-    client=${filename%%_results_*}
+    scenario=${filename#*_response_}
+    client=${filename%%_response_*}
     hash=$(hash_json_file "$file")
 
     clients_seen["$client"]=1
