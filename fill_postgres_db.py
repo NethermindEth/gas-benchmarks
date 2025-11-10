@@ -282,8 +282,12 @@ def load_aggregated_stats(output_csv_path: str) -> Dict[str, Dict[str, Any]]:
                             'p99_mgas_s': float(row['p99 (MGas/s)']) if row.get('p99 (MGas/s)') and row['p99 (MGas/s)'].strip() else None,
                             'min_mgas_s': float(row['Min (MGas/s)']) if row.get('Min (MGas/s)') and row['Min (MGas/s)'].strip() else None,
                             'n_samples': int(row['N']) if row.get('N') and row['N'].strip() else None,
-                            # Add timestamp fields if they exist
+                            # Add timestamp and duration fields if they exist
                             'start_time': row.get('Start Time') if row.get('Start Time') else None,
+                            'end_time': row.get('End Time') if row.get('End Time') else None,
+                            'test_duration': float(row['Duration (ms)']) if row.get('Duration (ms)') and row['Duration (ms)'].strip() else None,
+                            'fcu_duration': float(row['FCU time (ms)']) if row.get('FCU time (ms)') and row['FCU time (ms)'].strip() else None,
+                            'np_duration': float(row['NP time (ms)']) if row.get('NP time (ms)') and row['NP time (ms)'].strip() else None,
                             'test_description': row.get('Description')
                         }
                     except ValueError as ve:
@@ -472,6 +476,15 @@ def populate_data_for_client(
                     start_time = agg_stats.get('start_time')
                     if start_time in (0, "0", "", None):
                         start_time = None
+                    
+                    end_time = agg_stats.get('end_time')
+                    if end_time in (0, "0", "", None):
+                        end_time = None
+                    
+                    test_duration = agg_stats.get('test_duration')
+                    fcu_duration = agg_stats.get('fcu_duration')
+                    np_duration = agg_stats.get('np_duration')
+                    
                     record: Dict[str, Any] = {
                         'client_name': client_name,
                         'client_version': client_version,
@@ -488,6 +501,10 @@ def populate_data_for_client(
                         'raw_run_mgas_s': raw_run_mgas_s,
                         'raw_run_description': raw_run_description, # This is from the raw data row
                         'start_time': start_time,
+                        'end_time': end_time,
+                        'test_duration': test_duration,
+                        'fcu_duration': fcu_duration,
+                        'np_duration': np_duration,
                         **computer_specs
                     }
                     records_to_insert.append(record)
