@@ -1,5 +1,10 @@
 #!/usr/bin/env python
-import argparse, json, shutil, subprocess, re, sys
+import argparse
+import json
+import shutil
+import subprocess
+import re
+import sys
 from pathlib import Path
 
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
@@ -98,8 +103,8 @@ def main():
         help="Change stateRoot for all newPayloads (default: only last)"
     )
     p.add_argument(
-        "-p", "--pattern", default="*150M*.txt",
-        help="Glob pattern for test files (default '*150M*.txt')"
+        "-p", "--pattern", default="*.txt",
+        help="Glob pattern for test files (default '*.txt')"
     )
     args = p.parse_args()
 
@@ -189,7 +194,7 @@ def main():
 
         data_dir = Path("scripts/geth/execution-data").resolve()
         data_dir.mkdir(parents=True, exist_ok=True)
-
+        
         setup_node_cmd = [
             sys.executable,
             "setup_node.py",
@@ -210,10 +215,10 @@ def main():
             [
                 sys.executable, "run_kute.py",
                 "--output", "generationresults",
-                "--testsPath", tests_path,
+                "--testsPath", relative_subdir,
                 "--jwtPath", "/tmp/jwtsecret",
                 "--client", "geth",
-                "--run", "1"
+                "--skipForkchoice"
             ],
             check=True,
         )
