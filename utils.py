@@ -2,6 +2,7 @@ import json
 import math
 import os
 import re
+import logging
 from collections import defaultdict
 
 import cpuinfo
@@ -11,6 +12,8 @@ import numpy as np
 import psutil
 from bs4 import BeautifulSoup
 import datetime
+
+logger = logging.getLogger(__name__)
 
 def read_results(text):
     sections = {}
@@ -99,7 +102,11 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
             for x in results:
                 if x == 0:
                     continue
-                results_per_test_case[test_case].append(int(gas) / x * 1000)
+                gas_values_for_case = test_cases.get(test_case, {})
+                actual_mgas = gas_values_for_case.get(gas, gas)
+                if actual_mgas == 0:
+                    continue
+                results_per_test_case[test_case].append(actual_mgas / x * 1000)
 
     for test_case, _ in test_cases.items():
         results_norm = results_per_test_case[test_case]
@@ -196,7 +203,7 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
 
 
 def get_test_cases(tests_path):
-    test_cases = defaultdict(set)
+    test_cases = defaultdict(dict)
     pattern = re.compile(r'(?P<base>.+?)_(?P<gas>[0-9]+)M\.txt$')
 
     for root, _, files in os.walk(tests_path):
@@ -211,14 +218,57 @@ def get_test_cases(tests_path):
             m = pattern.match(file)
             if m:
                 test_case_name = m.group('base')
-                gas_value = int(m.group('gas'))  # e.g., "100" from "100M"
+                gas_label = int(m.group('gas'))  # e.g., "100" from "100M"
             else:
                 test_case_name = os.path.splitext(file)[0]
-                gas_value = 60
+                gas_label = 60
 
-            test_cases[test_case_name].add(gas_value)
+            file_path = os.path.join(root, file)
+            gas_used_units = _extract_gas_used_from_payload(file_path)
+            if gas_used_units is None:
+                gas_used_millions = float(gas_label)
+            else:
+                gas_used_millions = gas_used_units / 1_000_000.0
 
-    return {tc: sorted(list(gases)) for tc, gases in test_cases.items()}
+            test_cases[test_case_name][gas_label] = gas_used_millions
+
+    # Preserve ordering of gas labels for deterministic output
+    return {tc: dict(sorted(gases.items())) for tc, gases in test_cases.items()}
+
+
+def _extract_gas_used_from_payload(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line in file:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                method = data.get("method", "")
+                if not isinstance(method, str) or not method.startswith("engine_newPayload"):
+                    continue
+
+                params = data.get("params") or []
+                if not params or not isinstance(params[0], dict):
+                    continue
+
+                gas_used_value = params[0].get("gasUsed")
+                if isinstance(gas_used_value, str):
+                    gas_used_value = gas_used_value.strip()
+                    if not gas_used_value:
+                        continue
+                    base = 16 if gas_used_value.lower().startswith("0x") else 10
+                    return int(gas_used_value, base)
+                elif isinstance(gas_used_value, (int, float)):
+                    return int(gas_used_value)
+    except (OSError, ValueError) as exc:
+        logger.warning(f"Unable to parse gasUsed from {file_path}: {exc}")
+
+    return None
 
 class SectionData:
     def __init__(self, timestamp, measurement, tags, fields):
