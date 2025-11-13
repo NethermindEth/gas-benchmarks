@@ -571,6 +571,11 @@ def main():
         action="store_true",
         help="Skip fetching/pulling execution-specs when the repo already exists.",
     )
+    parser.add_argument(
+        "--parameter_filter",
+        default="",
+        help="Pass-through filter string forwarded to execute remote as -k \"...\".",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
@@ -836,6 +841,8 @@ def main():
             "--",
             "-m", "benchmark", "-n", "1",
         ]
+        if args.parameter_filter:
+            uv_cmd.extend(["-k", args.parameter_filter])
         stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")
         if stubs_source:
             stubs_path = Path(stubs_source).expanduser()
