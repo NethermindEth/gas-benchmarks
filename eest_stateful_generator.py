@@ -534,8 +534,8 @@ def main():
     )
     parser.add_argument(
         "--fixed-opcode-count",
-        action="store_true",
-        help="Use a fixed opcode count; skips passing --gas-benchmark-values to execute remote.",
+        default="",
+        help="Comma-separated fixed opcode counts to pass to execute remote instead of --gas-benchmark-values.",
     )
     parser.add_argument(
         "--nethermind-image",
@@ -575,7 +575,8 @@ def main():
     ensure_pip_pkg("requests")
 
     payloads_dir = _ensure_payloads_dir(Path(args.payload_dir))
-    gas_values = [v.strip() for v in args.gas_benchmark_values.split(",") if v.strip()]
+    gas_value_source = args.fixed_opcode_count or args.gas_benchmark_values
+    gas_values = [v.strip() for v in gas_value_source.split(",") if v.strip()]
     scenario_order_file = payloads_dir / "scenario_order.json"
     if scenario_order_file.exists():
         scenario_order_file.unlink()
@@ -821,7 +822,9 @@ def main():
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
         ]
-        if not args.fixed_opcode_count and args.gas_benchmark_values:
+        if args.fixed_opcode_count:
+            uv_cmd.append(f"--fixed-opcode-count={args.fixed_opcode_count}")
+        elif args.gas_benchmark_values:
             uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
         uv_cmd += [
             #"--eoa-fund-amount-default", "3100000000000000000",
