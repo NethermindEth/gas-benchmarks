@@ -840,7 +840,7 @@ def main():
             "--skip-cleanup",
             args.test_path,
             "--",
-            "-m", "benchmark", "-n", "1",
+            "-m", "benchmark and repricing", "-n", "1",
         ]
         if args.parameter_filter:
             uv_cmd.extend(["-k", args.parameter_filter])
