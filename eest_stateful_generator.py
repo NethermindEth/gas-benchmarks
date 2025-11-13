@@ -564,6 +564,11 @@ def main():
         default="main",
         help="Git branch of execution-specs to checkout before running (default: main).",
     )
+    parser.add_argument(
+        "--eest-no-pull",
+        action="store_true",
+        help="Skip fetching/pulling execution-specs when the repo already exists.",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
@@ -597,10 +602,13 @@ def main():
     repo_dir = Path("execution-specs")
     repo_url = args.eest_repo
     if repo_dir.exists():
-        run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
-        run(["git", "fetch", "origin"], cwd=str(repo_dir))
-        run(["git", "checkout", args.eest_branch], cwd=str(repo_dir))
-        run(["git", "pull", "origin", args.eest_branch], cwd=str(repo_dir))
+        if not args.eest_no_pull:
+            run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
+            run(["git", "fetch", "origin"], cwd=str(repo_dir))
+            run(["git", "checkout", args.eest_branch], cwd=str(repo_dir))
+            run(["git", "pull", "origin", args.eest_branch], cwd=str(repo_dir))
+        else:
+            print("[INFO] --eest-no-pull specified; using existing execution-specs checkout as-is.")
     else:
         run([
             "git",
