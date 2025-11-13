@@ -8,14 +8,11 @@ import utils
 import csv
 
 
-def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images, skip_empty=False):
+def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
     # Load the computer specs
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
         computer_spec = text
-    image_overrides = json.loads(images)
-    with open('images.yaml', 'r') as f:
-        default_images = yaml.safe_load(f).get("images", {})
 
     results_to_print = ('<!DOCTYPE html\>' +
                         '<html lang="en">' +
@@ -55,12 +52,15 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
     csv_table = {}
     for client in clients:
         image_to_print = ''
-        if client in image_overrides:
-            if image_overrides[client] != 'default' and image_overrides[client] != '':
-                image_to_print = image_overrides[client]
+        image_json = json.loads(images)
+        if client in image_json:
+            if image_json[client] != 'default' and image_json[client] != '':
+                image_to_print = image_json[client]
         if image_to_print == '':
+            with open('images.yaml', 'r') as f:
+                el_images = yaml.safe_load(f)["images"]
             client_without_tag = client.split("_")[0]
-            image_to_print = default_images.get(client_without_tag, client_without_tag)
+            image_to_print = el_images[client_without_tag]
         results_to_print += f'<h1>{client.capitalize()} - {image_to_print} - Benchmarking Report</h1>' + '\n'
         results_to_print += f'<table id="table_{client}">'
         results_to_print += ('<thread>\n'
@@ -74,14 +74,10 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              '<th>N</th>\n'
                              '<th class=\"title\">Description</th>\n'
                              '<th>Start Time</th>\n'
-                             '<th>End Time</th>\n'
-                             f'<th onclick="sortTable(10, \'table_{client}\', true)" style="cursor: pointer;">Duration (ms) &uarr; &darr;</th>\n'
-                             f'<th onclick="sortTable(11, \'table_{client}\', true)" style="cursor: pointer;">FCU time (ms) &uarr; &darr;</th>\n'
-                             f'<th onclick="sortTable(12, \'table_{client}\', true)" style="cursor: pointer;">NP time (ms) &uarr; &darr;</th>\n'
                              '</tr>\n'
                              '</thread>\n'
                              '<tbody>\n')
-        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, skip_empty)
+        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
         csv_table[client] = gas_table_norm
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'<tr>\n<td class="title">{data[0]}</td>\n'
@@ -92,11 +88,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                                  f'<td>{data[1]}</td>\n'
                                  f'<td>{data[6]}</td>\n'
                                  f'<td style="text-align:left;" >{data[7]}</td>\n'
-                                 f'<td>{data[8]}</td>\n'
-                                 f'<td>{data[9]}</td>\n'
-                                 f'<td>{data[10]}</td>\n'
-                                 f'<td>{data[11]}</td>\n'
-                                 f'<td>{data[12]}</td>\n</tr>\n')
+                                 f'<td>{data[8]}</td>\n</tr>\n')
         results_to_print += '\n'
         results_to_print += ('</table>\n'
                              '</tbody>\n')
@@ -161,7 +153,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
     print(formatted_html)
     if not os.path.exists('reports'):
         os.mkdir('reports')
-    with open('reports/index.html', 'w') as file:
+    with open(f'reports/index.html', 'w') as file:
         file.write(formatted_html)
 
     for client, gas_table in csv_table.items():
@@ -170,9 +162,9 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(
                 ['Title', 'Max (MGas/s)', 'p50 (MGas/s)', 'p95 (MGas/s)', 'p99 (MGas/s)', 'Min (MGas/s)', 'N',
-                 'Description', "Start Time", "End Time", "Duration (ms)", "FCU time (ms)", "NP time (ms)"])
+                 'Description', "Start Time"])
             for test_case, data in gas_table.items():
-                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8], data[9], data[10], data[11], data[12]])
+                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8]])
 
 
 def main():
@@ -185,7 +177,6 @@ def main():
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
                         default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}')
-    parser.add_argument('--skipEmpty', action='store_true', default=True, help='Skip empty results')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -196,7 +187,6 @@ def main():
     tests_path = args.testsPath
     runs = args.runs
     images = args.images
-    skip_empty = args.skipEmpty
 
     # Get the computer spec
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
@@ -223,31 +213,16 @@ def main():
                     client_results[client][test_case_name][gas][method] = []
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
-                        responses, results, timestamp, duration, fcu_duration, np_duration = utils.extract_response_and_result(results_paths, client, test_case_name,
+                        responses, results, timestamp = utils.extract_response_and_result(results_paths, client, test_case_name,
                                                                                gas, run, method, fields)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
                         # print(test_case_name + " : " + str(timestamp))
                         if str(timestamp) != "0":
-                            # Store raw timestamp in ticks for calculation, not converted string
-                            client_results[client][test_case_name]["timestamp_ticks"] = timestamp
-                            # Only store duration if non-zero to avoid overwriting valid values
-                            if duration != 0:
-                                client_results[client][test_case_name]["duration"] = duration
-                            if fcu_duration != 0:
-                                client_results[client][test_case_name]["fcu_duration"] = fcu_duration
-                            if np_duration != 0:
-                                client_results[client][test_case_name]["np_duration"] = np_duration
+                            client_results[client][test_case_name]["timestamp"] = utils.convert_dotnet_ticks_to_utc(timestamp)
                         else:
-                            if "timestamp_ticks" not in client_results[client][test_case_name]:
-                                client_results[client][test_case_name]["timestamp_ticks"] = 0
-                        # Initialize duration to 0 only if not set yet
-                        if "duration" not in client_results[client][test_case_name]:
-                            client_results[client][test_case_name]["duration"] = 0
-                        if "fcu_duration" not in client_results[client][test_case_name]:
-                            client_results[client][test_case_name]["fcu_duration"] = 0
-                        if "np_duration" not in client_results[client][test_case_name]:
-                            client_results[client][test_case_name]["np_duration"] = 0
+                            if "timestamp" not in str(client_results[client][test_case_name]):
+                                client_results[client][test_case_name]["timestamp"] = 0
 
     gas_set = set()
     for test_case_name, test_case_gas in test_cases.items():
@@ -279,15 +254,11 @@ def main():
                         name = metadata[test_case_name]['Title']
                         description = metadata[test_case_name]['Description']
 
-                    raw_results = client_results[client][test_case_name][gas][methods[0]]
-                    # Skip if all results are 0 (skipped tests)
-                    if skip_empty and all(r == 0 for r in raw_results):
-                        continue
-
-                    rows = [name, gas] + raw_results + [description]
+                    gas_value_mgas = test_case_gas.get(gas, gas)
+                    rows = [name, gas_value_mgas] + client_results[client][test_case_name][gas][methods[0]] + [description]
                     csvwriter.writerow(rows)
 
-    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, skip_empty)
+    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
 
     print('Done!')
 
