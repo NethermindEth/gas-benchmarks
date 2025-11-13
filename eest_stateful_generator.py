@@ -351,6 +351,8 @@ def start_nethermind_container(
         "Consensus.Processing.ProcessingStats:Debug",
         "--Blocks.SingleBlockImprovementOfSlot",
         "0.10",
+        "--Merge.NewPayloadBlockProcessingTimeout",
+        "70000",
     ]
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
