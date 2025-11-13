@@ -254,7 +254,8 @@ def main():
                         name = metadata[test_case_name]['Title']
                         description = metadata[test_case_name]['Description']
 
-                    rows = [name, gas] + client_results[client][test_case_name][gas][methods[0]] + [description]
+                    gas_value_mgas = test_case_gas.get(gas, gas)
+                    rows = [name, gas_value_mgas] + client_results[client][test_case_name][gas][methods[0]] + [description]
                     csvwriter.writerow(rows)
 
     get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
