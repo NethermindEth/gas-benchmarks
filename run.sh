@@ -937,8 +937,8 @@ for run in $(seq 1 $RUNS); do
   for client in "${CLIENT_ARRAY[@]}"; do
     debug_log "Processing client: $client"
     
-    # Skip nimbus if already run today
-    if [ "$client" = "nimbus" ] && was_executed_today "$client"; then
+    # Skip nimbus or ethrex if already run today
+    if { [ "$client" = "nimbus" ] || [ "$client" = "ethrex" ]; } && was_executed_today "$client"; then
       echo "Skipping $client - already executed today"
       continue
     fi
