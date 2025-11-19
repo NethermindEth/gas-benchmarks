@@ -1,0 +1,173 @@
+name: gas-benchmark-action
+
+inputs:
+  testPath:
+    description: 'Path to benchmark tests inside the gas-benchmarks repo'
+    required: false
+    default: 'eest_tests'
+  genesisFile:
+    description: 'Genesis filename used for all clients (under scripts/genesisfiles/<client>/)'
+    required: false
+    default: 'zkevmgenesis.json'
+  warmupFile:
+    description: 'Warmup file path; set to empty string to disable warmup'
+    required: false
+    default: 'warmup/warmup-1000bl-16wi-24tx.txt'
+  clients:
+    description: 'Comma-separated list of clients to benchmark'
+    required: false
+    default: 'nethermind,geth,reth,besu,erigon,nimbus,ethrex'
+  runs:
+    description: 'Number of benchmark runs to execute'
+    required: false
+    default: '1'
+  opcodeWarmupCount:
+    description: 'Number of opcode warmup iterations per test case'
+    required: false
+    default: '1'
+  filter:
+    description: 'Comma-separated include-only filename patterns for stateful scenarios'
+    required: false
+    default: ''
+  images:
+    description: 'JSON map of images per client (same format as multi-parallel workflow)'
+    required: false
+    default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
+  txtReport:
+    description: 'Generate an additional TXT report via report_txt.py (true/false)'
+    required: false
+    default: 'false'
+  postgresHost:
+    description: 'PostgreSQL host; when non-empty, DB posting is enabled'
+    required: false
+    default: ''
+  postgresPort:
+    description: 'PostgreSQL port'
+    required: false
+    default: '5432'
+  postgresDbName:
+    description: 'PostgreSQL database name'
+    required: false
+    default: ''
+  postgresTable:
+    description: 'Target PostgreSQL table name for benchmark data'
+    required: false
+    default: ''
+  postgresUser:
+    description: 'PostgreSQL user (pass from caller, typically from a secret)'
+    required: false
+    default: ''
+  postgresPassword:
+    description: 'PostgreSQL password (pass from caller, typically from a secret)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Ensure scripts are executable
+      shell: bash
+      run: |
+        chmod +x ./run.sh || true
+
+    - name: Install Python dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install -r requirements.txt
+
+    - name: Prepare Kute tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        make prepare_tools
+
+    - name: Ensure results directory exists
+      shell: bash
+      run: mkdir -p results
+
+    - name: Run gas-benchmarks
+      shell: bash
+      run: |
+        set -euo pipefail
+        TEST_PATH="${{ inputs.testPath }}"
+        GENESIS_FILE="${{ inputs.genesisFile }}"
+        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+
+        ./run.sh \
+          -T "$TEST_PATHS_JSON" \
+          -w "${{ inputs.warmupFile }}" \
+          -c "${{ inputs.clients }}" \
+          -r "${{ inputs.runs }}" \
+          -i '${{ inputs.images }}' \
+          -o "${{ inputs.opcodeWarmupCount }}" \
+          -f "${{ inputs.filter }}"
+
+    - name: Generate TXT report (optional)
+      if: ${{ inputs.txtReport == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 report_txt.py \
+          --resultsPath results \
+          --clients "${{ inputs.clients }}" \
+          --testsPath "${{ inputs.testPath }}" \
+          --runs "${{ inputs.runs }}"
+
+    - name: Upload benchmark artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gas-benchmarks-outputs
+        path: |
+          reports
+          reports.zip
+          results
+
+    - name: Validate PostgreSQL configuration (optional)
+      if: ${{ inputs.postgresHost != '' || inputs.postgresDbName != '' || inputs.postgresTable != '' || inputs.postgresUser != '' || inputs.postgresPassword != '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        missing=()
+        [ -z "${{ inputs.postgresHost }}" ] && missing+=("postgresHost")
+        [ -z "${{ inputs.postgresDbName }}" ] && missing+=("postgresDbName")
+        [ -z "${{ inputs.postgresTable }}" ] && missing+=("postgresTable")
+        [ -z "${{ inputs.postgresUser }}" ] && missing+=("postgresUser")
+        [ -z "${{ inputs.postgresPassword }}" ] && missing+=("postgresPassword")
+
+        if [ "${#missing[@]}" -ne 0 ]; then
+          echo "PostgreSQL configuration is incomplete. Missing: ${missing[*]}" >&2
+          exit 1
+        fi
+
+    - name: Populate PostgreSQL with benchmark data
+      if: ${{ inputs.postgresHost != '' }}
+      shell: bash
+      env:
+        DB_HOST: ${{ inputs.postgresHost }}
+        DB_PORT: ${{ inputs.postgresPort }}
+        DB_NAME: ${{ inputs.postgresDbName }}
+        DB_TABLE: ${{ inputs.postgresTable }}
+        DB_USER: ${{ inputs.postgresUser }}
+        DB_PASSWORD: ${{ inputs.postgresPassword }}
+      run: |
+        set -euo pipefail
+        python3 fill_postgres_db.py \
+          --reports-dir reports \
+          --db-host "$DB_HOST" \
+          --db-port "$DB_PORT" \
+          --db-user "$DB_USER" \
+          --db-password "$DB_PASSWORD" \
+          --db-name "$DB_NAME" \
+          --table-name "$DB_TABLE" \
+          --log-level INFO
