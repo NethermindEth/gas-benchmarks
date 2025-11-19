@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections import deque
 from pathlib import Path
 import time
 from typing import Any, Dict, Optional
@@ -255,6 +256,24 @@ def copy_genesis_file(source: Path, target: Path) -> None:
         exit(1)
 
     target.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        print(f"--- First 20 lines of {source} ---")
+        with open(source, "r", encoding="utf-8", errors="replace") as f:
+            for _ in range(20):
+                line = f.readline()
+                if not line:
+                    break
+                print(line.rstrip())
+
+        print(f"--- Last 20 lines of {source} ---")
+        with open(source, "r", encoding="utf-8", errors="replace") as f:
+            # Efficiently read last N lines
+            last_lines = deque(f, maxlen=20)
+            for line in last_lines:
+                print(line.rstrip())
+    except Exception as e:
+        print(f"⚠️ Failed to read file for debugging: {e}")
 
     try:
         shutil.copy(source, target)
