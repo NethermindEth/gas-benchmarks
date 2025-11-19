@@ -948,10 +948,14 @@ for run in $(seq 1 $RUNS); do
     genesis_client="$client_base"
 
     if [ -n "$raw_genesis" ]; then
-      if [ "$genesis_client" != "besu" ] && [ "$genesis_client" != "nethermind" ]; then
-        genesis_client="geth"
+      if [ -f "$raw_genesis" ]; then
+        genesis_path="$raw_genesis"
+      else
+        if [ "$genesis_client" != "besu" ] && [ "$genesis_client" != "nethermind" ]; then
+          genesis_client="geth"
+        fi
+        genesis_path="scripts/genesisfiles/$genesis_client/$raw_genesis"
       fi
-      genesis_path="scripts/genesisfiles/$genesis_client/$raw_genesis"
     else
       genesis_path=""
     fi
