@@ -77,27 +77,32 @@ runs:
 
     - name: Ensure scripts are executable
       shell: bash
+      working-directory: ${{ github.action_path }}/../../..
       run: |
         chmod +x ./run.sh || true
 
     - name: Install Python dependencies
       shell: bash
+      working-directory: ${{ github.action_path }}/../../..
       run: |
         set -euo pipefail
         pip install -r requirements.txt
 
     - name: Prepare Kute tools
       shell: bash
+      working-directory: ${{ github.action_path }}/../../..
       run: |
         set -euo pipefail
         make prepare_tools
 
     - name: Ensure results directory exists
       shell: bash
+      working-directory: ${{ github.action_path }}/../../..
       run: mkdir -p results
 
     - name: Run gas-benchmarks
       shell: bash
+      working-directory: ${{ github.action_path }}/../../..
       run: |
         set -euo pipefail
         TEST_PATH="${{ inputs.testPath }}"
@@ -116,6 +121,7 @@ runs:
     - name: Generate TXT report (optional)
       if: ${{ inputs.txtReport == 'true' }}
       shell: bash
+      working-directory: ${{ github.action_path }}/../../..
       run: |
         set -euo pipefail
         python3 report_txt.py \
@@ -153,6 +159,7 @@ runs:
     - name: Populate PostgreSQL with benchmark data
       if: ${{ inputs.postgresHost != '' }}
       shell: bash
+      working-directory: ${{ github.action_path }}/../../..
       env:
         DB_HOST: ${{ inputs.postgresHost }}
         DB_PORT: ${{ inputs.postgresPort }}
