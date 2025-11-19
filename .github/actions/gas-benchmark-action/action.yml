@@ -81,6 +81,13 @@ runs:
       run: |
         chmod +x ./run.sh || true
 
+    - name: Pull LFS files for gas-benchmarks
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        git lfs install
+        git lfs pull
+
     - name: Install Python dependencies
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
