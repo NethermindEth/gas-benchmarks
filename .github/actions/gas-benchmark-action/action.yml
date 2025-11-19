@@ -85,8 +85,13 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       run: |
-        git lfs install
-        git lfs pull
+        # Check if we are in a git repository
+        if [ -d .git ]; then
+          git lfs install
+          git lfs pull
+        else
+          echo "Not a git repository, skipping LFS pull."
+        fi
 
     - name: Install Python dependencies
       shell: bash
