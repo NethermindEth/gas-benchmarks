@@ -161,7 +161,7 @@ runs:
           results
 
     - name: Validate PostgreSQL configuration (optional)
-      if: ${{ inputs.postgresHost != '' || inputs.postgresDbName != '' || inputs.postgresTable != '' || inputs.postgresUser != '' || inputs.postgresPassword != '' }}
+      if: ${{ inputs.postgresHost != '' }}
       shell: bash
       run: |
         set -euo pipefail
