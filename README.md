@@ -286,3 +286,89 @@ The tool writes `mitm_config.json` automatically (edit it if you need to tweak d
 Important: This feature is still in development (See [PR description](https://github.com/NethermindEth/gas-benchmarks/pull/57)). The script writes `mitm_config.json` automatically; edit it only if you need to customize the generated values.
 
 Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## Reusable GitHub Action: `gas-benchmark-action`
+
+You can trigger gas-benchmarks from another repository using the composite action defined in this repo at `.github/actions/gas-benchmark-action/action.yml`.
+
+### Usage from an external repository
+
+Create a workflow in your repository, for example `.github/workflows/gas-benchmarks.yml`:
+
+```yaml
+name: Run gas benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Number of benchmark runs
+        required: false
+        default: 1
+
+jobs:
+  gas-benchmarks:
+    runs-on: ubuntu-latest # default runner; override to change VM
+
+    steps:
+      # 1. Checkout the repository with LFS enabled
+      - name: Checkout gas-benchmarks repository
+        uses: actions/checkout@v4
+        with:
+          repository: NethermindEth/gas-benchmarks
+          ref: main # or specific branch/tag
+          lfs: true # Critical for downloading genesis files correctly
+
+      # 2. Run the local action from the checkout path
+      - name: Run gas-benchmarks composite action
+        uses: ./.github/actions/gas-benchmark-action
+        with:
+          # Benchmark configuration (all optional, with sensible defaults)
+          testPath: eest_tests
+          genesisFile: zkevmgenesis.json
+          warmupFile: warmup/warmup-1000bl-16wi-24tx.txt
+          clients: nethermind,geth,reth,besu,erigon,nimbus,ethrex
+          runs: ${{ github.event.inputs.runs }}
+          opcodeWarmupCount: '1'
+          filter: ''
+          images: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
+
+          # PostgreSQL target (no DB is provisioned by this workflow)
+          # Leave empty to disable database posting
+          postgresHost: perfnet.core.nethermind.dev
+          postgresPort: '5432'
+          postgresDbName: monitoring
+          postgresTable: gas_benchmarks_ci
+
+          # DB credentials passed from your repository secrets
+          postgresUser: ${{ secrets.PERFNET_DB_USER }}
+          postgresPassword: ${{ secrets.PERFNET_DB_PASSWORD }}
+```
+
+### Inputs
+
+- **testPath** (string, default `eest_tests`): Path to benchmark tests relative to the `gas-benchmarks` repo.
+- **genesisFile** (string, default `zkevmgenesis.json`): Genesis file name resolved under `scripts/genesisfiles/<client>/`.
+- **warmupFile** (string, default `warmup/warmup-1000bl-16wi-24tx.txt`): Warmup payload file; set to empty string to disable warmup.
+- **clients** (string, default `nethermind,geth,reth,besu,erigon,nimbus,ethrex`): Comma-separated client list.
+- **runs** (string, default `'1'`): Number of benchmark iterations.
+- **opcodeWarmupCount** (string, default `'1'`): Per-scenario opcode warmup loops.
+- **filter** (string, default empty): Comma-separated case-insensitive substrings; only matching scenarios are executed.
+- **images** (string, default JSON map of `default` tags): JSON map of client → image tag, same format as `multi-parallel.yml`.
+- **txtReport** (string, default `'false'`): When set to `'true'`, also generates a TXT report via `report_txt.py`.
+- **postgresHost** (string, optional, default empty): When non-empty, enables posting metrics to PostgreSQL.
+- **postgresPort** (string, default `5432`): PostgreSQL port.
+- **postgresDbName** (string, optional, default empty): PostgreSQL database name.
+- **postgresTable** (string, optional, default empty): Target table name in the database.
+
+### Secrets
+
+- **postgresUser** (optional, default empty): PostgreSQL username, passed as a GitHub Actions secret.
+- **postgresPassword** (optional, default empty): PostgreSQL password, passed as a GitHub Actions secret.
+
+### Behavior and prerequisites
+
+- **Single run per trigger**: The reusable workflow runs a single benchmark job per invocation (no parallel matrix), but can execute multiple clients in one `run.sh` call.
+- **Preconditions**: The workflow clones `NethermindEth/gas-benchmarks`, installs Python dependencies from `requirements.txt`, runs `make prepare_tools`, and then calls `run.sh` with the provided inputs.
+- **PostgreSQL (optional)**: If `postgresHost` is left empty, no database writes are attempted and only artifacts are produced. If any PostgreSQL-related input is provided, the action validates that `postgresHost`, `postgresDbName`, `postgresTable`, `postgresUser`, and `postgresPassword` are all non-empty before calling `fill_postgres_db.py`; otherwise, it fails fast with a clear error.
+- **Artifacts**: The `reports/`, `reports.zip`, and `results/` directories are uploaded as a single `gas-benchmarks-outputs` artifact for further inspection in the caller repository.
