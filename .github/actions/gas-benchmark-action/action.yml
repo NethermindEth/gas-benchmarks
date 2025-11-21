@@ -8,13 +8,13 @@ inputs:
   genesisFile:
     description: 'Genesis filename used for all clients (under scripts/genesisfiles/<client>/)'
     required: false
-    default: 'zkevmgenesis.json'
+    default: ''
   warmupFile:
     description: 'Warmup file path; set to empty string to disable warmup'
     required: false
     default: 'warmup/warmup-1000bl-16wi-24tx.txt'
   clients:
-    description: 'Comma-separated list of clients to benchmark'
+    description: 'Comma-separated list of clients to benchmark. Use only one client if genesisFile is provided.'
     required: false
     default: 'nethermind,geth,reth,besu,erigon,nimbus,ethrex'
   runs:
