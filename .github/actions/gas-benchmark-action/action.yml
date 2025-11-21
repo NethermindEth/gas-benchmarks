@@ -124,20 +124,27 @@ runs:
     - name: Run gas-benchmarks
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
+      env:
+        TEST_PATH: ${{ inputs.testPath }}
+        GENESIS_FILE: ${{ inputs.genesisFile }}
+        WARMUP_FILE: ${{ inputs.warmupFile }}
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
+        IMAGES: ${{ inputs.images }}
+        OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
+        FILTER: ${{ inputs.filter }}
       run: |
         set -euo pipefail
-        TEST_PATH="${{ inputs.testPath }}"
-        GENESIS_FILE="${{ inputs.genesisFile }}"
         TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
 
         ./run.sh \
           -T "$TEST_PATHS_JSON" \
-          -w "${{ inputs.warmupFile }}" \
-          -c "${{ inputs.clients }}" \
-          -r "${{ inputs.runs }}" \
-          -i '${{ inputs.images }}' \
-          -o "${{ inputs.opcodeWarmupCount }}" \
-          -f "${{ inputs.filter }}"
+          -w "$WARMUP_FILE" \
+          -c "$CLIENTS" \
+          -r "$RUNS" \
+          -i "$IMAGES" \
+          -o "$OPCODE_WARMUP_COUNT" \
+          -f "$FILTER"
 
     - name: Generate TXT report (optional)
       if: ${{ inputs.txtReport == 'true' }}
@@ -163,14 +170,20 @@ runs:
     - name: Validate PostgreSQL configuration (optional)
       if: ${{ inputs.postgresHost != '' }}
       shell: bash
+      env:
+        DB_HOST: ${{ inputs.postgresHost }}
+        DB_NAME: ${{ inputs.postgresDbName }}
+        DB_TABLE: ${{ inputs.postgresTable }}
+        DB_USER: ${{ inputs.postgresUser }}
+        DB_PASSWORD: ${{ inputs.postgresPassword }}
       run: |
         set -euo pipefail
         missing=()
-        [ -z "${{ inputs.postgresHost }}" ] && missing+=("postgresHost")
-        [ -z "${{ inputs.postgresDbName }}" ] && missing+=("postgresDbName")
-        [ -z "${{ inputs.postgresTable }}" ] && missing+=("postgresTable")
-        [ -z "${{ inputs.postgresUser }}" ] && missing+=("postgresUser")
-        [ -z "${{ inputs.postgresPassword }}" ] && missing+=("postgresPassword")
+        [ -z "$DB_HOST" ] && missing+=("postgresHost")
+        [ -z "$DB_NAME" ] && missing+=("postgresDbName")
+        [ -z "$DB_TABLE" ] && missing+=("postgresTable")
+        [ -z "$DB_USER" ] && missing+=("postgresUser")
+        [ -z "$DB_PASSWORD" ] && missing+=("postgresPassword")
 
         if [ "${#missing[@]}" -ne 0 ]; then
           echo "PostgreSQL configuration is incomplete. Missing: ${missing[*]}" >&2
