@@ -150,13 +150,18 @@ runs:
       if: ${{ inputs.txtReport == 'true' }}
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
+      env:
+        RESULTS_PATH: results
+        CLIENTS: ${{ inputs.clients }}
+        TEST_PATH: ${{ inputs.testPath }}
+        RUNS: ${{ inputs.runs }}
       run: |
         set -euo pipefail
         python3 report_txt.py \
-          --resultsPath results \
-          --clients "${{ inputs.clients }}" \
-          --testsPath "${{ inputs.testPath }}" \
-          --runs "${{ inputs.runs }}"
+          --resultsPath "$RESULTS_PATH" \
+          --clients "$CLIENTS" \
+          --testsPath "$TEST_PATH" \
+          --runs "$RUNS"
 
     - name: Upload benchmark artifacts
       uses: actions/upload-artifact@v4
