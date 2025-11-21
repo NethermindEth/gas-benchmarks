@@ -51,7 +51,6 @@ services:
       - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
       - --authrpc.addr=0.0.0.0
       - --authrpc.port=8551
-      - --engine.disable-precompile-cache
     logging:
       driver: json-file
       options:
