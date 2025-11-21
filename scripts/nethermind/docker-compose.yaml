@@ -4,6 +4,7 @@ services:
     environment:
       - TERM=xterm-256color
       - COLORTERM=truecolor
+      - DIAG_WITH=dottrace
     stop_signal: SIGINT 
     stop_grace_period: 30s
     container_name: gas-execution-client
