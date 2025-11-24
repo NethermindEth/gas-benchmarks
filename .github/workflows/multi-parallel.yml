@@ -181,15 +181,43 @@ jobs:
 
       - name: Process combined results
         run: |
-          runs=${{ github.event.inputs.runs }}
-          images="${{ github.event.inputs.images }}"
-          if [ -z "$image" ]; then
-            python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs 
-            python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs 
-          else
-            python3 report_tables.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
-            python3 report_html.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} --runs $runs --images $images
+          set -euo pipefail
+          RESULTS_ROOT="extracted-results/results"
+          if [ ! -d "$RESULTS_ROOT" ]; then
+            echo "Results directory not found: $RESULTS_ROOT"
+            exit 1
           fi
+
+          mapfile -t CLIENTS < <(find "$RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
+          if [ "${#CLIENTS[@]}" -eq 0 ]; then
+            echo "No client result files detected under $RESULTS_ROOT; skipping report generation."
+            mkdir -p reports
+            exit 0
+          fi
+
+          CLIENT_LIST=$(
+            printf "%s\n" "${CLIENTS[@]}" \
+              | xargs -n1 basename \
+              | sed 's/_results_.*//' \
+              | sort -u \
+              | paste -sd',' -
+          )
+
+          if [ -z "$CLIENT_LIST" ]; then
+            echo "Unable to derive client list from results; skipping report generation."
+            mkdir -p reports
+            exit 0
+          fi
+
+          rm -rf reports
+          mkdir -p reports
+
+          RUNS="${{ github.event.inputs.runs }}"
+          TESTS="${{ github.event.inputs.test }}"
+          IMAGES='${{ github.event.inputs.images }}'
+
+          python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+          python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
 
       - name: Generate Report
         if: ${{ github.event.inputs.txt_report == 'true' }}

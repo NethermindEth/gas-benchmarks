@@ -10,6 +10,11 @@
 #   --prometheus-endpoint   The Prometheus endpoint URL.
 #   --prometheus-username   The Prometheus basic auth username.
 #   --prometheus-password   The Prometheus basic auth password.
+#   --network      Network name forwarded to run.sh (e.g. mainnet)
+#   --snapshot-root Base directory for overlay snapshots (can include placeholders)
+#   --snapshot-template Optional template appended to snapshot root (supports <<CLIENT>> / <<NETWORK>>)
+#   --clients      Comma-separated client list forwarded to run.sh
+#   --restarts     true/false to control client restarts (-R flag for run.sh)
 #   --debug        Enable debug mode with detailed timing
 #   --debug-file   Enable debug mode and save output to specified file
 #   --profile-test Enable test-specific profiling (shows individual test timings)
@@ -20,12 +25,45 @@
 #
 # Default warmup file is set to "warmup/warmup-1000bl-16wi-24tx.txt"
 
-# Default warmup file
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
-TEST_PATHS_JSON='[{\"path\": \"eest_tests\", \"genesis\":\"zkevmgenesis.json\"}]'  # default test path
-DEBUG_FLAG=""
+# Default warmup file (empty means skip warmup)
+WARMUP_FILE=""
+TEST_PATHS_JSON='[{"path":"eest_tests","genesis":"zkevmgenesis.json"}]'  # default test path
+DEBUG_ARGS=()
 DEBUG=false
 DEBUG_FILE=""
+NETWORK=""
+NETWORK_LABEL="all"
+SNAPSHOT_ROOT=""
+SNAPSHOT_TEMPLATE=""
+CLIENTS=""
+CLIENTS_LABEL="all"
+RESTART_BEFORE_TESTING=false
+parse_bool() {
+  case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
+    true|1|yes|on) echo true ;;
+    false|0|no|off) echo false ;;
+    *) echo "invalid" ;;
+  esac
+}
+
+sanitize_label() {
+  local value="${1:-}"
+  if [ -z "$value" ]; then
+    echo "none"
+    return
+  fi
+  local lowered
+  lowered=$(echo "$value" | tr '[:upper:]' '[:lower:]')
+  lowered="${lowered// /_}"
+  lowered="${lowered//[^a-z0-9._-]/_}"
+  # Collapse multiple underscores
+  lowered=$(echo "$lowered" | sed 's/_\+/_/g;s/^_//;s/_$//')
+  if [ -z "$lowered" ]; then
+    echo "none"
+  else
+    echo "$lowered"
+  fi
+}
 
 # Timing variables
 declare -A STEP_TIMES
@@ -155,30 +193,50 @@ while [[ $# -gt 0 ]]; do
       ;;
     --debug)
       DEBUG=true
-      if [ -z "$DEBUG_FLAG" ]; then
-        DEBUG_FLAG="-d"
-      else
-        DEBUG_FLAG="$DEBUG_FLAG -d"
-      fi
+      DEBUG_ARGS+=(-d)
       shift
       ;;
     --debug-file)
       DEBUG=true
       DEBUG_FILE="$2"
-      if [ -z "$DEBUG_FLAG" ]; then
-        DEBUG_FLAG="-D \"$2\"_detailed"
-      else
-        DEBUG_FLAG="$DEBUG_FLAG -D \"$2\""
-      fi
+      DEBUG_ARGS+=(-D "$DEBUG_FILE")
       shift 2
       ;;
     --profile-test)
-      if [ -z "$DEBUG_FLAG" ]; then
-        DEBUG_FLAG="-d -p"
-      else
-        DEBUG_FLAG="$DEBUG_FLAG -p"
-      fi
+      DEBUG=true
+      DEBUG_ARGS+=(-p)
       shift
+      ;;
+    --network)
+      NETWORK="$2"
+      NETWORK_LABEL=$(sanitize_label "$NETWORK")
+      shift 2
+      ;;
+    --snapshot-root)
+      SNAPSHOT_ROOT="$2"
+      shift 2
+      ;;
+    --snapshot-template)
+      SNAPSHOT_TEMPLATE="$2"
+      shift 2
+      ;;
+    --clients)
+      CLIENTS="$2"
+      CLIENTS_LABEL=$(sanitize_label "$CLIENTS")
+      shift 2
+      ;;
+    --restart-before-testing)
+      RESTART_BEFORE_TESTING=true
+      shift
+      ;;
+    --restarts)
+      value=$(parse_bool "$2")
+      if [ "$value" = "invalid" ]; then
+        echo "Invalid value for --restarts: $2 (expected true/false)"
+        exit 1
+      fi
+      RESTART_BEFORE_TESTING=$value
+      shift 2
       ;;
     *)
       echo "Unknown argument: $1"
@@ -187,8 +245,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+
+
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
   exit 1
 fi
 
@@ -241,21 +301,62 @@ while true; do
   
   start_timer "benchmark_testing"
   # Run the benchmark testing using specified warmup file
-  PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
-    eval "bash run.sh -T \"$TEST_PATHS_JSON\" -w \"$WARMUP_FILE\" -r1 -r1 $DEBUG_FLAG"
+  RUN_CMD=(bash run.sh -T "$TEST_PATHS_JSON" -r 1)
+  if [ -n "$WARMUP_FILE" ]; then
+    if [ -f "$WARMUP_FILE" ]; then
+      RUN_CMD+=(-w "$WARMUP_FILE")
+    else
+      echo "[WARN] Requested warmup file '$WARMUP_FILE' not found; skipping warmup."
+    fi
+  fi
+  if [ -n "$NETWORK" ]; then
+    RUN_CMD+=(-n "$NETWORK")
+  fi
+
+  snapshot_arg="$SNAPSHOT_ROOT"
+  if [ -n "$SNAPSHOT_TEMPLATE" ]; then
+    if [ -n "$snapshot_arg" ]; then
+      snapshot_arg="${snapshot_arg%/}/$SNAPSHOT_TEMPLATE"
+    else
+      snapshot_arg="$SNAPSHOT_TEMPLATE"
+    fi
+  fi
+  if [ -n "$snapshot_arg" ]; then
+    RUN_CMD+=(-B "$snapshot_arg")
+  fi
+
+  if [ -n "$CLIENTS" ]; then
+    RUN_CMD+=(-c "$CLIENTS")
+  fi
+
+  if [ "$RESTART_BEFORE_TESTING" = true ]; then
+    RUN_CMD+=(-R true)
+  fi
+
+  if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then
+    RUN_CMD+=("${DEBUG_ARGS[@]}")
+  fi
+
+  echo "[INFO] Executing benchmark command: ${RUN_CMD[*]}"
+  PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" \
+  PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" \
+  PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
+    "${RUN_CMD[@]}"
   end_timer "benchmark_testing"
 
   start_timer "populate_postgres_db_background"
   # Create unique backup directory with timestamp
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-  BACKUP_DIR="reports_backup_$TIMESTAMP"
-  
-  # Clean up old backup directories (keep only 2 newest)
-  if ls reports_backup_* 1> /dev/null 2>&1; then
+  BACKUP_PREFIX="reports_backup_${CLIENTS_LABEL}_${NETWORK_LABEL}"
+  BACKUP_DIR="${BACKUP_PREFIX}_${TIMESTAMP}"
+
+  # Clean up old backup directories (keep only 2 newest per client/network)
+  shopt -s nullglob
+  backup_candidates=("${BACKUP_PREFIX}"_*)
+  shopt -u nullglob
+  if [ ${#backup_candidates[@]} -gt 0 ]; then
     debug_log "Cleaning up old backup directories..."
-    # Get all backup directories sorted by modification time (newest first)
-    # Keep only the 2 newest, remove the rest
-    ls -dt reports_backup_* | tail -n +3 | xargs -r rm -rf
+    ls -dt "${backup_candidates[@]}" | tail -n +3 | xargs -r rm -rf
     debug_log "Cleanup completed"
   fi
   
@@ -287,3 +388,4 @@ while true; do
   debug_log "Loop iteration completed"
   echo "--- End of loop iteration ---"
 done
+

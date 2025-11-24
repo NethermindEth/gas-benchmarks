@@ -34,10 +34,15 @@ CREATE TABLE IF NOT EXISTS {table_name} (
     -- Individual run details (primarily from raw_results_{"{client}"}.csv)
     raw_gas_value TEXT NULL,         -- 'Gas' value from raw_*.csv, specific to this individual run
     raw_run_mgas_s REAL NULL,        -- The MGas/s for this specific individual run
+    raw_run_duration_ms REAL NULL,   -- Execution duration in milliseconds for this specific run
     raw_run_description TEXT NULL,   -- Description from the raw_*.csv row, potentially more specific
 
-    -- Test execution timestamps
+    -- Test execution timestamps and durations
     start_time TIMESTAMP WITH TIME ZONE NULL,  -- Test start timestamp
+    end_time TIMESTAMP WITH TIME ZONE NULL,    -- Test end timestamp
+    test_duration REAL NULL,                    -- Test duration in milliseconds
+    fcu_duration REAL NULL,                     -- FCU (engine_forkchoiceUpdatedV3) duration in milliseconds
+    np_duration REAL NULL,                      -- NP (engine_newPayloadV4) duration in milliseconds
 
     -- Computer Specifications (parsed from system info, repeated per row, all nullable)
     spec_processor_type TEXT NULL,
@@ -88,6 +93,11 @@ def execute_sql_on_db(db_params: Dict[str, Any], table_name: str) -> None:
                 columns_to_ensure: List[Tuple[str, str]] = [
                     ("client_version", "TEXT NULL"),
                     ("start_time", "TIMESTAMP WITH TIME ZONE NULL"),
+                    ("raw_run_duration_ms", "REAL NULL"),
+                    ("end_time", "TIMESTAMP WITH TIME ZONE NULL"),
+                    ("test_duration", "REAL NULL"),
+                    ("fcu_duration", "REAL NULL"),
+                    ("np_duration", "REAL NULL"),
                     # Add other columns here in the future for schema evolution
                     # e.g., ("new_feature_flag", "BOOLEAN DEFAULT FALSE")
                 ]

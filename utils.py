@@ -27,7 +27,8 @@ def read_results(text):
             if full_lines.startswith(' TIMESTAMP:'):
                 timestamp = int(full_lines.split(':')[1])
             elif full_lines.startswith(' MEASUREMENT:'):
-                measurement = full_lines.split(' ')[3].strip()
+                # Take everything after "MEASUREMENT: " to handle multi-word measurements
+                measurement = full_lines.split('MEASUREMENT:')[1].split('\n')[0].strip()
             elif full_lines.startswith(' TAGS:'):
                 for line in full_lines.split('\n')[1:]:
                     if not line:
@@ -56,34 +57,58 @@ def extract_response_and_result(results_path, client, test_case_name, gas_used, 
     if not os.path.exists(result_file):
         # print("No result: " + result_file)
         print("No result")
-        return False, 0, 0
+        return False, 0, 0, 0, 0, 0
     if not os.path.exists(response_file):
         print("No repsonse")
-        return False, 0, 0
+        return False, 0, 0, 0, 0, 0
     # Get the responses from the files
     with open(response_file, 'r') as file:
         text = file.read()
         if len(text) == 0:
             print("text len 0")
-            return False, 0, 0
+            return False, 0, 0, 0, 0, 0
         # Get latest line
         for line in text.split('\n'):
             if len(line) < 1:
                 continue
             if not check_sync_status(line):
                 print("Invalid sync status")
-                return False, 0, 0
+                return False, 0, 0, 0, 0, 0
     # Get the results from the files
     with open(result_file, 'r') as file:
         sections = read_results(file.read())
-        if method not in sections:
-            print(f"Method '{method}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
+        # Add [Application] prefix to method name if not present
+        method_key = f'[Application] {method}' if not method.startswith('[Application]') else method
+        
+        if method_key not in sections:
+            print(f"Method '{method_key}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
             # Get timestamp from first available section, or 0 if no sections exist
             timestamp = getattr(next(iter(sections.values())), 'timestamp', 0) if sections else 0
-            return False, 0, timestamp
-        result = sections[method].fields[field]
-        timestamp = getattr(sections[method], 'timestamp', 0)
-    return response, float(result), timestamp
+            return False, 0, timestamp, 0, 0, 0
+        result = sections[method_key].fields[field]
+        timestamp = getattr(sections[method_key], 'timestamp', 0)
+        # Extract total running time if available (in milliseconds)
+        total_running_time_ms = 0
+        if '[Application] Total Running Time' in sections:
+            total_running_time_section = sections['[Application] Total Running Time']
+            if 'sum' in total_running_time_section.fields:
+                total_running_time_ms = float(total_running_time_section.fields['sum'])
+        
+        # Extract FCU (engine_forkchoiceUpdatedV3) duration
+        fcu_duration_ms = 0
+        if '[Application] engine_forkchoiceUpdatedV3' in sections:
+            fcu_section = sections['[Application] engine_forkchoiceUpdatedV3']
+            if 'sum' in fcu_section.fields:
+                fcu_duration_ms = float(fcu_section.fields['sum'])
+        
+        # Extract NP (engine_newPayloadV4) duration
+        np_duration_ms = 0
+        if '[Application] engine_newPayloadV4' in sections:
+            np_section = sections['[Application] engine_newPayloadV4']
+            if 'sum' in np_section.fields:
+                np_duration_ms = float(np_section.fields['sum'])
+    
+    return response, float(result), timestamp, total_running_time_ms, fcu_duration_ms, np_duration_ms
 
 
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
@@ -103,11 +128,35 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
 
     for test_case, _ in test_cases.items():
         results_norm = results_per_test_case[test_case]
-        gas_table_norm[test_case] = ['' for _ in range(9)]
+        gas_table_norm[test_case] = ['' for _ in range(13)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
-        # (norm) title, description, N , max, min, p50, p95, p99
-        timestamp = client_results[client][test_case]["timestamp"] if client_results[client][test_case] and "timestamp" in client_results[client][test_case] else 0
-        gas_table_norm[test_case][8] = timestamp
+        # (norm) title, description, N , max, min, p50, p95, p99, start_time, end_time, duration_ms, fcu_duration_ms, np_duration_ms
+        timestamp_ticks = client_results[client][test_case]["timestamp_ticks"] if client_results[client][test_case] and "timestamp_ticks" in client_results[client][test_case] else 0
+        duration_ms = client_results[client][test_case]["duration"] if client_results[client][test_case] and "duration" in client_results[client][test_case] else 0
+        fcu_duration_ms = client_results[client][test_case]["fcu_duration"] if client_results[client][test_case] and "fcu_duration" in client_results[client][test_case] else 0
+        np_duration_ms = client_results[client][test_case]["np_duration"] if client_results[client][test_case] and "np_duration" in client_results[client][test_case] else 0
+        
+        # Convert start timestamp to formatted string
+        start_time_str = convert_dotnet_ticks_to_utc(timestamp_ticks) if timestamp_ticks != 0 else 0
+        gas_table_norm[test_case][8] = start_time_str
+        
+        # Calculate end time using raw ticks + duration
+        # 1 ms = 10,000 ticks (since 1 tick = 100 nanoseconds)
+        if timestamp_ticks != 0 and duration_ms != 0:
+            duration_ticks = int(duration_ms * 10_000)
+            end_time_ticks = timestamp_ticks + duration_ticks
+            end_time_str = convert_dotnet_ticks_to_utc(end_time_ticks)
+            gas_table_norm[test_case][9] = end_time_str
+        else:
+            gas_table_norm[test_case][9] = 0
+        
+        # Store duration in milliseconds
+        gas_table_norm[test_case][10] = f'{duration_ms:.2f}' if duration_ms != 0 else '0'
+        
+        # Store FCU and NP durations
+        gas_table_norm[test_case][11] = f'{fcu_duration_ms:.2f}' if fcu_duration_ms != 0 else '0'
+        gas_table_norm[test_case][12] = f'{np_duration_ms:.2f}' if np_duration_ms != 0 else '0'
+            
         if test_case in metadata:
             gas_table_norm[test_case][0] = metadata[test_case]['Title']
             gas_table_norm[test_case][7] = metadata[test_case]['Description']
@@ -200,15 +249,22 @@ def get_test_cases(tests_path):
     pattern = re.compile(r'(?P<base>.+?)_(?P<gas>[0-9]+)M\.txt$')
 
     for root, _, files in os.walk(tests_path):
+        normalized_root = root.replace('\\', '/')
+        if '/testing/' not in normalized_root and not normalized_root.endswith('/testing'):
+            continue
+
         for file in files:
             if not file.endswith('.txt'):
                 continue
+
             m = pattern.match(file)
-            if not m:
-                print(f"[Warning] skipping unexpected file name: {file}")
-                continue
-            test_case_name = m.group('base')
-            gas_value = int(m.group('gas'))  # e.g., "100" from "100M"
+            if m:
+                test_case_name = m.group('base')
+                gas_value = int(m.group('gas'))  # e.g., "100" from "100M"
+            else:
+                test_case_name = os.path.splitext(file)[0]
+                gas_value = 60
+
             test_cases[test_case_name].add(gas_value)
 
     return {tc: sorted(list(gases)) for tc, gases in test_cases.items()}
