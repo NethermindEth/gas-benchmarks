@@ -4,7 +4,7 @@ services:
     environment:
       - TERM=xterm-256color
       - COLORTERM=truecolor
-    stop_signal: SIGINT 
+    stop_signal: SIGINT
     stop_grace_period: 30s
     container_name: gas-execution-client
     restart: unless-stopped
@@ -59,6 +59,7 @@ services:
       metrics_port: "8008"
       metrics_path: "/metrics"
       logs_enabled: "false"
+      traces_enabled: "true"
       instance: "${GA_METRICS_LABELS_INSTANCE}"
   alloy:
     environment:
