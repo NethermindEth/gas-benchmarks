@@ -22,6 +22,7 @@ USE_OVERLAY=false
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
+SKIP_EMPTY=false
 
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
@@ -770,7 +771,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:F" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FS" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -788,7 +789,8 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:F" opt; do
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice]" >&2
+    S) SKIP_EMPTY=true;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty]" >&2
        exit 1 ;;
   esac
 done
@@ -802,7 +804,7 @@ if [ -z "$TEST_PATHS_JSON" ]; then
     exit 1
   fi
 
-  echo "âš ď¸Ź  Falling back to legacy mode with -t and -g"
+  echo "Falling back to legacy mode with -t and -g"
   if [ -n "$LEGACY_GENESIS_PATH" ]; then
     TEST_PATHS_JSON="[ {\"path\": \"$LEGACY_TEST_PATH\", \"genesis\": \"$LEGACY_GENESIS_PATH\"} ]"
   else
@@ -1151,12 +1153,17 @@ done
 end_timer "benchmarks_total"
 
 start_timer "results_processing"
+SKIP_EMPTY_OPT=""
+if [ "$SKIP_EMPTY" = true ]; then
+  SKIP_EMPTY_OPT="--skipEmpty"
+fi
+
 if [ -z "$IMAGES" ]; then
-  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS"
-  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS"
+  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" $SKIP_EMPTY_OPT
+  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" $SKIP_EMPTY_OPT
 else
-  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES"
-  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES"
+  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
+  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
 fi
 end_timer "results_processing"
 

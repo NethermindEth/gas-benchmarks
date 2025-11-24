@@ -7,7 +7,7 @@ import yaml
 import utils
 
 
-def get_table_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
+def get_table_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images, skip_empty=False):
     results_to_print = ''
 
     for client in clients:
@@ -24,7 +24,7 @@ def get_table_report(client_results, clients, results_paths, test_cases, methods
         results_to_print += f'{client.capitalize()} - {image_to_print} - Benchmarking Report' + '\n'
         results_to_print += (center_string('Title',
                                            68) + '| Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description | Start time | End time | Duration (ms) | FCU time (ms) | NP time (ms)\n')
-        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
+        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, skip_empty)
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'{align_left_string(data[0], 68)}|'
                                  f'{center_string(data[1], 14)}|'
@@ -73,6 +73,7 @@ def main():
     parser.add_argument('--images', type=str, help='Image values per each client',
                         default='{ "nethermind": "default", "besu": "default", "geth": "default", "reth": "default" , '
                                 '"erigon": "default"}')
+    parser.add_argument('--skipEmpty', action='store_true', help='Skip empty results')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -83,6 +84,7 @@ def main():
     tests_path = args.testsPath
     runs = args.runs
     images = args.images
+    skip_empty = args.skipEmpty
 
     # Get the computer spec
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
@@ -151,8 +153,8 @@ def main():
         for item in data:
             metadata[item['Name']] = item
 
-    get_table_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
-    get_table_report(failed_tests, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
+    get_table_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, skip_empty)
+    get_table_report(failed_tests, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, skip_empty)
 
     print('Done!')
 
