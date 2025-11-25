@@ -185,7 +185,7 @@ def main():
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
                         default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}')
-    parser.add_argument('--skipEmpty', action='store_true', help='Skip empty results')
+    parser.add_argument('--skipEmpty', action='store_true', default=True, help='Skip empty results')
 
     # Parse command-line arguments
     args = parser.parse_args()
