@@ -1126,6 +1126,8 @@ for run in $(seq 1 $RUNS); do
     start_timer "teardown_${client}"
     ts=$(date +%s)
     dump_client_logs "$client_base"
+
+    docker exec gas-execution-client sh -c 'ls -Rlah /nethermind || true' || true
     docker_compose_down_for_client "$client_base"
 
     rm -rf "scripts/$client_base/execution-data"
