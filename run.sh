@@ -150,6 +150,19 @@ sanitize_path_component() {
   echo "$input" | tr -cs '[:alnum:]._-' '_'
 }
 
+safe_remove_dir() {
+  local target="$1"
+  if [ -z "$target" ]; then
+    return
+  fi
+  rm -rf "$target" 2>/dev/null || true
+  if [ -d "$target" ]; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo rm -rf "$target" 2>/dev/null || sudo rm -rf "$target"
+    fi
+  fi
+}
+
 is_stateful_directory() {
   local dir="$1"
   [ -d "$dir" ] || return 1
@@ -1048,7 +1061,7 @@ for run in $(seq 1 $RUNS); do
       mkdir -p "$scenario_artifacts_dir"
 
       if [ "$USE_OVERLAY" != true ]; then
-        rm -rf "$data_dir"
+        safe_remove_dir "$data_dir"
         mkdir -p "$data_dir"
       fi
 
@@ -1103,7 +1116,7 @@ for run in $(seq 1 $RUNS); do
         docker_compose_down_for_client "$client_base"
         unset RUNNING_CLIENTS["$client_base"]
         if [ "$USE_OVERLAY" != true ]; then
-          rm -rf "$data_dir"
+          safe_remove_dir "$data_dir"
         fi
         if drop_host_caches; then
           debug_log "Dropped host caches"
@@ -1152,7 +1165,7 @@ for run in $(seq 1 $RUNS); do
       docker_compose_down_for_client "$client_base"
       unset RUNNING_CLIENTS["$client_base"]
       if [ "$USE_OVERLAY" != true ]; then
-        rm -rf "$data_dir"
+        safe_remove_dir "$data_dir"
       fi
       if drop_host_caches; then
         debug_log "Dropped host caches"
