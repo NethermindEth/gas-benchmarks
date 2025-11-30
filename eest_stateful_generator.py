@@ -447,6 +447,7 @@ def main():
     parser.add_argument("--rpc-seed-key", required=True)
     parser.add_argument("--rpc-address", required=True)
     parser.add_argument("--stubs-file", default=None, help="Path to address stubs JSON passed to execute remote")
+    parser.add_argument("--snapshot-dir", default="execution-data", help="Path to snapshot DB (default: execution-data)")
     parser.add_argument("--no-snapshot", action="store_true")
     parser.add_argument("--refresh-snapshot", action="store_true")
     parser.add_argument("--keep", action="store_true")
@@ -541,7 +542,7 @@ def main():
     run(["uv", "sync", "--all-extras"], cwd=str(repo_dir))
     run(["uv", "pip", "install", "-e", ".", "--break-system-packages"], cwd=str(repo_dir))
 
-    snapshot_dir = Path("execution-data")
+    snapshot_dir = Path(args.snapshot_dir).expanduser().resolve()
     if not args.no_snapshot:
         if snapshot_dir.exists() and any(snapshot_dir.iterdir()) and not args.refresh_snapshot:
             pass
