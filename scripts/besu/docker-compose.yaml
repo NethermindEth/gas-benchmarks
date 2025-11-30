@@ -52,7 +52,6 @@ services:
     labels:
       metrics_enabled: "true"
       metrics_port: "8008"
-      metrics_path: "/metrics"
       logs_enabled: "false"
       instance: "${GA_METRICS_LABELS_INSTANCE}"
   alloy:
@@ -61,10 +60,6 @@ services:
     extends:
       file: ../addons/alloy/compose.yaml
       service: alloy
-  node-exporter:
-    extends:
-      file: ../addons/node-exporter/compose.yaml
-      service: node-exporter
 networks:
   gas:
     name: gas-network

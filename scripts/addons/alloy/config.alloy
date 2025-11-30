@@ -35,12 +35,6 @@ discovery.relabel "filter_metrics_enabled" {
   }
 
   rule {
-    source_labels = ["__meta_docker_container_label_metrics_path"]
-    target_label  = "__metrics_path__"
-    action        = "replace"
-  }
-
-  rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "app"
     action        = "replace"
@@ -94,6 +88,7 @@ prometheus.scrape "docker_containers" {
   forward_to = [prometheus.remote_write.remote.receiver]
   job_name  = "docker_containers"
   scrape_interval = sys.env("METRICS_SCRAPE_INTERVAL")
+  metrics_path = sys.env("METRICS_ENDPOINT_PATH")
 }
 
 prometheus.remote_write "remote" {
