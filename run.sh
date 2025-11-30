@@ -144,6 +144,12 @@ print(os.path.abspath(sys.argv[1]))
 PY
 }
 
+sanitize_path_component() {
+  local input="$1"
+  # Replace any characters outside a safe set with underscores
+  echo "$input" | tr -cs '[:alnum:]._-' '_'
+}
+
 is_stateful_directory() {
   local dir="$1"
   [ -d "$dir" ] || return 1
@@ -930,6 +936,12 @@ for genesis_entry in "${TEST_TO_GENESIS[@]}"; do
   fi
 done
 
+BASE_ARTIFACTS_ROOT="${CLIENT_ARTIFACTS_DIR:-}"
+if [ -n "$BASE_ARTIFACTS_ROOT" ]; then
+  BASE_ARTIFACTS_ROOT=$(abspath "$BASE_ARTIFACTS_ROOT")
+fi
+computer_specs_written=false
+
 # Run benchmarks
 start_timer "benchmarks_total"
 for run in $(seq 1 $RUNS); do
@@ -957,6 +969,7 @@ for run in $(seq 1 $RUNS); do
     fi
 
     data_dir=""
+    client_artifacts_root="$BASE_ARTIFACTS_ROOT"
     if [ "$USE_OVERLAY" = true ]; then
       snapshot_root_for_client=$(resolve_snapshot_root_for_client "$client_base" "$NETWORK")
       if [ -z "$snapshot_root_for_client" ]; then
@@ -973,60 +986,10 @@ for run in $(seq 1 $RUNS); do
       data_dir=$(abspath "scripts/$client_base/execution-data")
       mkdir -p "$data_dir"
     fi
-
-    volume_name="${client_base}_$(date +%s)_$RANDOM"
-    if [ "$USE_OVERLAY" = true ]; then
-      overlay_root="${ACTIVE_OVERLAY_ROOTS[$client_base]}"
-      if [ -n "$overlay_root" ]; then
-        overlay_token=$(basename "$overlay_root")
-        volume_name="${client_base}_${overlay_token}_$(date +%s)_$RANDOM"
-      fi
+    if [ -z "$client_artifacts_root" ]; then
+      client_artifacts_root=$(abspath "scripts/$client_base/artifacts")
     fi
-    volume_name=$(echo "$volume_name" | tr -cd '[:alnum:]._-')
-    if [ -z "$volume_name" ]; then
-      volume_name="${client_base}_volume"
-    fi
-
-    end_timer "setup_node_${client}"
-
-    setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
-    if [ -n "$NETWORK" ]; then
-      setup_cmd+=(--network "$NETWORK")
-    fi
-    if [ -z "$NETWORK" ] && [ -n "$genesis_path" ]; then
-      echo "Using custom genesis for $client: $genesis_path"
-      setup_cmd+=(--genesisPath "$genesis_path")
-    fi
-    setup_cmd+=(--volumeName "$volume_name")
-
-    RUNNING_CLIENTS["$client_base"]=1
-
-    echo "[INFO] Running setup_node command: ${setup_cmd[*]}"
-    "${setup_cmd[@]}"
-
-    if declare -f wait_for_rpc >/dev/null 2>&1; then
-      wait_for_rpc "http://127.0.0.1:8545" 300
-    else
-      sleep 5
-    fi
-
-    python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
-    cat results/computer_specs.txt
-
-    warmed=false
-
-    # Warmup
-    if [ "$warmed" = false ] && [ -n "$WARMUP_FILE" ]; then
-      start_timer "warmup_${client}_run_${run}"
-      if [ -f "$WARMUP_FILE" ]; then
-        echo "[INFO] Running warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$WARMUP_FILE\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
-        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
-      else
-        echo "[WARN] Warmup file '$WARMUP_FILE' not found; skipping warmup."
-      fi
-      warmed=true
-      end_timer "warmup_${client}_run_${run}"
-    fi
+    mkdir -p "$client_artifacts_root"
 
     declare -A warmup_run_counts=()
 
@@ -1073,26 +1036,89 @@ for run in $(seq 1 $RUNS); do
         fi
       fi
 
+      scenario_base_name="${filename%.*}"
+      scenario_safe_name=$(sanitize_path_component "$scenario_base_name")
+      if [ -z "$scenario_safe_name" ]; then
+        scenario_safe_name="scenario_${i}"
+      fi
+
+      scenario_artifacts_dir="$client_artifacts_root/run_${run}_${scenario_safe_name}"
+
+      rm -rf "$scenario_artifacts_dir"
+      mkdir -p "$scenario_artifacts_dir"
+
+      if [ "$USE_OVERLAY" != true ]; then
+        rm -rf "$data_dir"
+        mkdir -p "$data_dir"
+      fi
+
+      volume_name="${client_base}_$(date +%s)_$RANDOM"
+      if [ "$USE_OVERLAY" = true ]; then
+        overlay_root="${ACTIVE_OVERLAY_ROOTS[$client_base]}"
+        if [ -n "$overlay_root" ]; then
+          overlay_token=$(basename "$overlay_root")
+          volume_name="${client_base}_${overlay_token}_$(date +%s)_$RANDOM"
+        fi
+      fi
+      volume_name=$(echo "$volume_name" | tr -cd '[:alnum:]._-')
+      if [ -z "$volume_name" ]; then
+        volume_name="${client_base}_volume"
+      fi
+
+      setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
+      if [ -n "$NETWORK" ]; then
+        setup_cmd+=(--network "$NETWORK")
+      fi
+      if [ -z "$NETWORK" ] && [ -n "$genesis_path" ]; then
+        echo "Using custom genesis for $client: $genesis_path"
+        setup_cmd+=(--genesisPath "$genesis_path")
+      fi
+      setup_cmd+=(--volumeName "$volume_name")
+
+      RUNNING_CLIENTS["$client_base"]=1
+
+      echo "[INFO] Running setup_node command: ${setup_cmd[*]}"
+      CLIENT_ARTIFACTS_DIR="$scenario_artifacts_dir" "${setup_cmd[@]}"
+
+      if declare -f wait_for_rpc >/dev/null 2>&1; then
+        wait_for_rpc "http://127.0.0.1:8545" 300
+      else
+        sleep 5
+      fi
+
+      if [ "$computer_specs_written" = false ]; then
+        python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
+        cat results/computer_specs.txt
+        computer_specs_written=true
+      fi
+
       if [ "$measured" = false ]; then
         echo "Executing preparation script (not measured): $filename"
         echo "[INFO] Running preparation run_kute command: python3 run_kute.py --output \"$PREPARATION_RESULTS_DIR\" --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
         echo ""
-        continue
-      fi
 
-      if [ "$RESTART_BEFORE_TESTING" = true ]; then
-        if ! restart_client_containers "$client_base"; then
-          echo "âš ď¸Ź  Skipping $filename for $client - restart failed" >&2
-          continue
+        start_timer "teardown_${client}_${scenario_safe_name}_run_${run}"
+        dump_client_logs "$client_base"
+        docker_compose_down_for_client "$client_base"
+        unset RUNNING_CLIENTS["$client_base"]
+        if [ "$USE_OVERLAY" != true ]; then
+          rm -rf "$data_dir"
         fi
+        if drop_host_caches; then
+          debug_log "Dropped host caches"
+        else
+          debug_log "Skipped host cache drop (insufficient permissions)"
+        fi
+        end_timer "teardown_${client}_${scenario_safe_name}_run_${run}"
+        continue
       fi
 
       base_prefix="${filename%-gas-value_*}"
       warmup_candidates=( "$WARMUP_OPCODES_PATH"/"$base_prefix"-gas-value_*.txt )
       warmup_path="${warmup_candidates[0]}"
 
-      if (( OPCODES_WARMUP_COUNT > 0 )); then
+      if (( OPCODES_WARMUP_COUNT > 0 )) && [ -n "$WARMUP_FILE" ]; then
         start_test_timer "opcodes_warmup_${client}_${filename}"
         current_count="${warmup_run_counts[$warmup_path]:-0}"
         if (( current_count >= OPCODES_WARMUP_COUNT )); then
@@ -1120,30 +1146,25 @@ for run in $(seq 1 $RUNS); do
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
       end_test_timer "test_run_${client}_${filename}"
       echo "" # Line break after each test for logs clarity
+
+      start_timer "teardown_${client}_${scenario_safe_name}_run_${run}"
+      dump_client_logs "$client_base"
+      docker_compose_down_for_client "$client_base"
+      unset RUNNING_CLIENTS["$client_base"]
+      if [ "$USE_OVERLAY" != true ]; then
+        rm -rf "$data_dir"
+      fi
+      if drop_host_caches; then
+        debug_log "Dropped host caches"
+      else
+        debug_log "Skipped host cache drop (insufficient permissions)"
+      fi
+      end_timer "teardown_${client}_${scenario_safe_name}_run_${run}"
     done
-
-    # Collect logs & teardown
-    start_timer "teardown_${client}"
-    ts=$(date +%s)
-    dump_client_logs "$client_base"
-
-    docker exec gas-execution-client sh -c 'ls -Rlah /nethermind || true' || true
-    docker_compose_down_for_client "$client_base"
-
-    rm -rf "scripts/$client_base/execution-data"
 
     if [ "$USE_OVERLAY" = true ]; then
       cleanup_overlay_for_client "$client_base"
       cleanup_stale_overlay_mounts
-    fi
-    end_timer "teardown_${client}"
-
-    unset RUNNING_CLIENTS["$client_base"]
-
-    if drop_host_caches; then
-      debug_log "Dropped host caches"
-    else
-      debug_log "Skipped host cache drop (insufficient permissions)"
     fi
 
     update_execution_time "$client"
