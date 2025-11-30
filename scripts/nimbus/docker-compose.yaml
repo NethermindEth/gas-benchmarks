@@ -11,6 +11,7 @@ services:
       - execution_data:/var/lib/nimbus/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+      - ${CLIENT_ARTIFACTS_DIR:-./artifacts}:/artifacts
     user: root
     ports:
       - 8008:8008/tcp

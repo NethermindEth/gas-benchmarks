@@ -10,6 +10,7 @@ services:
       - execution_data:/var/lib/erigon
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${CLIENT_ARTIFACTS_DIR:-./artifacts}:/artifacts
     entrypoint:
       - /bin/sh
       - -c
@@ -30,6 +31,7 @@ services:
       - execution_data:/var/lib/erigon
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${CLIENT_ARTIFACTS_DIR:-./artifacts}:/artifacts
     ports:
       - "8008:8008/tcp"
       - "8551:8551"

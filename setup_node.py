@@ -219,6 +219,18 @@ def set_env(
         "NETWORK_NAME": network or "",
     }
 
+    artifacts_override = os.environ.get("CLIENT_ARTIFACTS_DIR")
+    if artifacts_override:
+        artifacts_path = Path(artifacts_override).expanduser().resolve()
+    else:
+        artifacts_path = (Path(run_path) / "artifacts").resolve()
+    artifacts_path.mkdir(parents=True, exist_ok=True)
+    env_map["CLIENT_ARTIFACTS_DIR"] = artifacts_path.as_posix()
+
+    if client == "nethermind":
+        diag_path = artifacts_path / "diag"
+        diag_path.mkdir(parents=True, exist_ok=True)
+
     sanitized_volume = sanitize_volume_name(volume_name) if volume_name else sanitize_volume_name(
         f"{client}_{int(time.time())}"
     )

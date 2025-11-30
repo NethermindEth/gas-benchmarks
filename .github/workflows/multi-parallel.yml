@@ -100,11 +100,15 @@ jobs:
         run: chmod +x ./run.sh
 
       - name: Run benchmarks for client=${{ matrix.client }}
+        env:
+          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}', github.workspace, matrix.client) }}
         run: |
           GENESIS_FILENAME="${{ github.event.inputs.genesis }}"
           TEST_PATH="${{ github.event.inputs.test }}"
           CLIENT="${{ matrix.client }}"
           TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
+          rm -rf "$CLIENT_ARTIFACTS_DIR" || sudo rm -rf "$CLIENT_ARTIFACTS_DIR" || true
+          mkdir -p "$CLIENT_ARTIFACTS_DIR"
       
           ./run.sh \
             -T "$TEST_PATHS_JSON" \
@@ -149,15 +153,29 @@ jobs:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
       
-      - name: Zip trace
+      - name: Zip client outputs
+        if: always()
+        env:
+          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}', github.workspace, matrix.client) }}
+          CLIENT_ARTIFACTS_RELATIVE: ${{ format('client-artifacts/{0}', matrix.client) }}
+          OUTPUT_ZIP: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
         run: |
-          zip -r diag.zip /root/diagfiles
+          set -euo pipefail
+          rm -f "$OUTPUT_ZIP"
+          if [ -d "$CLIENT_ARTIFACTS_DIR" ] && [ "$(ls -A "$CLIENT_ARTIFACTS_DIR")" ]; then
+            zip -r "$OUTPUT_ZIP" "$CLIENT_ARTIFACTS_RELATIVE"
+          else
+            echo "No client outputs found in $CLIENT_ARTIFACTS_DIR"
+            mkdir -p client-artifacts-placeholder
+            zip -r "$OUTPUT_ZIP" client-artifacts-placeholder
+          fi
 
-      - name: Upload trace
+      - name: Upload client outputs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: diagfiles
-          path: diag.zip
+          name: client-outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
+          path: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
 
   combine-results:
     needs: build
