@@ -1127,23 +1127,38 @@ for run in $(seq 1 $RUNS); do
         continue
       fi
 
+      if [ -n "$WARMUP_FILE" ]; then
+        start_test_timer "warmup_${client}_${scenario_safe_name}_run_${run}"
+        if [ -f "$WARMUP_FILE" ]; then
+          echo "[INFO] Running warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$WARMUP_FILE\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
+          python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
+        else
+          echo "[WARN] Warmup file '$WARMUP_FILE' not found; skipping warmup."
+        fi
+        end_test_timer "warmup_${client}_${scenario_safe_name}_run_${run}"
+      fi
+
       base_prefix="${filename%-gas-value_*}"
       warmup_candidates=( "$WARMUP_OPCODES_PATH"/"$base_prefix"-gas-value_*.txt )
       warmup_path="${warmup_candidates[0]}"
 
-      if (( OPCODES_WARMUP_COUNT > 0 )) && [ -n "$WARMUP_FILE" ]; then
-        start_test_timer "opcodes_warmup_${client}_${filename}"
-        current_count="${warmup_run_counts[$warmup_path]:-0}"
-        if (( current_count >= OPCODES_WARMUP_COUNT )); then
-          echo ""
+      if (( OPCODES_WARMUP_COUNT > 0 )); then
+        if [ -f "$warmup_path" ]; then
+          start_test_timer "opcodes_warmup_${client}_${filename}"
+          current_count="${warmup_run_counts[$warmup_path]:-0}"
+          if (( current_count >= OPCODES_WARMUP_COUNT )); then
+            echo ""
+          else
+            for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
+              test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
+              echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+              python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+              warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
+            done
+            end_test_timer "opcodes_warmup_${client}_${filename}"
+          fi
         else
-          for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-            test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
-            echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
-            python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
-            warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
-          done
-          end_test_timer "opcodes_warmup_${client}_${filename}"
+          test_debug_log "No opcode warmup file found for prefix $base_prefix (expected $warmup_path)"
         fi
       fi
 
