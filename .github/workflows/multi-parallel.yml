@@ -148,6 +148,17 @@ jobs:
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+      
+      - name: Zip trace
+        run: |
+          zip -r diag.zip /root/diagfiles
+
+      - name: Upload trace
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagfiles
+          path: diag.zip
+
   combine-results:
     needs: build
     runs-on: ubuntu-latest
@@ -233,16 +244,6 @@ jobs:
         with:
           name: reports
           path: reports.zip
-
-      - name: Zip trace
-        run: |
-          zip -r diag.zip /root/diagfiles
-
-      - name: Upload trace
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagfiles
-          path: diag.zip
 
   populate-db:
     needs: combine-results
