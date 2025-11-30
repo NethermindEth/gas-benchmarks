@@ -1,12 +1,10 @@
 .PHONY: prepare_tools clean
 
 prepare_tools:
-
 	@if [ ! -d nethermind ]; then \
-		git clone https://github.com/NethermindEth/nethermind nethermind;\
-    git lfs pull
+		git clone https://github.com/NethermindEth/nethermind nethermind; \
+		cd nethermind && git lfs pull; \
 	fi
-
 	cd nethermind && git checkout e1857d7ca6613ccdc40973899290f565f367e235 && cd ..
 	dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release --property WarningLevel=0
 
