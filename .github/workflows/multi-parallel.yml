@@ -383,10 +383,11 @@ jobs:
         if: always()
         run: |
           mkdir -p extracted-results extracted-client-outputs
-          tar -czf all-traces.tar.gz -C extracted-results .
+          tar -cf all-traces.tar -C extracted-results .
           if [ -d extracted-client-outputs ] && find extracted-client-outputs -type f -print -quit | grep -q .; then
-            tar -rzf all-traces.tar.gz -C extracted-client-outputs .
+            tar -rf all-traces.tar -C extracted-client-outputs .
           fi
+          gzip -9 all-traces.tar
 
       - name: Create merged client outputs artifact
         if: always()
