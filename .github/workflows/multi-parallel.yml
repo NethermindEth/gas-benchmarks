@@ -367,16 +367,28 @@ jobs:
 
       - name: Extract client output files and free space
         run: |
-          mkdir -p extracted-client-outputs
+          set -euo pipefail
+          rm -rf merged-client-outputs
+          mkdir -p merged-client-outputs
           if find combined-client-outputs -name '*.zip' -print -quit | grep -q .; then
-            find combined-client-outputs -name '*.zip' -print0 | xargs -0 -n1 -P "$(nproc)" bash -lc '
-              set -euo pipefail
-              zipfile="$1"
+            while IFS= read -r -d '' zipfile; do
               tmpdir=$(mktemp -d)
               unzip -o -qq "$zipfile" -d "$tmpdir"
-              rsync -a "$tmpdir"/ extracted-client-outputs/
+              if [ -d "$tmpdir/client-artifacts" ]; then
+                for client_dir in "$tmpdir"/client-artifacts/*; do
+                  [ -d "$client_dir" ] || continue
+                  client_name=$(basename "$client_dir")
+                  dest="merged-client-outputs/client-artifacts/$client_name"
+                  mkdir -p "$dest"
+                  for subdir in "$client_dir"/*; do
+                    [ -d "$subdir" ] || continue
+                    rsync -a "$subdir"/ "$dest"/
+                  done
+                  find "$client_dir" -maxdepth 1 -type f -print0 | xargs -0 -I{} rsync -a "{}" "$dest"/ || true
+                done
+              fi
               rm -rf "$tmpdir" "$zipfile"
-            ' bash
+            done < <(find combined-client-outputs -name '*.zip' -print0)
           else
             echo "No client-output zip artifacts found under combined-client-outputs"
           fi
@@ -385,17 +397,25 @@ jobs:
       - name: Create merged traces artifact (all shards)
         if: always()
         run: |
-          mkdir -p extracted-results extracted-client-outputs
+          set -euo pipefail
+          rm -rf merged-artifacts
+          mkdir -p merged-artifacts
+
+          # Copy results as-is
           if find extracted-results -type f -print -quit | grep -q .; then
-            tar -cf all-traces.tar -C extracted-results .
+            rsync -a extracted-results/ merged-artifacts/
           else
-            echo "No results found; creating empty archive."
-            tar -cf all-traces.tar --files-from /dev/null
+            echo "No results found; merged artifact will contain only client outputs (if any)."
           fi
-          if [ -d extracted-client-outputs ] && find extracted-client-outputs -type f -print -quit | grep -q .; then
-            tar -rf all-traces.tar -C extracted-client-outputs .
+
+          # Flattened client outputs already staged in merged-client-outputs
+          if [ -d merged-client-outputs ] && find merged-client-outputs -type f -print -quit | grep -q .; then
+            rsync -a merged-client-outputs/ merged-artifacts/
+          else
+            echo "No client outputs found to merge."
           fi
-          gzip -9 all-traces.tar
+
+          tar -czf all-traces.tar.gz -C merged-artifacts .
 
       - name: Upload merged traces
         if: always()
@@ -476,7 +496,7 @@ jobs:
       - name: Cleanup merged artifacts workspace
         if: always()
         run: |
-          rm -rf combined-results combined-client-outputs extracted-results extracted-client-outputs reports reports.zip all-traces.tar.gz || true
+          rm -rf combined-results combined-client-outputs extracted-results extracted-client-outputs merged-artifacts reports reports.zip all-traces.tar.gz || true
 
   populate-db:
     needs: combine-results
