@@ -112,6 +112,7 @@ jobs:
       
           ./run.sh \
             -T "$TEST_PATHS_JSON" \
+            -X \
             -w "${{ github.event.inputs.warmup }}" \
             -c "$CLIENT" \
             -r 1 \
