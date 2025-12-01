@@ -315,6 +315,9 @@ jobs:
   combine-results:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -424,22 +427,12 @@ jobs:
 
       - name: Delete per-shard artifacts (results + client outputs)
         if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          # Remove only the per-shard artifacts now that merged artifacts are uploaded.
-          gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" --paginate \
-            | jq -r '.artifacts[] | "\(.id) \(.name)"' \
-            | while read -r art_id art_name; do
-                if [[ "$art_name" == results-* || "$art_name" == client-outputs-* ]]; then
-                  echo "Deleting artifact: $art_name (id=$art_id)"
-                  gh api -X DELETE "repos/${REPO}/actions/artifacts/${art_id}" >/dev/null
-                fi
-              done
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: |
+            results-*
+            client-outputs-*
+          failOnError: false
 
       - name: Process combined results
         run: |
