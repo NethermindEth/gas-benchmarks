@@ -284,6 +284,7 @@ jobs:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}.zip
           compression-level: 6
+          retention-days: 90
       
       - name: Zip client outputs
         if: always()
@@ -309,6 +310,7 @@ jobs:
           name: client-outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}
           path: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}.zip
           compression-level: 6
+          retention-days: 90
 
   combine-results:
     needs: build
@@ -402,6 +404,7 @@ jobs:
           name: reports
           path: reports.zip
           compression-level: 6
+          retention-days: 90
 
       - name: Generate download helper
         if: always()
@@ -436,6 +439,7 @@ jobs:
           name: artifact-download-helper
           path: artifact-download-helper
           compression-level: 6
+          retention-days: 90
 
       - name: Cleanup merged artifacts workspace
         if: always()
