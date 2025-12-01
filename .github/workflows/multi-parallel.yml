@@ -427,11 +427,12 @@ jobs:
 
       - name: Delete per-shard artifacts (results + client outputs)
         if: always()
-        uses: geekyeggo/delete-artifact@v2
+        uses: geekyeggo/delete-artifact@v4
         with:
           name: |
-            results-*
-            client-outputs-*
+            results-*-*-*
+            client-outputs-*-*-*
+          useGlob: true
           failOnError: false
 
       - name: Process combined results
