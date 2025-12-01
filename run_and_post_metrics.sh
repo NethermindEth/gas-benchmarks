@@ -39,6 +39,7 @@ CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
 LOOP_LIMIT=0
+PER_TEST_RESTARTS=false
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -239,6 +240,15 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=$value
       shift 2
       ;;
+    --per-test-restarts)
+      value=$(parse_bool "$2")
+      if [ "$value" = "invalid" ]; then
+        echo "Invalid value for --per-test-restarts: $2 (expected true/false)"
+        exit 1
+      fi
+      PER_TEST_RESTARTS=$value
+      shift 2
+      ;;
     --max-loops)
       LOOP_LIMIT="$2"
       shift 2
@@ -253,7 +263,7 @@ done
 
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --max-loops <number>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --per-test-restarts <true|false> --max-loops <number>]"
   exit 1
 fi
 
@@ -342,6 +352,10 @@ while true; do
 
   if [ "$RESTART_BEFORE_TESTING" = true ]; then
     RUN_CMD+=(-R true)
+  fi
+
+  if [ "$PER_TEST_RESTARTS" = true ]; then
+    RUN_CMD+=(-X)
   fi
 
   if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then
