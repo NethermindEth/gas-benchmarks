@@ -65,95 +65,95 @@ jobs:
           GENESIS: ${{ github.event.inputs.genesis }}
         run: |
           python3 - <<'PY'
-import json
-import math
-import os
-import pathlib
-import sys
+            import json
+            import math
+            import os
+            import pathlib
+            import sys
 
 
-def parse_positive_int(raw_value: str, name: str, default: int = 1) -> int:
-    try:
-        value = int(str(raw_value))
-    except ValueError:
-        print(f"::warning title=Invalid {name} input::{name} must be an integer; defaulting to {default}")
-        return default
-    if value < 1:
-        print(f"::warning title=Invalid {name} input::{name} must be >=1; defaulting to {default}")
-        return default
-    return value
+            def parse_positive_int(raw_value: str, name: str, default: int = 1) -> int:
+                try:
+                    value = int(str(raw_value))
+                except ValueError:
+                    print(f"::warning title=Invalid {name} input::{name} must be an integer; defaulting to {default}")
+                    return default
+                if value < 1:
+                    print(f"::warning title=Invalid {name} input::{name} must be >=1; defaulting to {default}")
+                    return default
+                return value
 
 
-runs = parse_positive_int(os.environ.get("RUNS", "1"), "runs")
-clients = [c.strip() for c in os.environ.get("CLIENTS", "").split(",") if c.strip()]
-requested_shards = parse_positive_int(os.environ.get("SHARDS", "1") or "1", "shards")
-test_path = os.environ.get("TEST_PATH", "").strip()
-genesis = os.environ.get("GENESIS", "").strip()
-matrix_cap = 256  # GitHub matrix include limit
+            runs = parse_positive_int(os.environ.get("RUNS", "1"), "runs")
+            clients = [c.strip() for c in os.environ.get("CLIENTS", "").split(",") if c.strip()]
+            requested_shards = parse_positive_int(os.environ.get("SHARDS", "1") or "1", "shards")
+            test_path = os.environ.get("TEST_PATH", "").strip()
+            genesis = os.environ.get("GENESIS", "").strip()
+            matrix_cap = 256  # GitHub matrix include limit
 
-if runs < 1:
-    print("::warning title=Invalid runs input::Runs must be >=1; defaulting to 1")
-    runs = 1
-if not clients:
-    print("::error title=No clients found::Client list is empty")
-    sys.exit(1)
-if runs * len(clients) > matrix_cap:
-    print(f"::error title=Matrix too large::runs x clients ({runs} x {len(clients)}) exceeds {matrix_cap}. Reduce inputs or run fewer clients.")
-    sys.exit(1)
-if not test_path:
-    print("::error title=Missing test path::Input 'test' is required")
-    sys.exit(1)
+            if runs < 1:
+                print("::warning title=Invalid runs input::Runs must be >=1; defaulting to 1")
+                runs = 1
+            if not clients:
+                print("::error title=No clients found::Client list is empty")
+                sys.exit(1)
+            if runs * len(clients) > matrix_cap:
+                print(f"::error title=Matrix too large::runs x clients ({runs} x {len(clients)}) exceeds {matrix_cap}. Reduce inputs or run fewer clients.")
+                sys.exit(1)
+            if not test_path:
+                print("::error title=Missing test path::Input 'test' is required")
+                sys.exit(1)
 
-path = pathlib.Path(test_path)
-tests = []
-if path.is_file():
-    tests = [str(path)]
-elif path.is_dir():
-    tests = [str(p) for p in sorted(path.rglob("*.txt")) if p.is_file()]
-else:
-    print(f"::error title=Invalid test path::Test path not found: {test_path}")
-    sys.exit(1)
+            path = pathlib.Path(test_path)
+            tests = []
+            if path.is_file():
+                tests = [str(path)]
+            elif path.is_dir():
+                tests = [str(p) for p in sorted(path.rglob("*.txt")) if p.is_file()]
+            else:
+                print(f"::error title=Invalid test path::Test path not found: {test_path}")
+                sys.exit(1)
 
-if not tests:
-    print(f"::error title=No tests found::No test files discovered under {test_path}")
-    sys.exit(1)
+            if not tests:
+                print(f"::error title=No tests found::No test files discovered under {test_path}")
+                sys.exit(1)
 
-max_shards_allowed = max(1, matrix_cap // (runs * max(len(clients), 1)))
-shard_count = max(1, min(requested_shards, max_shards_allowed, len(tests)))
+            max_shards_allowed = max(1, matrix_cap // (runs * max(len(clients), 1)))
+            shard_count = max(1, min(requested_shards, max_shards_allowed, len(tests)))
 
-chunk_size = math.ceil(len(tests) / shard_count)
-shards = []
-for idx in range(shard_count):
-    shard_tests = tests[idx * chunk_size : (idx + 1) * chunk_size]
-    if not shard_tests:
-        continue
-    shard_label = f"shard-{idx + 1:03d}-of-{shard_count:03d}"
-    shards.append(
-        {
-            "shard_index": idx + 1,
-            "shard_total": shard_count,
-            "shard_label": shard_label,
-            "tests_json": json.dumps([{"path": t, "genesis": genesis} for t in shard_tests]),
-        }
-    )
+            chunk_size = math.ceil(len(tests) / shard_count)
+            shards = []
+            for idx in range(shard_count):
+                shard_tests = tests[idx * chunk_size : (idx + 1) * chunk_size]
+                if not shard_tests:
+                    continue
+                shard_label = f"shard-{idx + 1:03d}-of-{shard_count:03d}"
+                shards.append(
+                    {
+                        "shard_index": idx + 1,
+                        "shard_total": shard_count,
+                        "shard_label": shard_label,
+                        "tests_json": json.dumps([{"path": t, "genesis": genesis} for t in shard_tests]),
+                    }
+                )
 
-matrix_include = []
-for run_idx in range(1, runs + 1):
-    for client in clients:
-        for shard in shards:
-            entry = {"run": str(run_idx), "client": client}
-            entry.update(shard)
-            matrix_include.append(entry)
+            matrix_include = []
+            for run_idx in range(1, runs + 1):
+                for client in clients:
+                    for shard in shards:
+                        entry = {"run": str(run_idx), "client": client}
+                        entry.update(shard)
+                        matrix_include.append(entry)
 
-matrix = json.dumps({"include": matrix_include})
-max_parallel = min(matrix_cap, len(matrix_include)) or 1
+            matrix = json.dumps({"include": matrix_include})
+            max_parallel = min(matrix_cap, len(matrix_include)) or 1
 
-with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-    fh.write(f"matrix={matrix}\n")
-    fh.write(f"max_parallel={max_parallel}\n")
+            with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+                fh.write(f"matrix={matrix}\n")
+                fh.write(f"max_parallel={max_parallel}\n")
 
-print(f"Sharding {len(tests)} tests into {len(shards)} shards; total jobs: {len(matrix_include)}.")
-PY
+            print(f"Sharding {len(tests)} tests into {len(shards)} shards; total jobs: {len(matrix_include)}.")
+          PY
 
   build:
     needs: set-matrix
