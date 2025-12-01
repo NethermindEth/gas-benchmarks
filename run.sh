@@ -37,6 +37,7 @@ declare -A ACTIVE_OVERLAY_WORKS
 declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
 declare -A RUNNING_CLIENTS
+declare -A TEST_FILE_SET
 SCRIPT_START_TIME=$(date +%s.%N)
 
 # Debug logging function
@@ -471,9 +472,53 @@ append_tests_for_path() {
   local base_path="$1"
   local genesis="$2"
 
+  add_test_file() {
+    local file="$1"
+    local gen="$2"
+    if [ -z "$file" ] || [ ! -f "$file" ]; then
+      return
+    fi
+    if [ -n "${TEST_FILE_SET["$file"]}" ]; then
+      return
+    fi
+    TEST_FILE_SET["$file"]=1
+    TEST_FILES+=("$file")
+    TEST_TO_GENESIS+=("$gen")
+  }
+
   if [ -f "$base_path" ]; then
-    TEST_FILES+=("$base_path")
-    TEST_TO_GENESIS+=("$genesis")
+    # If the provided file is inside a stateful testing folder, include its setup/testing/cleanup companions.
+    normalized="${base_path//\\/\/}"
+    if [[ "$normalized" == */testing/* ]]; then
+      scenario_dir=$(dirname "$base_path")
+      testing_dir=$(dirname "$scenario_dir")
+      root_dir=$(dirname "$testing_dir")
+      if is_stateful_directory "$root_dir"; then
+        scenario_idx=$(basename "$scenario_dir")
+        scenario_stem=$(basename "${base_path%.*}")
+
+        add_test_file "$root_dir/gas-bump.txt" "$genesis"
+        add_test_file "$root_dir/funding.txt" "$genesis"
+        add_test_file "$root_dir/setup-global-test.txt" "$genesis"
+
+        # Setup
+        add_test_file "$root_dir/setup/$scenario_idx/$scenario_stem.txt" "$genesis"
+        add_test_file "$root_dir/setup/$scenario_stem.txt" "$genesis"
+
+        # Main testing file
+        add_test_file "$base_path" "$genesis"
+
+        # Cleanup
+        add_test_file "$root_dir/cleanup/$scenario_idx/$scenario_stem.txt" "$genesis"
+        add_test_file "$root_dir/cleanup/$scenario_stem.txt" "$genesis"
+
+        add_test_file "$root_dir/teardown-global-test.txt" "$genesis"
+        add_test_file "$root_dir/current-last-global-test.txt" "$genesis"
+        return
+      fi
+    fi
+
+    add_test_file "$base_path" "$genesis"
     return
   fi
 
