@@ -21,6 +21,9 @@ on:
       runs:
         description: 'Number of runs for the application'
         default: 1
+      shards:
+        description: 'Number of shards to split tests across (max effective matrix size is 256)'
+        default: 1
       images:
         description: 'JSON map of images for the clients'
         default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
@@ -42,33 +45,115 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      max_parallel: ${{ steps.set-matrix.outputs.max_parallel }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.x
+          python-version: '3.x'
 
-      - name: Set matrix dynamically
+      - name: Set matrix dynamically with sharded tests
         id: set-matrix
+        env:
+          RUNS: ${{ github.event.inputs.runs }}
+          CLIENTS: ${{ github.event.inputs.client }}
+          SHARDS: ${{ github.event.inputs.shards }}
+          TEST_PATH: ${{ github.event.inputs.test }}
+          GENESIS: ${{ github.event.inputs.genesis }}
         run: |
-          runs=${{ github.event.inputs.runs }}
-          clients="${{ github.event.inputs.client }}"
-          IFS=',' read -ra client_array <<< "$clients"
-          matrix_elements=()
-          
-          for ((i=1; i<=runs; i++)); do
-            for client in "${client_array[@]}"; do
-              element="{'run': '$i', 'client': '$client'}"
-              matrix_elements+=("$element")
-            done
-          done
-          
-          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
-          
-          echo "::set-output name=matrix::$matrix"
+          python3 - <<'PY'
+import json
+import math
+import os
+import pathlib
+import sys
+
+
+def parse_positive_int(raw_value: str, name: str, default: int = 1) -> int:
+    try:
+        value = int(str(raw_value))
+    except ValueError:
+        print(f"::warning title=Invalid {name} input::{name} must be an integer; defaulting to {default}")
+        return default
+    if value < 1:
+        print(f"::warning title=Invalid {name} input::{name} must be >=1; defaulting to {default}")
+        return default
+    return value
+
+
+runs = parse_positive_int(os.environ.get("RUNS", "1"), "runs")
+clients = [c.strip() for c in os.environ.get("CLIENTS", "").split(",") if c.strip()]
+requested_shards = parse_positive_int(os.environ.get("SHARDS", "1") or "1", "shards")
+test_path = os.environ.get("TEST_PATH", "").strip()
+genesis = os.environ.get("GENESIS", "").strip()
+matrix_cap = 256  # GitHub matrix include limit
+
+if runs < 1:
+    print("::warning title=Invalid runs input::Runs must be >=1; defaulting to 1")
+    runs = 1
+if not clients:
+    print("::error title=No clients found::Client list is empty")
+    sys.exit(1)
+if runs * len(clients) > matrix_cap:
+    print(f"::error title=Matrix too large::runs x clients ({runs} x {len(clients)}) exceeds {matrix_cap}. Reduce inputs or run fewer clients.")
+    sys.exit(1)
+if not test_path:
+    print("::error title=Missing test path::Input 'test' is required")
+    sys.exit(1)
+
+path = pathlib.Path(test_path)
+tests = []
+if path.is_file():
+    tests = [str(path)]
+elif path.is_dir():
+    tests = [str(p) for p in sorted(path.rglob("*.txt")) if p.is_file()]
+else:
+    print(f"::error title=Invalid test path::Test path not found: {test_path}")
+    sys.exit(1)
+
+if not tests:
+    print(f"::error title=No tests found::No test files discovered under {test_path}")
+    sys.exit(1)
+
+max_shards_allowed = max(1, matrix_cap // (runs * max(len(clients), 1)))
+shard_count = max(1, min(requested_shards, max_shards_allowed, len(tests)))
+
+chunk_size = math.ceil(len(tests) / shard_count)
+shards = []
+for idx in range(shard_count):
+    shard_tests = tests[idx * chunk_size : (idx + 1) * chunk_size]
+    if not shard_tests:
+        continue
+    shard_label = f"shard-{idx + 1:03d}-of-{shard_count:03d}"
+    shards.append(
+        {
+            "shard_index": idx + 1,
+            "shard_total": shard_count,
+            "shard_label": shard_label,
+            "tests_json": json.dumps([{"path": t, "genesis": genesis} for t in shard_tests]),
+        }
+    )
+
+matrix_include = []
+for run_idx in range(1, runs + 1):
+    for client in clients:
+        for shard in shards:
+            entry = {"run": str(run_idx), "client": client}
+            entry.update(shard)
+            matrix_include.append(entry)
+
+matrix = json.dumps({"include": matrix_include})
+max_parallel = min(matrix_cap, len(matrix_include)) or 1
+
+with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+    fh.write(f"matrix={matrix}\n")
+    fh.write(f"max_parallel={max_parallel}\n")
+
+print(f"Sharding {len(tests)} tests into {len(shards)} shards; total jobs: {len(matrix_include)}.")
+PY
 
   build:
     needs: set-matrix
@@ -78,9 +163,13 @@ jobs:
       # Consume the JSON matrix we just emitted
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
       fail-fast: false
+      max-parallel: ${{ fromJson(needs.set-matrix.outputs.max_parallel) }}
 
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
+      SHARD_LABEL: ${{ matrix.shard_label }}
+      SHARD_INDEX: ${{ matrix.shard_index }}
+      SHARD_TOTAL: ${{ matrix.shard_total }}
 
     steps:
       - name: Checkout code
@@ -101,12 +190,11 @@ jobs:
 
       - name: Run benchmarks for client=${{ matrix.client }}
         env:
-          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}', github.workspace, matrix.client) }}
+          TEST_PATHS_JSON: ${{ matrix.tests_json }}
+          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.shard_label) }}
         run: |
           GENESIS_FILENAME="${{ github.event.inputs.genesis }}"
-          TEST_PATH="${{ github.event.inputs.test }}"
           CLIENT="${{ matrix.client }}"
-          TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
           rm -rf "$CLIENT_ARTIFACTS_DIR" || sudo rm -rf "$CLIENT_ARTIFACTS_DIR" || true
           mkdir -p "$CLIENT_ARTIFACTS_DIR"
       
@@ -144,22 +232,24 @@ jobs:
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
           CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
+          CLEANED_SHARD=$(echo "${{ env.SHARD_LABEL }}" | tr -d '\n')
           echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
           echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
-          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
+          echo "CLEANED_SHARD=$CLEANED_SHARD" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}-${CLEANED_SHARD}.zip results
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
-          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}.zip
       
       - name: Zip client outputs
         if: always()
         env:
-          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}', github.workspace, matrix.client) }}
-          CLIENT_ARTIFACTS_RELATIVE: ${{ format('client-artifacts/{0}', matrix.client) }}
-          OUTPUT_ZIP: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.shard_label) }}
+          CLIENT_ARTIFACTS_RELATIVE: ${{ format('client-artifacts/{0}/{1}', matrix.client, matrix.shard_label) }}
+          OUTPUT_ZIP: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}.zip
         run: |
           set -euo pipefail
           rm -f "$OUTPUT_ZIP"
@@ -175,8 +265,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: client-outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
-          path: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+          name: client-outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}
+          path: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}.zip
 
   combine-results:
     needs: build
@@ -208,6 +298,19 @@ jobs:
         run: |
           mkdir -p extracted-results
           find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Create merged traces artifact (all shards)
+        if: always()
+        run: |
+          cd extracted-results
+          zip -r ../all-traces.zip .
+
+      - name: Upload merged traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-traces
+          path: all-traces.zip
 
       - name: Process combined results
         run: |
