@@ -22,6 +22,7 @@ USE_OVERLAY=false
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
+PER_TEST_RESTARTS=false
 
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
@@ -161,6 +162,77 @@ safe_remove_dir() {
       sudo rm -rf "$target" 2>/dev/null || sudo rm -rf "$target"
     fi
   fi
+}
+
+teardown_client_instance() {
+  local timer_label="$1"
+  if [ -n "$timer_label" ]; then
+    start_timer "$timer_label"
+  fi
+  dump_client_logs "$client_base"
+  docker_compose_down_for_client "$client_base"
+  unset RUNNING_CLIENTS["$client_base"]
+  if [ "$USE_OVERLAY" != true ]; then
+    safe_remove_dir "$data_dir"
+  fi
+  if drop_host_caches; then
+    debug_log "Dropped host caches"
+  else
+    debug_log "Skipped host cache drop (insufficient permissions)"
+  fi
+  if [ -n "$timer_label" ]; then
+    end_timer "$timer_label"
+  fi
+}
+
+launch_client_instance() {
+  local artifacts_dir="$1"
+
+  local volume_name="${client_base}_$(date +%s)_$RANDOM"
+  if [ "$USE_OVERLAY" = true ]; then
+    local overlay_root="${ACTIVE_OVERLAY_ROOTS[$client_base]}"
+    if [ -n "$overlay_root" ]; then
+      local overlay_token
+      overlay_token=$(basename "$overlay_root")
+      volume_name="${client_base}_${overlay_token}_$(date +%s)_$RANDOM"
+    fi
+  fi
+  volume_name=$(echo "$volume_name" | tr -cd '[:alnum:]._-')
+  if [ -z "$volume_name" ]; then
+    volume_name="${client_base}_volume"
+  fi
+
+  local setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
+  if [ -n "$NETWORK" ]; then
+    setup_cmd+=(--network "$NETWORK")
+  fi
+  if [ -z "$NETWORK" ] && [ -n "$genesis_path" ]; then
+    echo "Using custom genesis for $client: $genesis_path"
+    setup_cmd+=(--genesisPath "$genesis_path")
+  fi
+  setup_cmd+=(--volumeName "$volume_name")
+
+  echo "[INFO] Running setup_node command: ${setup_cmd[*]}"
+  if ! CLIENT_ARTIFACTS_DIR="$artifacts_dir" "${setup_cmd[@]}"; then
+    return 1
+  fi
+
+  if declare -f wait_for_rpc >/dev/null 2>&1; then
+    if ! wait_for_rpc "http://127.0.0.1:8545" 300; then
+      return 1
+    fi
+  else
+    sleep 5
+  fi
+
+  if [ "$computer_specs_written" = false ]; then
+    python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
+    cat results/computer_specs.txt
+    computer_specs_written=true
+  fi
+
+  RUNNING_CLIENTS["$client_base"]=1
+  return 0
 }
 
 is_stateful_directory() {
@@ -789,7 +861,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:F" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FX" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -807,7 +879,8 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:F" opt; do
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice]" >&2
+    X) PER_TEST_RESTARTS=true;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-X per_test_restarts]" >&2
        exit 1 ;;
   esac
 done
@@ -1004,7 +1077,29 @@ for run in $(seq 1 $RUNS); do
     fi
     mkdir -p "$client_artifacts_root"
 
+    if [ "$PER_TEST_RESTARTS" != true ]; then
+      run_artifacts_dir="$client_artifacts_root/run_${run}"
+      rm -rf "$run_artifacts_dir"
+      mkdir -p "$run_artifacts_dir"
+      if [ "$USE_OVERLAY" != true ]; then
+        safe_remove_dir "$data_dir"
+        mkdir -p "$data_dir"
+      fi
+      if ! launch_client_instance "$run_artifacts_dir"; then
+        echo "⚠️  Failed to start $client for run $run; skipping client." >&2
+        teardown_client_instance ""
+        if [ "$USE_OVERLAY" = true ]; then
+          cleanup_overlay_for_client "$client_base"
+          cleanup_stale_overlay_mounts
+        fi
+        continue
+      fi
+    fi
+
     declare -A warmup_run_counts=()
+    current_scenario=""
+    scenario_active=false
+    scenario_failed=false
 
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
@@ -1055,54 +1150,35 @@ for run in $(seq 1 $RUNS); do
         scenario_safe_name="scenario_${i}"
       fi
 
-      scenario_artifacts_dir="$client_artifacts_root/run_${run}_${scenario_safe_name}"
+      if [ "$PER_TEST_RESTARTS" = true ]; then
+        if [ "$scenario_safe_name" != "$current_scenario" ]; then
+          if [ "$scenario_active" = true ]; then
+            teardown_client_instance "teardown_${client}_${current_scenario}_run_${run}"
+            scenario_active=false
+          fi
+          current_scenario="$scenario_safe_name"
+          scenario_failed=false
 
-      rm -rf "$scenario_artifacts_dir"
-      mkdir -p "$scenario_artifacts_dir"
+          scenario_artifacts_dir="$client_artifacts_root/run_${run}_${scenario_safe_name}"
+          rm -rf "$scenario_artifacts_dir"
+          mkdir -p "$scenario_artifacts_dir"
 
-      if [ "$USE_OVERLAY" != true ]; then
-        safe_remove_dir "$data_dir"
-        mkdir -p "$data_dir"
-      fi
+          if [ "$USE_OVERLAY" != true ]; then
+            safe_remove_dir "$data_dir"
+            mkdir -p "$data_dir"
+          fi
 
-      volume_name="${client_base}_$(date +%s)_$RANDOM"
-      if [ "$USE_OVERLAY" = true ]; then
-        overlay_root="${ACTIVE_OVERLAY_ROOTS[$client_base]}"
-        if [ -n "$overlay_root" ]; then
-          overlay_token=$(basename "$overlay_root")
-          volume_name="${client_base}_${overlay_token}_$(date +%s)_$RANDOM"
+          if ! launch_client_instance "$scenario_artifacts_dir"; then
+            echo "⚠️  Failed to start $client for scenario $filename; skipping scenario." >&2
+            teardown_client_instance ""
+            scenario_active=false
+            scenario_failed=true
+            continue
+          fi
+          scenario_active=true
+        elif [ "$scenario_failed" = true ]; then
+          continue
         fi
-      fi
-      volume_name=$(echo "$volume_name" | tr -cd '[:alnum:]._-')
-      if [ -z "$volume_name" ]; then
-        volume_name="${client_base}_volume"
-      fi
-
-      setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
-      if [ -n "$NETWORK" ]; then
-        setup_cmd+=(--network "$NETWORK")
-      fi
-      if [ -z "$NETWORK" ] && [ -n "$genesis_path" ]; then
-        echo "Using custom genesis for $client: $genesis_path"
-        setup_cmd+=(--genesisPath "$genesis_path")
-      fi
-      setup_cmd+=(--volumeName "$volume_name")
-
-      RUNNING_CLIENTS["$client_base"]=1
-
-      echo "[INFO] Running setup_node command: ${setup_cmd[*]}"
-      CLIENT_ARTIFACTS_DIR="$scenario_artifacts_dir" "${setup_cmd[@]}"
-
-      if declare -f wait_for_rpc >/dev/null 2>&1; then
-        wait_for_rpc "http://127.0.0.1:8545" 300
-      else
-        sleep 5
-      fi
-
-      if [ "$computer_specs_written" = false ]; then
-        python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
-        cat results/computer_specs.txt
-        computer_specs_written=true
       fi
 
       if [ "$measured" = false ]; then
@@ -1111,19 +1187,6 @@ for run in $(seq 1 $RUNS); do
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
         echo ""
 
-        start_timer "teardown_${client}_${scenario_safe_name}_run_${run}"
-        dump_client_logs "$client_base"
-        docker_compose_down_for_client "$client_base"
-        unset RUNNING_CLIENTS["$client_base"]
-        if [ "$USE_OVERLAY" != true ]; then
-          safe_remove_dir "$data_dir"
-        fi
-        if drop_host_caches; then
-          debug_log "Dropped host caches"
-        else
-          debug_log "Skipped host cache drop (insufficient permissions)"
-        fi
-        end_timer "teardown_${client}_${scenario_safe_name}_run_${run}"
         continue
       fi
 
@@ -1175,20 +1238,22 @@ for run in $(seq 1 $RUNS); do
       end_test_timer "test_run_${client}_${filename}"
       echo "" # Line break after each test for logs clarity
 
-      start_timer "teardown_${client}_${scenario_safe_name}_run_${run}"
-      dump_client_logs "$client_base"
-      docker_compose_down_for_client "$client_base"
-      unset RUNNING_CLIENTS["$client_base"]
-      if [ "$USE_OVERLAY" != true ]; then
-        safe_remove_dir "$data_dir"
-      fi
       if drop_host_caches; then
         debug_log "Dropped host caches"
       else
         debug_log "Skipped host cache drop (insufficient permissions)"
       fi
-      end_timer "teardown_${client}_${scenario_safe_name}_run_${run}"
     done
+
+    if [ "$PER_TEST_RESTARTS" = true ]; then
+      if [ "$scenario_active" = true ]; then
+        teardown_client_instance "teardown_${client}_${current_scenario}_run_${run}"
+        scenario_active=false
+      fi
+      current_scenario=""
+    else
+      teardown_client_instance "teardown_${client}_run_${run}"
+    fi
 
     if [ "$USE_OVERLAY" = true ]; then
       cleanup_overlay_for_client "$client_base"

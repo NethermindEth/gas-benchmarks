@@ -38,6 +38,7 @@ SNAPSHOT_TEMPLATE=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
+LOOP_LIMIT=0
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -238,6 +239,10 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=$value
       shift 2
       ;;
+    --max-loops)
+      LOOP_LIMIT="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1"
       exit 1
@@ -248,7 +253,7 @@ done
 
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --max-loops <number>]"
   exit 1
 fi
 
@@ -285,7 +290,13 @@ if [ -n "$DEBUG_FILE" ]; then
 fi
 
 # Run commands in an infinite loop
+LOOP_COUNT=0
 while true; do
+  if [ "$LOOP_LIMIT" -gt 0 ] && [ "$LOOP_COUNT" -ge "$LOOP_LIMIT" ]; then
+    echo "[INFO] Reached loop limit ($LOOP_LIMIT); exiting."
+    break
+  fi
+  LOOP_COUNT=$((LOOP_COUNT + 1))
   # Start timing for this loop iteration
   LOOP_START_TIME=$(date +%s.%N)
   debug_log "Starting new loop iteration"
