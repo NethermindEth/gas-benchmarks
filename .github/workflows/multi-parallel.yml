@@ -133,33 +133,46 @@ jobs:
               print(f"::error title=Matrix too large::runs x clients ({runs} x {len(clients)}) exceeds {matrix_cap}. Reduce inputs or run fewer clients.")
               sys.exit(1)
 
-          shard_count = min(len(tests), max_shards_allowed)
-          base = len(tests) // shard_count
-          extra = len(tests) % shard_count
+          chunk_size = max(1, math.ceil(len(tests) / max_shards_allowed))
 
-          shards = []
+          shards_raw = []
           offset = 0
-          for idx in range(shard_count):
-              size = base + (1 if idx < extra else 0)
-              shard_tests = tests[offset : offset + size]
-              offset += size
+          shard_seq = 0
+          while offset < len(tests):
+              shard_seq += 1
+              shard_tests = tests[offset : offset + chunk_size]
+              offset += chunk_size
               if not shard_tests:
-                  continue
-              shard_label = f"shard-{idx + 1:03d}-of-{shard_count:03d}"
+                  break
               first_name = pathlib.Path(shard_tests[0]).stem
               if len(shard_tests) > 1:
                   test_label = f"{first_name}+{len(shard_tests)-1}more"
               else:
                   test_label = first_name
-              test_label = re.sub(r"[^A-Za-z0-9._-]+", "_", test_label)[:80] or shard_label
+              test_label = re.sub(r"[^A-Za-z0-9._-]+", "_", test_label)[:80] or f"shard-{shard_seq}"
+              artifact_name = f"{test_label}-{shard_seq:03d}"
+              shards_raw.append(
+                  {
+                      "shard_index": shard_seq,
+                      "artifact_label": test_label,
+                      "artifact_name": artifact_name,
+                      "shard_tests": shard_tests,
+                  }
+              )
+
+          shard_total = len(shards_raw)
+          shards = []
+          for item in shards_raw:
+              shard_label = f"shard-{item['shard_index']:03d}-of-{shard_total:03d}"
               shards.append(
                   {
-                      "shard_index": idx + 1,
-                      "shard_total": shard_count,
+                      "shard_index": item["shard_index"],
+                      "shard_total": shard_total,
                       "shard_label": shard_label,
-                      "artifact_label": test_label,
-                      "tests_json": json.dumps([{"path": t, "genesis": genesis} for t in shard_tests]),
-                      "tests_count": len(shard_tests),
+                      "artifact_label": item["artifact_label"],
+                      "artifact_name": item["artifact_name"],
+                      "tests_json": json.dumps([{"path": t, "genesis": genesis} for t in item["shard_tests"]]),
+                      "tests_count": len(item["shard_tests"]),
                   }
               )
 
@@ -194,6 +207,7 @@ jobs:
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
       TEST_LABEL: ${{ matrix.artifact_label }}
+      ARTIFACT_NAME: ${{ matrix.artifact_name }}
       SHARD_INDEX: ${{ matrix.shard_index }}
       SHARD_TOTAL: ${{ matrix.shard_total }}
 
@@ -217,7 +231,7 @@ jobs:
       - name: Run benchmarks for client=${{ matrix.client }}
         env:
           TEST_PATHS_JSON: ${{ matrix.tests_json }}
-          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.artifact_label) }}
+          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.artifact_name) }}
         run: |
           GENESIS_FILENAME="${{ github.event.inputs.genesis }}"
           CLIENT="${{ matrix.client }}"
@@ -258,7 +272,7 @@ jobs:
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
           CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
-          CLEANED_LABEL=$(echo "${{ env.TEST_LABEL }}" | tr -d '\n')
+          CLEANED_LABEL=$(echo "${{ env.ARTIFACT_NAME }}" | tr -d '\n')
           echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
           echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
           echo "CLEANED_LABEL=$CLEANED_LABEL" >> $GITHUB_ENV
@@ -274,8 +288,8 @@ jobs:
       - name: Zip client outputs
         if: always()
         env:
-          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.artifact_label) }}
-          CLIENT_ARTIFACTS_RELATIVE: ${{ format('client-artifacts/{0}/{1}', matrix.client, matrix.artifact_label) }}
+          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.artifact_name) }}
+          CLIENT_ARTIFACTS_RELATIVE: ${{ format('client-artifacts/{0}/{1}', matrix.client, matrix.artifact_name) }}
           OUTPUT_ZIP: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}.zip
         run: |
           set -euo pipefail
