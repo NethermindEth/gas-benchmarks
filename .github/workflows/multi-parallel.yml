@@ -397,31 +397,12 @@ jobs:
           fi
           gzip -9 all-traces.tar
 
-      - name: Create merged client outputs artifact
-        if: always()
-        run: |
-          if [ -d extracted-client-outputs ] && find extracted-client-outputs -type f -print -quit | grep -q .; then
-            tar -czf client-outputs-merged.tar.gz -C extracted-client-outputs .
-          else
-            echo "No client outputs to merge; creating empty placeholder archive."
-            tar -czf client-outputs-merged.tar.gz --files-from /dev/null
-          fi
-
       - name: Upload merged traces
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: all-traces
           path: all-traces.tar.gz
-          compression-level: 6
-          retention-days: 90
-
-      - name: Upload merged client outputs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: client-outputs-merged
-          path: client-outputs-merged.tar.gz
           compression-level: 6
           retention-days: 90
 
@@ -495,7 +476,7 @@ jobs:
       - name: Cleanup merged artifacts workspace
         if: always()
         run: |
-          rm -rf combined-results combined-client-outputs extracted-results extracted-client-outputs reports reports.zip all-traces.tar.gz client-outputs-merged.tar.gz || true
+          rm -rf combined-results combined-client-outputs extracted-results extracted-client-outputs reports reports.zip all-traces.tar.gz || true
 
   populate-db:
     needs: combine-results
