@@ -10,6 +10,12 @@
 #   --prometheus-endpoint   The Prometheus endpoint URL.
 #   --prometheus-username   The Prometheus basic auth username.
 #   --prometheus-password   The Prometheus basic auth password.
+#   --loki-endpoint         The Loki endpoint URL.
+#   --loki-username         The Loki basic auth username.
+#   --loki-password         The Loki basic auth password.
+#   --pyroscope-endpoint    The Pyroscope endpoint URL.
+#   --pyroscope-username    The Pyroscope basic auth username.
+#   --pyroscope-password    The Pyroscope basic auth password.
 #   --network      Network name forwarded to run.sh (e.g. mainnet)
 #   --snapshot-root Base directory for overlay snapshots (can include placeholders)
 #   --snapshot-template Optional template appended to snapshot root (supports <<CLIENT>> / <<NETWORK>>)
@@ -187,6 +193,30 @@ while [[ $# -gt 0 ]]; do
       PROMETHEUS_PASSWORD="$2"
       shift 2
       ;;
+    --loki-endpoint)
+      LOKI_ENDPOINT="$2"
+      shift 2
+      ;;
+    --loki-username)
+      LOKI_USERNAME="$2"
+      shift 2
+      ;;
+    --loki-password)
+      LOKI_PASSWORD="$2"
+      shift 2
+      ;;
+    --pyroscope-endpoint)
+      PYROSCOPE_ENDPOINT="$2"
+      shift 2
+      ;;
+    --pyroscope-username)
+      PYROSCOPE_USERNAME="$2"
+      shift 2
+      ;;
+    --pyroscope-password)
+      PYROSCOPE_PASSWORD="$2"
+      shift 2
+      ;;
     --test-paths-json)
       TEST_PATHS_JSON="$2"
       shift 2
@@ -248,7 +278,7 @@ done
 
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --loki-endpoint <loki_endpoint> --loki-username <loki_username> --loki-password <loki_password> --pyroscope-endpoint <pyroscope_endpoint> --pyroscope-username <pyroscope_username> --pyroscope-password <pyroscope_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
   exit 1
 fi
 
@@ -338,9 +368,15 @@ while true; do
   fi
 
   echo "[INFO] Executing benchmark command: ${RUN_CMD[*]}"
-  PROMETHEUS_ENDPOINT="$PROMETHEUS_ENDPOINT" \
-  PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" \
-  PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
+  PROMETHEUS_RW_URL="$PROMETHEUS_ENDPOINT" \
+  PROMETHEUS_RW_USERNAME="$PROMETHEUS_USERNAME" \
+  PROMETHEUS_RW_PASSWORD="$PROMETHEUS_PASSWORD" \
+  LOKI_RW_URL="$LOKI_ENDPOINT" \
+  LOKI_RW_USERNAME="$LOKI_USERNAME" \
+  LOKI_RW_PASSWORD="$LOKI_PASSWORD" \
+  PYROSCOPE_RW_URL="$PYROSCOPE_ENDPOINT" \
+  PYROSCOPE_RW_USERNAME="$PYROSCOPE_USERNAME" \
+  PYROSCOPE_RW_PASSWORD="$PYROSCOPE_PASSWORD" \
     "${RUN_CMD[@]}"
   end_timer "benchmark_testing"
 
