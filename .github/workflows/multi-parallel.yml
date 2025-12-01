@@ -343,11 +343,71 @@ jobs:
         run: |
           mkdir -p extracted-results
           if find combined-results -name '*.zip' -print -quit | grep -q .; then
-            find combined-results -name '*.zip' -print0 | xargs -0 -n1 -P "$(nproc)" sh -c 'zipfile="$1"; unzip -o "$zipfile" -d extracted-results && rm -f "$zipfile"' sh
+            find combined-results -name '*.zip' -print0 | xargs -0 -n1 -P "$(nproc)" bash -lc '
+              set -euo pipefail
+              zipfile="$1"
+              tmpdir=$(mktemp -d)
+              unzip -o -qq "$zipfile" -d "$tmpdir"
+              rsync -a "$tmpdir"/ extracted-results/
+              rm -rf "$tmpdir" "$zipfile"
+            ' bash
           else
             echo "No zip artifacts found under combined-results"
           fi
           rm -rf combined-results
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: combined-client-outputs
+          merge-multiple: true
+          pattern: "client-outputs-*"
+
+      - name: Extract client output files and free space
+        run: |
+          mkdir -p extracted-client-outputs
+          if find combined-client-outputs -name '*.zip' -print -quit | grep -q .; then
+            find combined-client-outputs -name '*.zip' -print0 | xargs -0 -n1 -P "$(nproc)" bash -lc '
+              set -euo pipefail
+              zipfile="$1"
+              tmpdir=$(mktemp -d)
+              unzip -o -qq "$zipfile" -d "$tmpdir"
+              rsync -a "$tmpdir"/ extracted-client-outputs/
+              rm -rf "$tmpdir" "$zipfile"
+            ' bash
+          else
+            echo "No client-output zip artifacts found under combined-client-outputs"
+          fi
+          rm -rf combined-client-outputs
+
+      - name: Create merged traces artifact (all shards)
+        if: always()
+        run: |
+          mkdir -p extracted-results extracted-client-outputs
+          tar -czf all-traces.tar.gz -C extracted-results . -C extracted-client-outputs .
+
+      - name: Create merged client outputs artifact
+        if: always()
+        run: |
+          mkdir -p extracted-client-outputs
+          tar -czf client-outputs-merged.tar.gz -C extracted-client-outputs .
+
+      - name: Upload merged traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-traces
+          path: all-traces.tar.gz
+          compression-level: 6
+          retention-days: 90
+
+      - name: Upload merged client outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-outputs-merged
+          path: client-outputs-merged.tar.gz
+          compression-level: 6
+          retention-days: 90
 
       - name: Process combined results
         run: |
@@ -444,7 +504,7 @@ jobs:
       - name: Cleanup merged artifacts workspace
         if: always()
         run: |
-          rm -rf combined-results extracted-results reports reports.zip artifact-download-helper || true
+          rm -rf combined-results combined-client-outputs extracted-results extracted-client-outputs reports reports.zip all-traces.tar.gz client-outputs-merged.tar.gz artifact-download-helper || true
 
   populate-db:
     needs: combine-results
