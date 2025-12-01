@@ -256,7 +256,7 @@ jobs:
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}.zip
-          compression-level: 0
+          compression-level: 6
       
       - name: Zip client outputs
         if: always()
@@ -281,7 +281,7 @@ jobs:
         with:
           name: client-outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}
           path: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}.zip
-          compression-level: 0
+          compression-level: 6
 
   combine-results:
     needs: build
@@ -317,15 +317,15 @@ jobs:
       - name: Create merged traces artifact (all shards)
         if: always()
         run: |
-          tar -cf all-traces.tar -C extracted-results .
+          tar -czf all-traces.tar.gz -C extracted-results .
 
       - name: Upload merged traces
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: all-traces
-          path: all-traces.tar
-          compression-level: 0
+          path: all-traces.tar.gz
+          compression-level: 6
 
       - name: Process combined results
         run: |
@@ -381,12 +381,12 @@ jobs:
         with:
           name: reports
           path: reports.zip
-          compression-level: 0
+          compression-level: 6
 
       - name: Cleanup merged artifacts workspace
         if: always()
         run: |
-          rm -rf combined-results extracted-results reports reports.zip all-traces.tar || true
+          rm -rf combined-results extracted-results reports reports.zip all-traces.tar.gz || true
 
   populate-db:
     needs: combine-results
