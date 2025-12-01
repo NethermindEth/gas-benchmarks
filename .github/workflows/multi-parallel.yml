@@ -383,13 +383,20 @@ jobs:
         if: always()
         run: |
           mkdir -p extracted-results extracted-client-outputs
-          tar -czf all-traces.tar.gz -C extracted-results . -C extracted-client-outputs .
+          tar -czf all-traces.tar.gz -C extracted-results .
+          if [ -d extracted-client-outputs ] && find extracted-client-outputs -type f -print -quit | grep -q .; then
+            tar -rzf all-traces.tar.gz -C extracted-client-outputs .
+          fi
 
       - name: Create merged client outputs artifact
         if: always()
         run: |
-          mkdir -p extracted-client-outputs
-          tar -czf client-outputs-merged.tar.gz -C extracted-client-outputs .
+          if [ -d extracted-client-outputs ] && find extracted-client-outputs -type f -print -quit | grep -q .; then
+            tar -czf client-outputs-merged.tar.gz -C extracted-client-outputs .
+          else
+            echo "No client outputs to merge; creating empty placeholder archive."
+            tar -czf client-outputs-merged.tar.gz --files-from /dev/null
+          fi
 
       - name: Upload merged traces
         if: always()
@@ -466,45 +473,10 @@ jobs:
           compression-level: 6
           retention-days: 90
 
-      - name: Generate download helper
-        if: always()
-        env:
-          RUN_ID: ${{ github.run_id }}
-          REPO: ${{ github.repository }}
-        run: |
-          mkdir -p artifact-download-helper
-          cat > artifact-download-helper/README.txt <<'EOF'
-          To download all artifacts from this run in one go, install GitHub CLI (gh) and run:
-
-            gh run download $GITHUB_RUN_ID -D artifacts
-
-          This will download every artifact into the "artifacts" folder. You can optionally pass a different run ID via the RUN_ID env var.
-          EOF
-          cat > artifact-download-helper/download_all_artifacts.sh <<'EOF'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          RUN_ID="${RUN_ID:-${GITHUB_RUN_ID:-}}"
-          if [ -z "$RUN_ID" ]; then
-            echo "RUN_ID or GITHUB_RUN_ID must be set" >&2
-            exit 1
-          fi
-          gh run download "$RUN_ID" -D artifacts "$@"
-          EOF
-          chmod +x artifact-download-helper/download_all_artifacts.sh
-
-      - name: Upload download helper
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifact-download-helper
-          path: artifact-download-helper
-          compression-level: 6
-          retention-days: 90
-
       - name: Cleanup merged artifacts workspace
         if: always()
         run: |
-          rm -rf combined-results combined-client-outputs extracted-results extracted-client-outputs reports reports.zip all-traces.tar.gz client-outputs-merged.tar.gz artifact-download-helper || true
+          rm -rf combined-results combined-client-outputs extracted-results extracted-client-outputs reports reports.zip all-traces.tar.gz client-outputs-merged.tar.gz || true
 
   populate-db:
     needs: combine-results
