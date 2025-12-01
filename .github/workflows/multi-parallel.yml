@@ -61,112 +61,125 @@ jobs:
           GENESIS: ${{ github.event.inputs.genesis }}
           FILTER: ${{ github.event.inputs.filter }}
         run: |
-            python3 <<'PY'
-            import json
-            import math
-            import os
-            import pathlib
-            import sys
+          python3 <<'PY'
+          import json
+          import math
+          import os
+          import pathlib
+          import sys
+          import re
 
 
-            def parse_positive_int(raw_value: str, name: str, default: int = 1) -> int:
-                try:
-                    value = int(str(raw_value))
-                except ValueError:
-                    print(f"::warning title=Invalid {name} input::{name} must be an integer; defaulting to {default}")
-                    return default
-                if value < 1:
-                    print(f"::warning title=Invalid {name} input::{name} must be >=1; defaulting to {default}")
-                    return default
-                return value
+          def parse_positive_int(raw_value: str, name: str, default: int = 1) -> int:
+              try:
+                  value = int(str(raw_value))
+              except ValueError:
+                  print(f"::warning title=Invalid {name} input::{name} must be an integer; defaulting to {default}")
+                  return default
+              if value < 1:
+                  print(f"::warning title=Invalid {name} input::{name} must be >=1; defaulting to {default}")
+                  return default
+              return value
 
 
-            runs = parse_positive_int(os.environ.get("RUNS", "1"), "runs")
-            clients = [c.strip() for c in os.environ.get("CLIENTS", "").split(",") if c.strip()]
-            test_path = os.environ.get("TEST_PATH", "").strip()
-            genesis = os.environ.get("GENESIS", "").strip()
-            filter_raw = os.environ.get("FILTER", "")
-            filters = [f.strip().lower() for f in filter_raw.split(",") if f.strip()]
-            matrix_cap = 256  # GitHub matrix include limit
+          runs = parse_positive_int(os.environ.get("RUNS", "1"), "runs")
+          clients = [c.strip() for c in os.environ.get("CLIENTS", "").split(",") if c.strip()]
+          test_path = os.environ.get("TEST_PATH", "").strip()
+          genesis = os.environ.get("GENESIS", "").strip()
+          filter_raw = os.environ.get("FILTER", "")
+          filters = [f.strip().lower() for f in filter_raw.split(",") if f.strip()]
+          matrix_cap = 256  # GitHub matrix include limit
 
-            if runs < 1:
-                print("::warning title=Invalid runs input::Runs must be >=1; defaulting to 1")
-                runs = 1
-            if not clients:
-                print("::error title=No clients found::Client list is empty")
-                sys.exit(1)
-            if runs * len(clients) > matrix_cap:
-                print(f"::error title=Matrix too large::runs x clients ({runs} x {len(clients)}) exceeds {matrix_cap}. Reduce inputs or run fewer clients.")
-                sys.exit(1)
-            if not test_path:
-                print("::error title=Missing test path::Input 'test' is required")
-                sys.exit(1)
+          if runs < 1:
+              print("::warning title=Invalid runs input::Runs must be >=1; defaulting to 1")
+              runs = 1
+          if not clients:
+              print("::error title=No clients found::Client list is empty")
+              sys.exit(1)
+          if runs * len(clients) > matrix_cap:
+              print(f"::error title=Matrix too large::runs x clients ({runs} x {len(clients)}) exceeds {matrix_cap}. Reduce inputs or run fewer clients.")
+              sys.exit(1)
+          if not test_path:
+              print("::error title=Missing test path::Input 'test' is required")
+              sys.exit(1)
 
-            path = pathlib.Path(test_path)
-            tests = []
-            if path.is_file():
-                tests = [str(path)]
-            elif path.is_dir():
-                tests = [str(p) for p in sorted(path.rglob("*.txt")) if p.is_file()]
-            else:
-                print(f"::error title=Invalid test path::Test path not found: {test_path}")
-                sys.exit(1)
+          path = pathlib.Path(test_path)
+          tests = []
+          if path.is_file():
+              tests = [str(path)]
+          elif path.is_dir():
+              tests = [str(p) for p in sorted(path.rglob("*.txt")) if p.is_file()]
+          else:
+              print(f"::error title=Invalid test path::Test path not found: {test_path}")
+              sys.exit(1)
 
-            if not tests:
-                print(f"::error title=No tests found::No test files discovered under {test_path}")
-                sys.exit(1)
+          if not tests:
+              print(f"::error title=No tests found::No test files discovered under {test_path}")
+              sys.exit(1)
 
-            if filters:
-                filtered_tests = []
-                for t in tests:
-                    name_l = pathlib.Path(t).name.lower()
-                    if any(pat in name_l for pat in filters):
-                        filtered_tests.append(t)
-                tests = filtered_tests
-                if not tests:
-                    print(f"::error title=Filter eliminated tests::No tests matched filter(s): {', '.join(filters)}")
-                    sys.exit(1)
+          if filters:
+              filtered_tests = []
+              for t in tests:
+                  name_l = pathlib.Path(t).name.lower()
+                  if any(pat in name_l for pat in filters):
+                      filtered_tests.append(t)
+              tests = filtered_tests
+              if not tests:
+                  print(f"::error title=Filter eliminated tests::No tests matched filter(s): {', '.join(filters)}")
+                  sys.exit(1)
 
-            max_shards_allowed = matrix_cap // (runs * len(clients))
-            if max_shards_allowed < 1:
-                print(f"::error title=Matrix too large::runs x clients ({runs} x {len(clients)}) exceeds {matrix_cap}. Reduce inputs or run fewer clients.")
-                sys.exit(1)
+          max_shards_allowed = matrix_cap // (runs * len(clients))
+          if max_shards_allowed < 1:
+              print(f"::error title=Matrix too large::runs x clients ({runs} x {len(clients)}) exceeds {matrix_cap}. Reduce inputs or run fewer clients.")
+              sys.exit(1)
 
-            shard_count = min(len(tests), max_shards_allowed)
-            chunk_size = math.ceil(len(tests) / shard_count)
+          shard_count = min(len(tests), max_shards_allowed)
+          base = len(tests) // shard_count
+          extra = len(tests) % shard_count
 
-            shards = []
-            for idx in range(shard_count):
-                shard_tests = tests[idx * chunk_size : (idx + 1) * chunk_size]
-                if not shard_tests:
-                    continue
-                shard_label = f"shard-{idx + 1:03d}-of-{shard_count:03d}"
-                shards.append(
-                    {
-                        "shard_index": idx + 1,
-                        "shard_total": shard_count,
-                        "shard_label": shard_label,
-                        "tests_json": json.dumps([{"path": t, "genesis": genesis} for t in shard_tests]),
-                    }
-                )
+          shards = []
+          offset = 0
+          for idx in range(shard_count):
+              size = base + (1 if idx < extra else 0)
+              shard_tests = tests[offset : offset + size]
+              offset += size
+              if not shard_tests:
+                  continue
+              shard_label = f"shard-{idx + 1:03d}-of-{shard_count:03d}"
+              first_name = pathlib.Path(shard_tests[0]).stem
+              if len(shard_tests) > 1:
+                  test_label = f"{first_name}+{len(shard_tests)-1}more"
+              else:
+                  test_label = first_name
+              test_label = re.sub(r"[^A-Za-z0-9._-]+", "_", test_label)[:80] or shard_label
+              shards.append(
+                  {
+                      "shard_index": idx + 1,
+                      "shard_total": shard_count,
+                      "shard_label": shard_label,
+                      "artifact_label": test_label,
+                      "tests_json": json.dumps([{"path": t, "genesis": genesis} for t in shard_tests]),
+                      "tests_count": len(shard_tests),
+                  }
+              )
 
-            matrix_include = []
-            for run_idx in range(1, runs + 1):
-                for client in clients:
-                    for shard in shards:
-                        entry = {"run": str(run_idx), "client": client}
-                        entry.update(shard)
-                        matrix_include.append(entry)
+          matrix_include = []
+          for run_idx in range(1, runs + 1):
+              for client in clients:
+                  for shard in shards:
+                      entry = {"run": str(run_idx), "client": client}
+                      entry.update(shard)
+                      matrix_include.append(entry)
 
-            matrix = json.dumps({"include": matrix_include})
-            max_parallel = min(matrix_cap, len(matrix_include)) or 1
+          matrix = json.dumps({"include": matrix_include})
+          max_parallel = min(matrix_cap, len(matrix_include)) or 1
 
-            with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-                fh.write(f"matrix={matrix}\n")
-                fh.write(f"max_parallel={max_parallel}\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"matrix={matrix}\n")
+              fh.write(f"max_parallel={max_parallel}\n")
 
-            print(f"Auto-sharded {len(tests)} tests into {len(shards)} shards (runs={runs}, clients={len(clients)}); total jobs: {len(matrix_include)}.")
-            PY
+          print(f"Auto-sharded {len(tests)} tests into {len(shards)} shards (runs={runs}, clients={len(clients)}); total jobs: {len(matrix_include)}.")
+          PY
 
   build:
     needs: set-matrix
@@ -180,7 +193,7 @@ jobs:
 
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
-      SHARD_LABEL: ${{ matrix.shard_label }}
+      TEST_LABEL: ${{ matrix.artifact_label }}
       SHARD_INDEX: ${{ matrix.shard_index }}
       SHARD_TOTAL: ${{ matrix.shard_total }}
 
@@ -204,7 +217,7 @@ jobs:
       - name: Run benchmarks for client=${{ matrix.client }}
         env:
           TEST_PATHS_JSON: ${{ matrix.tests_json }}
-          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.shard_label) }}
+          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.artifact_label) }}
         run: |
           GENESIS_FILENAME="${{ github.event.inputs.genesis }}"
           CLIENT="${{ matrix.client }}"
@@ -245,25 +258,25 @@ jobs:
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
           CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
-          CLEANED_SHARD=$(echo "${{ env.SHARD_LABEL }}" | tr -d '\n')
+          CLEANED_LABEL=$(echo "${{ env.TEST_LABEL }}" | tr -d '\n')
           echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
           echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
-          echo "CLEANED_SHARD=$CLEANED_SHARD" >> $GITHUB_ENV
-          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}-${CLEANED_SHARD}.zip results
+          echo "CLEANED_LABEL=$CLEANED_LABEL" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}-${CLEANED_LABEL}.zip results
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}
-          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}.zip
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}.zip
           compression-level: 6
       
       - name: Zip client outputs
         if: always()
         env:
-          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.shard_label) }}
-          CLIENT_ARTIFACTS_RELATIVE: ${{ format('client-artifacts/{0}/{1}', matrix.client, matrix.shard_label) }}
-          OUTPUT_ZIP: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}.zip
+          CLIENT_ARTIFACTS_DIR: ${{ format('{0}/client-artifacts/{1}/{2}', github.workspace, matrix.client, matrix.artifact_label) }}
+          CLIENT_ARTIFACTS_RELATIVE: ${{ format('client-artifacts/{0}/{1}', matrix.client, matrix.artifact_label) }}
+          OUTPUT_ZIP: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}.zip
         run: |
           set -euo pipefail
           rm -f "$OUTPUT_ZIP"
@@ -279,8 +292,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: client-outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}
-          path: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_SHARD }}.zip
+          name: client-outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}
+          path: outputs-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_LABEL }}.zip
           compression-level: 6
 
   combine-results:
@@ -319,50 +332,6 @@ jobs:
             echo "No zip artifacts found under combined-results"
           fi
           rm -rf combined-results
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: combined-client-outputs
-          merge-multiple: true
-          pattern: "client-outputs-*"
-
-      - name: Extract client output files and free space
-        run: |
-          mkdir -p extracted-client-outputs
-          if find combined-client-outputs -name '*.zip' -print -quit | grep -q .; then
-            find combined-client-outputs -name '*.zip' -print0 | xargs -0 -n1 -P "$(nproc)" sh -c 'zipfile="$1"; unzip -o "$zipfile" -d extracted-client-outputs && rm -f "$zipfile"' sh
-          else
-            echo "No client-output zip artifacts found under combined-client-outputs"
-          fi
-          rm -rf combined-client-outputs
-
-      - name: Create merged traces artifact (all shards)
-        if: always()
-        run: |
-          mkdir -p extracted-results extracted-client-outputs
-          tar -czf all-traces.tar.gz -C extracted-results . -C extracted-client-outputs .
-
-      - name: Create merged client outputs artifact
-        if: always()
-        run: |
-          mkdir -p extracted-client-outputs
-          tar -czf client-outputs-merged.tar.gz -C extracted-client-outputs .
-
-      - name: Upload merged traces
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: all-traces
-          path: all-traces.tar.gz
-          compression-level: 6
-
-      - name: Upload merged client outputs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: client-outputs-merged
-          path: client-outputs-merged.tar.gz
-          compression-level: 6
 
       - name: Process combined results
         run: |
@@ -420,10 +389,44 @@ jobs:
           path: reports.zip
           compression-level: 6
 
+      - name: Generate download helper
+        if: always()
+        env:
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p artifact-download-helper
+          cat > artifact-download-helper/README.txt <<'EOF'
+          To download all artifacts from this run in one go, install GitHub CLI (gh) and run:
+
+            gh run download $GITHUB_RUN_ID -D artifacts
+
+          This will download every artifact into the "artifacts" folder. You can optionally pass a different run ID via the RUN_ID env var.
+          EOF
+          cat > artifact-download-helper/download_all_artifacts.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          RUN_ID="${RUN_ID:-${GITHUB_RUN_ID:-}}"
+          if [ -z "$RUN_ID" ]; then
+            echo "RUN_ID or GITHUB_RUN_ID must be set" >&2
+            exit 1
+          fi
+          gh run download "$RUN_ID" -D artifacts "$@"
+          EOF
+          chmod +x artifact-download-helper/download_all_artifacts.sh
+
+      - name: Upload download helper
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-download-helper
+          path: artifact-download-helper
+          compression-level: 6
+
       - name: Cleanup merged artifacts workspace
         if: always()
         run: |
-          rm -rf combined-results combined-client-outputs extracted-results extracted-client-outputs reports reports.zip all-traces.tar.gz client-outputs-merged.tar.gz || true
+          rm -rf combined-results extracted-results reports reports.zip artifact-download-helper || true
 
   populate-db:
     needs: combine-results
