@@ -74,6 +74,10 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              '<th>N</th>\n'
                              '<th class=\"title\">Description</th>\n'
                              '<th>Start Time</th>\n'
+                             '<th>End Time</th>\n'
+                             f'<th onclick="sortTable(10, \'table_{client}\', true)" style="cursor: pointer;">Duration (ms) &uarr; &darr;</th>\n'
+                             f'<th onclick="sortTable(11, \'table_{client}\', true)" style="cursor: pointer;">FCU time (ms) &uarr; &darr;</th>\n'
+                             f'<th onclick="sortTable(12, \'table_{client}\', true)" style="cursor: pointer;">NP time (ms) &uarr; &darr;</th>\n'
                              '</tr>\n'
                              '</thread>\n'
                              '<tbody>\n')
@@ -88,7 +92,11 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                                  f'<td>{data[1]}</td>\n'
                                  f'<td>{data[6]}</td>\n'
                                  f'<td style="text-align:left;" >{data[7]}</td>\n'
-                                 f'<td>{data[8]}</td>\n</tr>\n')
+                                 f'<td>{data[8]}</td>\n'
+                                 f'<td>{data[9]}</td>\n'
+                                 f'<td>{data[10]}</td>\n'
+                                 f'<td>{data[11]}</td>\n'
+                                 f'<td>{data[12]}</td>\n</tr>\n')
         results_to_print += '\n'
         results_to_print += ('</table>\n'
                              '</tbody>\n')
@@ -153,7 +161,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
     print(formatted_html)
     if not os.path.exists('reports'):
         os.mkdir('reports')
-    with open(f'reports/index.html', 'w') as file:
+    with open('reports/index.html', 'w') as file:
         file.write(formatted_html)
 
     for client, gas_table in csv_table.items():
@@ -162,9 +170,9 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
             csvwriter = csv.writer(csvfile)
             csvwriter.writerow(
                 ['Title', 'Max (MGas/s)', 'p50 (MGas/s)', 'p95 (MGas/s)', 'p99 (MGas/s)', 'Min (MGas/s)', 'N',
-                 'Description', "Start Time"])
+                 'Description', "Start Time", "End Time", "Duration (ms)", "FCU time (ms)", "NP time (ms)"])
             for test_case, data in gas_table.items():
-                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8]])
+                csvwriter.writerow([data[0], data[2], data[3], data[4], data[5], data[1], data[6], data[7], data[8], data[9], data[10], data[11], data[12]])
 
 
 def main():
@@ -213,16 +221,31 @@ def main():
                     client_results[client][test_case_name][gas][method] = []
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
-                        responses, results, timestamp = utils.extract_response_and_result(results_paths, client, test_case_name,
+                        responses, results, timestamp, duration, fcu_duration, np_duration = utils.extract_response_and_result(results_paths, client, test_case_name,
                                                                                gas, run, method, fields)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
                         # print(test_case_name + " : " + str(timestamp))
                         if str(timestamp) != "0":
-                            client_results[client][test_case_name]["timestamp"] = utils.convert_dotnet_ticks_to_utc(timestamp)
+                            # Store raw timestamp in ticks for calculation, not converted string
+                            client_results[client][test_case_name]["timestamp_ticks"] = timestamp
+                            # Only store duration if non-zero to avoid overwriting valid values
+                            if duration != 0:
+                                client_results[client][test_case_name]["duration"] = duration
+                            if fcu_duration != 0:
+                                client_results[client][test_case_name]["fcu_duration"] = fcu_duration
+                            if np_duration != 0:
+                                client_results[client][test_case_name]["np_duration"] = np_duration
                         else:
-                            if "timestamp" not in str(client_results[client][test_case_name]):
-                                client_results[client][test_case_name]["timestamp"] = 0
+                            if "timestamp_ticks" not in client_results[client][test_case_name]:
+                                client_results[client][test_case_name]["timestamp_ticks"] = 0
+                        # Initialize duration to 0 only if not set yet
+                        if "duration" not in client_results[client][test_case_name]:
+                            client_results[client][test_case_name]["duration"] = 0
+                        if "fcu_duration" not in client_results[client][test_case_name]:
+                            client_results[client][test_case_name]["fcu_duration"] = 0
+                        if "np_duration" not in client_results[client][test_case_name]:
+                            client_results[client][test_case_name]["np_duration"] = 0
 
     gas_set = set()
     for test_case_name, test_case_gas in test_cases.items():
