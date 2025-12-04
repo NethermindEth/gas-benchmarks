@@ -839,13 +839,13 @@ def main():
         elif args.gas_benchmark_values:
             uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
         uv_cmd += [
-            #"--eoa-fund-amount-default", "3100000000000000000",
-            "--tx-wait-timeout", "30",
+            "--eoa-fund-amount-default", "3100000000000000000",
+            "--tx-wait-timeout", "300",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             "--skip-cleanup",
             args.test_path,
             "--",
-            "-m", "benchmark and repricing", "-n", "1",
+            "-m", "repricing", "-n", "1",
         ]
         if args.parameter_filter:
             uv_cmd.extend(["-k", args.parameter_filter])
