@@ -9,6 +9,7 @@ import pathlib
 import re
 import shutil
 import threading
+import subprocess
 import time
 import uuid
 from datetime import datetime
@@ -39,7 +40,21 @@ _ENGINE_HOST = _u.hostname or "127.0.0.1"
 _ENGINE_PORT = _u.port or (443 if (_u.scheme == "https") else 80)
 _ENGINE_PATH = _u.path or "/"
 
-_LOG_FILE = "/root/mitm_logs.log"
+_LOG_FILE_RAW = _CFG.get("mitm_log_path") or _CFG.get("log_file")
+_LOG_FILE_PATH = pathlib.Path(_LOG_FILE_RAW).expanduser() if _LOG_FILE_RAW else pathlib.Path("/root/mitm_logs.log")
+if not _LOG_FILE_PATH.is_absolute():
+    _LOG_FILE_PATH = _LOG_FILE_PATH.resolve()
+_LOG_FILE = str(_LOG_FILE_PATH)
+
+_MERGED_LOG_RAW = _CFG.get("merged_log_path")
+_MERGED_LOG_PATH = pathlib.Path(_MERGED_LOG_RAW).expanduser() if _MERGED_LOG_RAW else _LOG_FILE_PATH.with_name("mitm_nethermind.log")
+if not _MERGED_LOG_PATH.is_absolute():
+    _MERGED_LOG_PATH = _MERGED_LOG_PATH.resolve()
+
+_NETHERMIND_CONTAINER = _CFG.get("nethermind_container") or "eest-nethermind"
+_LIGHT_LOG = bool(_CFG.get("light_logs", True))
+_LIGHT_PREFIX_KEEP = ("[MITM]", "[NM]", "ERROR", "WARN", "overlay", "PAUSE", "RESUME")
+_NM_LAST_TS: Optional[str] = None
 
 # Quiet period before producing a block (seconds)
 QUIET_SECONDS: float = 0.1
@@ -154,13 +169,70 @@ _CURRENT_LAST_FILE = _PAYLOADS_DIR / "current-last-global-test.txt"
 # Utilities
 # ---------------------------------------------------------------------------
 
-def _log(msg: str) -> None:
+def _append_lines(path: pathlib.Path, lines: List[str]) -> None:
     try:
-        with open(_LOG_FILE, "a", encoding="utf-8") as f:
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-            f.write(f"{ts} {msg}\n")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            for ln in lines:
+                f.write(ln + "\n")
     except Exception:
         pass
+
+
+def _now_ts() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+
+def _log(msg: str, *, to_merged: bool = False) -> None:
+    try:
+        if _LIGHT_LOG and not to_merged:
+            if not msg.startswith(_LIGHT_PREFIX_KEEP):
+                return
+        line = f"{_now_ts()} {msg}"
+        _append_lines(_LOG_FILE_PATH, [line])
+        if to_merged:
+            _append_lines(_MERGED_LOG_PATH, [line])
+    except Exception:
+        pass
+
+
+def _capture_nethermind_logs() -> List[str]:
+    global _NM_LAST_TS
+    since_args: List[str] = ["--since", _NM_LAST_TS] if _NM_LAST_TS else ["--tail", "200"]
+    try:
+        cp = subprocess.run(
+            ["docker", "logs", "--timestamps", *since_args, _NETHERMIND_CONTAINER],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        if cp.returncode != 0:
+            _log(f"[NM] docker logs rc={cp.returncode} out={cp.stdout[-200:]} err={cp.stderr or ''}")
+            return []
+        lines = [ln for ln in cp.stdout.splitlines() if ln.strip()]
+        if lines:
+            first = lines[-1]
+            ts_part = first.split(" ", 1)[0]
+            if ts_part:
+                _NM_LAST_TS = ts_part
+        return lines
+    except Exception as e:
+        _log(f"[NM] docker logs error: {e}")
+        return []
+
+
+def _emit_newpayload_event(exec_payload: Dict[str, Any], parent_hash: str) -> None:
+    block_hash = exec_payload.get("blockHash") or "unknown"
+    txs = exec_payload.get("transactions") or []
+    summary = f"[MITM][NP] block={block_hash} parent={parent_hash} txs={len(txs)}"
+    _log(summary, to_merged=True)
+
+    nm_lines = _capture_nethermind_logs()
+    if nm_lines:
+        ts_prefix = _now_ts()
+        prefixed = [f"{ts_prefix} [NM] {ln}" for ln in nm_lines]
+        _append_lines(_MERGED_LOG_PATH, prefixed)
 
 
 def _http_post_json(url: str, obj: Any, timeout: int = 90, headers: Optional[Dict[str, str]] = None) -> Any:
@@ -197,24 +269,27 @@ def _engine(method: str, params: List[Any]) -> Any:
     token = _jwt_from_file()
     body = {"jsonrpc": "2.0", "id": int(time.time()), "method": method, "params": params}
 
-    # Log with redacted Authorization
-    eng_hdrs = {"Content-Type": "application/json", "Authorization": "Bearer <redacted>"}
-    _log(
-        f"REQ POST {_ENGINE_HOST}:{_ENGINE_PORT}{_ENGINE_PATH} "
-        f"headers={json.dumps(eng_hdrs)} body_preview={json.dumps(body)}"
-    )
+    if not _LIGHT_LOG:
+        # Log with redacted Authorization
+        eng_hdrs = {"Content-Type": "application/json", "Authorization": "Bearer <redacted>"}
+        _log(
+            f"REQ POST {_ENGINE_HOST}:{_ENGINE_PORT}{_ENGINE_PATH} "
+            f"headers={json.dumps(eng_hdrs)} body_preview={json.dumps(body)}"
+        )
 
     j = _http_post_json(ENGINE_URL, body, timeout=90, headers={"Authorization": f"Bearer {token}"})
-    try:
-        _log(
-            f"RESP POST {_ENGINE_HOST}:{_ENGINE_PORT}{_ENGINE_PATH} "
-            f"status=200 headers={json.dumps({'Content-Type':'application/json'})} "
-            f"body_preview={json.dumps(j)}"
-        )
-    except Exception:
-        _log(f"RESP POST {_ENGINE_HOST}:{_ENGINE_PORT}{_ENGINE_PATH} status=200 <non-json>")
+    if not _LIGHT_LOG:
+        try:
+            _log(
+                f"RESP POST {_ENGINE_HOST}:{_ENGINE_PORT}{_ENGINE_PATH} "
+                f"status=200 headers={json.dumps({'Content-Type':'application/json'})} "
+                f"body_preview={json.dumps(j)}"
+            )
+        except Exception:
+            _log(f"RESP POST {_ENGINE_HOST}:{_ENGINE_PORT}{_ENGINE_PATH} status=200 <non-json>")
 
     if "error" in j:
+        _log(f"ERROR engine call {method} failed: {j['error']}")
         raise RuntimeError(str(j["error"]))
 
     return j["result"]
@@ -525,6 +600,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         }
 
         _engine("engine_newPayloadV4", [exec_payload, [], parent_hash, []])
+        _emit_newpayload_event(exec_payload, parent_hash)
 
         if file_base == "global-setup":
             # keep anchor update logic for historical behavior
@@ -918,6 +994,7 @@ def request(flow: http.HTTPFlow) -> None:
     start_time = perf_counter()
     _wait_for_resume()
 
+    body_text = ""
     try:
         hdrs = {k: str(v) for k, v in flow.request.headers.items()}
         start_parse = perf_counter()
@@ -927,16 +1004,18 @@ def request(flow: http.HTTPFlow) -> None:
             body_text = (
                 flow.request.content[:4096].decode("utf-8", errors="ignore") if flow.request.content else ""
             )
-        _log(
-            f"REQ POST {flow.request.host}:{flow.request.port}{flow.request.path} "
-            f"headers={json.dumps(hdrs)} body_preview={body_text[:2048]}"
-        )
+        if not _LIGHT_LOG:
+            _log(
+                f"REQ POST {flow.request.host}:{flow.request.port}{flow.request.path} "
+                f"headers={json.dumps(hdrs)} body_preview={body_text[:2048]}"
+            )
     except Exception as e:
         _log(f"REQ log error: {e}")
 
     if flow.request.method.upper() != "POST":
         duration = perf_counter() - start_time
-        _log(f"REQ non-POST handled in {duration:.4f}s")
+        if not _LIGHT_LOG:
+            _log(f"REQ non-POST handled in {duration:.4f}s")
         return
 
     try:
@@ -983,6 +1062,7 @@ def request(flow: http.HTTPFlow) -> None:
 
 def response(flow: http.HTTPFlow) -> None:
     start_time = perf_counter()
+    body_text = ""
     try:
         hdrs = {k: str(v) for k, v in flow.response.headers.items()}
         try:
@@ -991,11 +1071,12 @@ def response(flow: http.HTTPFlow) -> None:
             body_text = (
                 flow.response.content[:4096].decode("utf-8", errors="ignore") if flow.response.content else ""
             )
-        _log(
-            f"RESP POST {flow.request.host}:{flow.request.port}{flow.request.path} "
-            f"status={flow.response.status_code} headers={json.dumps(hdrs)} "
-            f"body_preview={body_text[:2048]}"
-        )
+        if not _LIGHT_LOG:
+            _log(
+                f"RESP POST {flow.request.host}:{flow.request.port}{flow.request.path} "
+                f"status={flow.response.status_code} headers={json.dumps(hdrs)} "
+                f"body_preview={body_text[:2048]}"
+            )
     except Exception as e:
         _log(f"RESP log error: {e}")
 
@@ -1008,7 +1089,8 @@ def response(flow: http.HTTPFlow) -> None:
 
     if flow.request.method.upper() != "POST":
         duration = perf_counter() - start_time
-        _log(f"RESP non-POST handled in {duration:.4f}s")
+        if not _LIGHT_LOG:
+            _log(f"RESP non-POST handled in {duration:.4f}s")
         return
 
     try:
