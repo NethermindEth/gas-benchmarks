@@ -233,6 +233,7 @@ def _emit_newpayload_event(exec_payload: Dict[str, Any], parent_hash: str) -> No
         ts_prefix = _now_ts()
         prefixed = [f"{ts_prefix} [NM] {ln}" for ln in nm_lines]
         _append_lines(_MERGED_LOG_PATH, prefixed)
+        _append_lines(_LOG_FILE_PATH, prefixed)
 
 
 def _http_post_json(url: str, obj: Any, timeout: int = 90, headers: Optional[Dict[str, str]] = None) -> Any:
