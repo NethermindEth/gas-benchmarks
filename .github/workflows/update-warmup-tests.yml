@@ -1,0 +1,73 @@
+name: Refresh Warmup Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare Nethermind tools
+        run: make prepare_tools
+
+      - name: Regenerate warmup tests
+        run: |
+          python3 make_warmup_tests.py -s eest_tests/ -d warmup-tests -g scripts/genesisfiles/geth/zkevmgenesis.json
+
+      - name: Detect repository changes
+        id: git-status
+        run: |
+          git status --short
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create pull request
+        if: steps.git-status.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: refresh warmup tests"
+          committer: GitHub Actions <actions@github.com>
+          author: GitHub Actions <actions@github.com>
+          title: "chore: refresh warmup tests"
+          body: |
+            Automated refresh of warmup payloads via `make_warmup_tests.py`.
+            - Sources: `warmup-tests`
+            - Trigger: `${{ github.event_name }}`
+          branch: chore/refresh-warmup-tests
+          delete-branch: true
+          add-paths: |
+            warmup-tests/**
+
+      - name: Nothing to commit
+        if: steps.git-status.outputs.changed == 'false'
+        run: echo "Warmup tests already up to date."

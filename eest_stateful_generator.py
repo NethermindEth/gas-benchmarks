@@ -511,6 +511,7 @@ def main():
     parser.add_argument("--rpc-seed-key", required=True)
     parser.add_argument("--rpc-address", required=True)
     parser.add_argument("--stubs-file", default=None, help="Path to address stubs JSON passed to execute remote")
+    parser.add_argument("--snapshot-dir", default="execution-data", help="Path to snapshot DB (default: execution-data)")
     parser.add_argument("--no-snapshot", action="store_true")
     parser.add_argument("--refresh-snapshot", action="store_true")
     parser.add_argument(
