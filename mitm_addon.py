@@ -53,7 +53,7 @@ if not _MERGED_LOG_PATH.is_absolute():
 
 _NETHERMIND_CONTAINER = _CFG.get("nethermind_container") or "eest-nethermind"
 _LIGHT_LOG = bool(_CFG.get("light_logs", True))
-_LIGHT_PREFIX_KEEP = ("[MITM]", "[NM]", "ERROR", "WARN", "overlay", "PAUSE", "RESUME")
+_LIGHT_PREFIX_KEEP = ("[MITM]", "[NM]", "[SENDRAW]", "ERROR", "WARN", "overlay", "PAUSE", "RESUME")
 _NM_LAST_TS: Optional[str] = None
 
 # Quiet period before producing a block (seconds)
@@ -929,12 +929,21 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
 
     meta, src = _extract_meta(headers, item)
 
+    scenario_name = "global-nophase"
+    phase_name = "none"
+
     # Recognize global no-phase: metadata present but no 'phase'
     if meta and not (meta.get("phase")):
         grp = ("global-nophase", "global-nophase", "global-nophase")
+        phase_name = "global-nophase"
         _log(f"intercept sendraw id={item.get('id')} grp={grp} via={src} (no-phase)")
     elif meta:
         grp = _derive_group_from_meta(meta)
+        phase_name = meta.get("phase") or "unknown"
+        try:
+            scenario_name = _scenario_name(grp[0], grp[1])
+        except Exception:
+            scenario_name = "unknown"
         _log(f"intercept sendraw id={item.get('id')} grp={grp} via={src}")
         # If phase is literally "unknown" → also append raw request to unknown.txt
         if (meta.get("phase") or "").lower() == "unknown":
@@ -950,6 +959,13 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         # Missing metadata → treat like global no-phase lifecycle (we'll route via setup/middle/teardown)
         grp = ("global-nophase", "global-nophase", "global-nophase")
         _log(f"intercept sendraw fallback→global-nophase id={item.get('id', 'noid')}")
+
+    # Always log sendRawTransaction IDs with meta summary (to both mitm and merged logs)
+    tx_index = (meta or {}).get("txIndex") if meta else None
+    _log(
+        f"[SENDRAW] id={item.get('id')} phase={phase_name} scenario={scenario_name} tx_index={tx_index} via={src}",
+        to_merged=True,
+    )
 
     force_prev: Optional[Tuple[Tuple[str, str, str], List[Tuple[str, Any]]]] = None
     with _GROUP_LOCK:
