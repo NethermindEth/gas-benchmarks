@@ -36,12 +36,16 @@ on:
       genesis:
         description: 'Genesis filename (used for all clients)'
         default: 'zkevmgenesis.json'
+      artifact_run_id:
+        description: 'Existing workflow run ID to reuse artifacts (skips building)'
+        default: ''
 
 jobs:
   set-matrix:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+    if: ${{ github.event.inputs.artifact_run_id == '' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -73,6 +77,7 @@ jobs:
   build:
     needs: set-matrix
     runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.artifact_run_id == '' }}
 
     strategy:
       # Consume the JSON matrix we just emitted
@@ -148,11 +153,30 @@ jobs:
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+
+  fetch-artifacts:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.artifact_run_id != '' }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download artifacts from existing run
+        run: |
+          mkdir -p combined-results
+          gh run download "${{ github.event.inputs.artifact_run_id }}" -R "${{ github.repository }}" -D combined-results
+
+      - name: Upload fetched artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetched-artifacts
+          path: combined-results
+
   combine-results:
-    needs: build
+    needs: [build, fetch-artifacts]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    if: ${{ needs.build.result == 'success' || needs.fetch-artifacts.result == 'success' || github.event.inputs.artifact_run_id != '' }}
 
     steps:
       - uses: actions/checkout@v4
