@@ -171,13 +171,12 @@ jobs:
           name: fetched-artifacts
           path: combined-results
 
-  combine-results:
-    needs: [build, fetch-artifacts]
+  combine-results-from-build:
+    needs: build
+    if: ${{ github.event.inputs.artifact_run_id == '' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    if: ${{ needs.build.result == 'success' || needs.fetch-artifacts.result == 'success' || github.event.inputs.artifact_run_id != '' }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -201,9 +200,7 @@ jobs:
       - name: Extract all result files
         run: |
           mkdir -p extracted-results
-          # Unzip any zipped artifacts (original pipeline case)
           find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
-          # If nothing was zipped (e.g., artifacts already extracted by gh), copy the first results folder we find
           if [ ! -d extracted-results/results ]; then
             mkdir -p extracted-results/results
             find combined-results -type d -name results -print0 | while IFS= read -r -d '' dir; do
@@ -268,8 +265,145 @@ jobs:
           name: reports
           path: reports.zip
 
-  populate-db:
-    needs: combine-results
+  combine-results-from-artifacts:
+    needs: fetch-artifacts
+    if: ${{ github.event.inputs.artifact_run_id != '' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: combined-results
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+          if [ ! -d extracted-results/results ]; then
+            mkdir -p extracted-results/results
+            find combined-results -type d -name results -print0 | while IFS= read -r -d '' dir; do
+              cp -R "$dir/." extracted-results/results/
+            done
+          fi
+          ls -R combined-results || true
+          ls -R extracted-results || true
+
+      - name: Process combined results
+        run: |
+          set -euo pipefail
+          RESULTS_ROOT="extracted-results/results"
+          if [ ! -d "$RESULTS_ROOT" ]; then
+            echo "Results directory not found: $RESULTS_ROOT"
+            exit 1
+          fi
+
+          mapfile -t CLIENTS < <(find "$RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
+          if [ "${#CLIENTS[@]}" -eq 0 ]; then
+            echo "No client result files detected under $RESULTS_ROOT; skipping report generation."
+            mkdir -p reports
+            exit 0
+          fi
+
+          CLIENT_LIST=$(
+            printf "%s\n" "${CLIENTS[@]}" \
+              | xargs -n1 basename \
+              | sed 's/_results_.*//' \
+              | sort -u \
+              | paste -sd',' -
+          )
+
+          if [ -z "$CLIENT_LIST" ]; then
+            echo "Unable to derive client list from results; skipping report generation."
+            mkdir -p reports
+            exit 0
+          fi
+
+          rm -rf reports
+          mkdir -p reports
+
+          RUNS="${{ github.event.inputs.runs }}"
+          TESTS="${{ github.event.inputs.test }}"
+          IMAGES='${{ github.event.inputs.images }}'
+
+          python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+          python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+
+      - name: Generate Report
+        if: ${{ github.event.inputs.txt_report == 'true' }}
+        run: |
+          python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} 
+
+      - name: Zip the results folder
+        run: |
+          zip -r reports.zip reports
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports.zip
+
+  populate-db-from-build:
+    needs: combine-results-from-build
+    if: ${{ github.event.inputs.artifact_run_id == '' }}
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install python dependencies for submodule
+        run: |
+          pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: combined-results # Download artifacts from previous jobs
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Populate Benchmark DB
+        run: |
+          python fill_postgres_db.py \
+            --db-host ${{ env.DB_HOST }} \
+            --db-port ${{ env.DB_PORT }} \
+            --db-user ${{ env.DB_USER }} \
+            --db-name monitoring \
+            --table-name gas_benchmarks_ci \
+            --db-password "${{ env.DB_PASSWORD }}" \
+            --log-level DEBUG \
+            --reports-dir 'extracted-results/reports/'
+
+  populate-db-from-artifacts:
+    needs: combine-results-from-artifacts
+    if: ${{ github.event.inputs.artifact_run_id != '' }}
     runs-on: ubuntu-latest
     env:
       DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
