@@ -50,6 +50,8 @@ services:
       - --Blocks.CachePrecompilesOnBlockProcessing=false
       - --FlatDb.Enabled=true
       - --FlatDb.ImportFromPruningTrieState=true
+      - --Db.FlatStateDbEnableFileWarmer=true
+      - --Db.FlatStorageDbEnableFileWarmer=true
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
     logging:
       driver: json-file
