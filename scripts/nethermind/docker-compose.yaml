@@ -48,6 +48,8 @@ services:
       - --Merge.TerminalTotalDifficulty=0
       - --Init.LogRules=Consensus.Processing.ProcessingStats:Debug
       - --Blocks.CachePrecompilesOnBlockProcessing=false
+      - --FlatDb.Enabled=true
+      - --FlatDb.ImportFromPruningTrieState=true
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
     logging:
       driver: json-file
