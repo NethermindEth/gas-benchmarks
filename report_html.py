@@ -13,6 +13,9 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
         computer_spec = text
+    image_overrides = json.loads(images)
+    with open('images.yaml', 'r') as f:
+        default_images = yaml.safe_load(f).get("images", {})
 
     results_to_print = ('<!DOCTYPE html\>' +
                         '<html lang="en">' +
@@ -52,15 +55,12 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
     csv_table = {}
     for client in clients:
         image_to_print = ''
-        image_json = json.loads(images)
-        if client in image_json:
-            if image_json[client] != 'default' and image_json[client] != '':
-                image_to_print = image_json[client]
+        if client in image_overrides:
+            if image_overrides[client] != 'default' and image_overrides[client] != '':
+                image_to_print = image_overrides[client]
         if image_to_print == '':
-            with open('images.yaml', 'r') as f:
-                el_images = yaml.safe_load(f)["images"]
             client_without_tag = client.split("_")[0]
-            image_to_print = el_images[client_without_tag]
+            image_to_print = default_images.get(client_without_tag, client_without_tag)
         results_to_print += f'<h1>{client.capitalize()} - {image_to_print} - Benchmarking Report</h1>' + '\n'
         results_to_print += f'<table id="table_{client}">'
         results_to_print += ('<thread>\n'
