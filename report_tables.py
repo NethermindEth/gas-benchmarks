@@ -9,18 +9,18 @@ import utils
 
 def get_table_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
     results_to_print = ''
+    image_overrides = json.loads(images)
+    with open('images.yaml', 'r') as f:
+        default_images = yaml.safe_load(f).get("images", {})
 
     for client in clients:
         image_to_print = ''
-        image_json = json.loads(images)
-        if client in image_json:
-            if image_json[client] != 'default' and image_json[client] != '':
-                image_to_print = image_json[client]
+        if client in image_overrides:
+            if image_overrides[client] != 'default' and image_overrides[client] != '':
+                image_to_print = image_overrides[client]
         if image_to_print == '':
-            with open('images.yaml', 'r') as f:
-                el_images = yaml.safe_load(f)["images"]
             client_without_tag = client.split("_")[0]
-            image_to_print = el_images[client_without_tag]
+            image_to_print = default_images.get(client_without_tag, client_without_tag)
         results_to_print += f'{client.capitalize()} - {image_to_print} - Benchmarking Report' + '\n'
         results_to_print += (center_string('Title',
                                            68) + '| Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description | Start time | End time | Duration (ms) | FCU time (ms) | NP time (ms)\n')
