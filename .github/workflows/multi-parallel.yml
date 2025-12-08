@@ -201,7 +201,17 @@ jobs:
       - name: Extract all result files
         run: |
           mkdir -p extracted-results
+          # Unzip any zipped artifacts (original pipeline case)
           find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+          # If nothing was zipped (e.g., artifacts already extracted by gh), copy the first results folder we find
+          if [ ! -d extracted-results/results ]; then
+            mkdir -p extracted-results/results
+            find combined-results -type d -name results -print0 | while IFS= read -r -d '' dir; do
+              cp -R "$dir/." extracted-results/results/
+            done
+          fi
+          ls -R combined-results || true
+          ls -R extracted-results || true
 
       - name: Process combined results
         run: |
