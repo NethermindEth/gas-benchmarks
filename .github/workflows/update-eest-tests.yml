@@ -1,0 +1,96 @@
+name: Refresh EEST Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      direct-commit:
+        description: 'Commit changes directly to the current branch instead of creating a PR'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Prepare Nethermind tools
+        run: make prepare_tools
+
+      - name: Refresh EEST tests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git lfs pull
+          rm -rf eest_tests
+          gh run download -R ethereum/execution-spec-tests -n fixtures_benchmark_fast --token ${{ env.GH_TOKEN }}
+          mv fixtures_benchmark_fast.tar.gz fixtures_benchmark.tar.gz
+          python3 capture_eest_tests.py -o eest_tests
+
+      - name: Detect repository changes
+        id: git-status
+        run: |
+          git status --short
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push changes directly
+        if: steps.git-status.outputs.changed == 'true' && github.event_name == 'workflow_dispatch' && inputs.direct-commit == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add eest_tests
+          git commit -m "chore: refresh EEST tests"
+          git push
+
+      - name: Create pull request
+        if: steps.git-status.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.direct-commit == 'true')
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: refresh EEST tests"
+          committer: GitHub Actions <actions@github.com>
+          author: GitHub Actions <actions@github.com>
+          title: "chore: refresh EEST tests"
+          body: |
+            Automated refresh of EEST tests via `capture_eest_tests.py`.
+            - Sources: `eest_tests`
+            - Trigger: `${{ github.event_name }}`
+          branch: chore/refresh-eest-tests
+          delete-branch: true
+          add-paths: |
+            eest_tests/**
+
+      - name: Nothing to commit
+        if: steps.git-status.outputs.changed == 'false'
+        run: echo "EEST tests already up to date."
