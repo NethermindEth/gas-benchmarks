@@ -48,7 +48,7 @@ jobs:
         run: |
           git lfs pull
           rm -rf eest_tests
-          gh run download -R ethereum/execution-spec-tests -n fixtures_benchmark_fast --token ${{ env.GH_TOKEN }}
+          gh run download -R ethereum/execution-spec-tests -n fixtures_benchmark_fast
           mv fixtures_benchmark_fast.tar.gz fixtures_benchmark.tar.gz
           python3 capture_eest_tests.py -o eest_tests
 
