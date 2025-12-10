@@ -60,7 +60,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mv fixtures_benchmark.tar.gz fixtures_benchmark.tar.gz
+          mv fixtures_benchmark_fast.tar.gz fixtures_benchmark.tar.gz
           python3 capture_eest_tests.py -o eest_tests
 
       - name: Detect repository changes
