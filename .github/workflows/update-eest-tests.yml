@@ -42,13 +42,24 @@ jobs:
       - name: Prepare Nethermind tools
         run: make prepare_tools
 
-      - name: Refresh EEST tests
+      - name: Pull and remove old EEST tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git lfs pull
           rm -rf eest_tests
+          
+      - name: Downlaod EEST fixtures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           gh run download -R ethereum/execution-spec-tests -n fixtures_benchmark_fast
+          ls -la
+
+      - name: Capture EEST tests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           mv fixtures_benchmark_fast.tar.gz fixtures_benchmark.tar.gz
           python3 capture_eest_tests.py -o eest_tests
 
