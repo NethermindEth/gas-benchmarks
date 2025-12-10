@@ -55,6 +55,7 @@ services:
       metrics_port: "8008"
       metrics_path: "/metrics"
       logs_enabled: "false"
+      traces_enabled: "true"
       instance: "${GA_METRICS_LABELS_INSTANCE}"
   alloy:
     environment:

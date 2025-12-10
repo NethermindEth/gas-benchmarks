@@ -56,34 +56,65 @@ discovery.relabel "filter_metrics_enabled" {
 }
 
 discovery.relabel "filter_logs_enabled" {
-    targets = discovery.docker.containers.targets
+  targets = discovery.docker.containers.targets
 
-    rule {
-        source_labels = ["__meta_docker_container_label_logs_enabled"]
-        regex         = "true"
-        action        = "keep"
-    }
+  rule {
+    source_labels = ["__meta_docker_container_label_logs_enabled"]
+    regex         = "true"
+    action        = "keep"
+  }
 
-    // Ensure logs from other containers are not included
-    rule {
-        source_labels = ["__meta_docker_container_label_instance"]
-        regex         = sys.env("METRICS_LABELS_INSTANCE")
-        action        = "keep"
-    }
+  // Ensure logs from other containers are not included
+  rule {
+    source_labels = ["__meta_docker_container_label_instance"]
+    regex         = sys.env("METRICS_LABELS_INSTANCE")
+    action        = "keep"
+  }
 
-    rule {
-        source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
-        target_label  = "app"
-        action        = "replace"
-    }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "app"
+    action        = "replace"
+  }
 
-    rule {
-        source_labels = ["__meta_docker_container_name"]
-        regex         = "/(.+)"
-        replacement   = "$1"
-        target_label  = "container"
-        action        = "replace"
-    }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.+)"
+    replacement   = "$1"
+    target_label  = "container"
+    action        = "replace"
+  }
+}
+
+discovery.relabel "filter_traces_enabled" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_traces_enabled"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  // Ensure logs from other containers are not included
+  rule {
+    source_labels = ["__meta_docker_container_label_instance"]
+    regex         = sys.env("METRICS_LABELS_INSTANCE")
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "app"
+    action        = "replace"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.+)"
+    replacement   = "$1"
+    target_label  = "container"
+    action        = "replace"
+  }
 }
 
 //######################################################################
@@ -98,11 +129,11 @@ prometheus.scrape "docker_containers" {
 
 prometheus.remote_write "remote" {
   endpoint {
-    url = sys.env("PROMETHEUS_REMOTE_WRITE_URL")
+    url = sys.env("PROMETHEUS_RW_URL")
 
     basic_auth {
-      username = sys.env("BASIC_AUTH_USERNAME")
-      password = sys.env("BASIC_AUTH_PASSWORD")
+      username = sys.env("PROMETHEUS_RW_USERNAME")
+      password = sys.env("PROMETHEUS_RW_PASSWORD")
     }
   }
   external_labels = {
@@ -136,13 +167,53 @@ loki.process "filter" {
 
 loki.write "remote" {
   endpoint {
-    url = sys.env("LOKI_REMOTE_WRITE_URL")
+    url = sys.env("LOKI_RW_URL")
 
     basic_auth {
-      username = sys.env("BASIC_AUTH_USERNAME")
-      password = sys.env("BASIC_AUTH_PASSWORD")
+      username = sys.env("LOKI_RW_USERNAME")
+      password = sys.env("LOKI_RW_PASSWORD")
     }
   }
+  external_labels = {
+    collector = "alloy-external",
+    project = sys.env("NETHERMIND_PROJECT"),
+    external_provider = sys.env("EXTERNAL_PROVIDER"),
+    instance = sys.env("METRICS_LABELS_INSTANCE"),
+    network = sys.env("METRICS_LABELS_NETWORK"),
+    testnet = sys.env("METRICS_LABELS_TESTNET"),
+    execution_client = sys.env("METRICS_LABELS_EXECUTION_CLIENT"),
+  }
+}
+
+
+//######################################################################
+//# TRACES
+//######################################################################
+// Receives profiles over HTTP from nodes that support it
+pyroscope.receive_http "default" {
+  http {
+    listen_address = sys.env("PYROSCOPE_LOCAL_ADDRESS")
+    listen_port = sys.env("PYROSCOPE_LOCAL_PORT")
+  }
+  forward_to = [pyroscope.write.remote.receiver]
+}
+
+// Collect epbf for configured containers
+pyroscope.epbf "containers_traces" {
+  targets = discovery.relabel.filter_traces_enabled.output
+  forward_to = [pyroscope.write.remote.receiver]
+}
+
+pyroscope.write "remote" {
+  endpoint {
+    url = sys.env("PYROSCOPE_RW_URL")
+
+    basic_auth {
+      username = sys.env("PYROSCOPE_RW_USERNAME")
+      password = sys.env("PYROSCOPE_RW_PASSWORD")
+    }
+  }
+
   external_labels = {
     collector = "alloy-external",
     project = sys.env("NETHERMIND_PROJECT"),
