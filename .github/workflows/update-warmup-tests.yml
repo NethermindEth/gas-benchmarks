@@ -38,7 +38,8 @@ jobs:
 
       - name: Regenerate warmup tests
         run: |
-          python3 make_warmup_tests.py -s eest_tests/ -d warmup-tests -g scripts/genesisfiles/geth/zkevmgenesis.json
+          git lfs pull
+          python3 make_warmup_tests.py -s eest_tests/ -d warmup-tests -g scripts/genesisfiles/geth/zkevmgenesis.json -p "*.txt"
 
       - name: Detect repository changes
         id: git-status
