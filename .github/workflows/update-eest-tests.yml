@@ -53,7 +53,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh run download -R ethereum/execution-spec-tests -n fixtures_benchmark_fast
+          gh run download -R ethereum/execution-specs -n fixtures_benchmark_fast
           ls -la
 
       - name: Capture EEST tests
