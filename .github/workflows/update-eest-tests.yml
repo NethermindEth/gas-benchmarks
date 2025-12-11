@@ -152,6 +152,12 @@ jobs:
           echo "Genesis files copied:"
           find scripts/genesisfiles -type f -name "zkevmgenesis.json" -exec ls -lh {} \;
 
+      - name: Track genesis files with Git LFS
+        run: |
+          git lfs track "scripts/genesisfiles/**/zkevmgenesis.json"
+          echo "Git LFS tracking updated:"
+          cat .gitattributes
+
       - name: Detect repository changes
         id: git-status
         run: |
@@ -169,7 +175,7 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add eest_tests scripts/genesisfiles
+          git add eest_tests scripts/genesisfiles .gitattributes
           git commit -m "chore: refresh EEST tests and genesis files"
           git push
 
@@ -185,13 +191,14 @@ jobs:
           body: |
             Automated refresh of EEST tests and genesis files.
             - EEST tests: `eest_tests/**`
-            - Genesis files: `scripts/genesisfiles/**/zkevmgenesis.json`
+            - Genesis files: `scripts/genesisfiles/**/zkevmgenesis.json` (tracked with Git LFS)
             - Trigger: `${{ github.event_name }}`
           branch: chore/refresh-eest-tests
           delete-branch: true
           add-paths: |
             eest_tests/**
             scripts/genesisfiles/**
+            .gitattributes
 
       - name: Nothing to commit
         if: steps.git-status.outputs.changed == 'false'
