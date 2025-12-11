@@ -162,6 +162,31 @@ jobs:
           git diff --stat scripts/genesisfiles/ || echo "No existing files modified"
           git ls-files --others --exclude-standard scripts/genesisfiles/ | grep zkevmgenesis.json || echo "No new files"
 
+      - name: Verify Git LFS and stage genesis files
+        run: |
+          echo "=== Git LFS Status ==="
+          git lfs version
+          cat .gitattributes
+          echo ""
+          
+          echo "=== Staging genesis files ==="
+          git add scripts/genesisfiles/
+          
+          echo "=== Verify LFS pointer files ==="
+          for file in scripts/genesisfiles/*/zkevmgenesis.json; do
+            if [ -f "$file" ]; then
+              echo "File: $file"
+              git ls-files -s "$file"
+              if git check-attr filter "$file" | grep -q "lfs"; then
+                echo "  ✓ LFS tracked"
+                head -n 3 "$file" | grep -q "git-lfs.github.com" && echo "  ✓ Is LFS pointer" || echo "  ✗ Not yet an LFS pointer (will be on commit)"
+              else
+                echo "  ✗ Not LFS tracked"
+              fi
+              echo ""
+            fi
+          done
+
       - name: Detect repository changes
         id: git-status
         run: |
@@ -179,9 +204,15 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+          git lfs install
           git add eest_tests scripts/genesisfiles
           git commit -m "chore: refresh EEST tests and genesis files"
+          git lfs push --all origin
           git push
+
+      - name: Configure Git LFS for PR
+        if: steps.git-status.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.direct-commit == 'true')
+        run: git lfs install
 
       - name: Create pull request
         if: steps.git-status.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.direct-commit == 'true')
