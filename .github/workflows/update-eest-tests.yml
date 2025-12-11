@@ -75,7 +75,7 @@ jobs:
           set -euxo pipefail
           archive=""
           for ext in tar.gz tgz zip; do
-            candidate=$(ls *benchmark_genesis_benchmark_fast*.$ext 2>/dev/null || true)
+            candidate=$(ls benchmark_genesis.$ext 2>/dev/null || true)
             if [ -n "$candidate" ]; then
               archive="$candidate"
               break
@@ -83,7 +83,7 @@ jobs:
           done
 
           if [ -z "$archive" ]; then
-            echo "No archive found matching *benchmark_genesis_benchmark_fast*.{tar.gz,tgz,zip}" >&2
+            echo "No archive found matching benchmark_genesis.{tar.gz,tgz,zip}" >&2
             exit 1
           fi
 
