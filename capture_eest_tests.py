@@ -256,6 +256,11 @@ def main() -> None:
         "--release-tag",
         help="Specific benchmark release tag (e.g. benchmark@v1.2.3). Uses latest if omitted.",
     )
+    parser.add_argument(
+        "--local-archive",
+        type=Path,
+        help="Path to local fixtures_benchmark.tar.gz archive (skips download)",
+    )
     args = parser.parse_args()
 
     flat_excludes: list[str] = []
@@ -272,25 +277,33 @@ def main() -> None:
         shutil.rmtree(args.output_dir)
     args.output_dir.mkdir(exist_ok=True)
 
-    release = select_release(args.release_tag)
-    if args.release_tag:
-        print(f"Using benchmark release: {args.release_tag}")
-    tag = release["tag_name"]
-    print(f"Selected benchmark release: {tag}")
-
-    cache_path = args.temp_dir / CACHE_FILE
-    if load_cached_tag(cache_path) == tag:
-        print(f"Release {tag} already processed. Skipping download.")
-    else:
-        asset = next((a for a in release["assets"] if a["name"] == ASSET_NAME), None)
-        if not asset:
-            raise RuntimeError(f"Asset {ASSET_NAME} missing in release {tag}")
-        archive = args.temp_dir / ASSET_NAME
-        print(f"Downloading {ASSET_NAME}...")
-        download_asset(asset["browser_download_url"], archive)
+    if args.local_archive:
+        archive = args.local_archive
+        if not archive.exists():
+            raise RuntimeError(f"Local archive not found: {archive}")
+        print(f"Using local archive: {archive}")
         print(f"Extracting to {args.temp_dir}...")
         extract_tarball(archive, args.temp_dir)
-        save_cached_tag(cache_path, tag)
+    else:
+        release = select_release(args.release_tag)
+        if args.release_tag:
+            print(f"Using benchmark release: {args.release_tag}")
+        tag = release["tag_name"]
+        print(f"Selected benchmark release: {tag}")
+
+        cache_path = args.temp_dir / CACHE_FILE
+        if load_cached_tag(cache_path) == tag:
+            print(f"Release {tag} already processed. Skipping download.")
+        else:
+            asset = next((a for a in release["assets"] if a["name"] == ASSET_NAME), None)
+            if not asset:
+                raise RuntimeError(f"Asset {ASSET_NAME} missing in release {tag}")
+            archive = args.temp_dir / ASSET_NAME
+            print(f"Downloading {ASSET_NAME}...")
+            download_asset(asset["browser_download_url"], archive)
+            print(f"Extracting to {args.temp_dir}...")
+            extract_tarball(archive, args.temp_dir)
+            save_cached_tag(cache_path, tag)
 
     bench_path = args.temp_dir / "fixtures" / "blockchain_tests_engine_x" / "benchmark"
     if not bench_path.exists():

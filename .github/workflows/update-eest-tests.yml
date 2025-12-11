@@ -26,7 +26,7 @@ jobs:
         with:
           lfs: true
           #ref: ${{ github.head_ref }}
-          #fetch-depth: 0
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -63,7 +63,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mv fixtures_benchmark_fast.tar.gz fixtures_benchmark.tar.gz
-          python3 capture_eest_tests.py -o eest_tests
+          python3 capture_eest_tests.py -o eest_tests --local-archive fixtures_benchmark.tar.gz
 
       - name: Download benchmark genesis artifact
         env:
