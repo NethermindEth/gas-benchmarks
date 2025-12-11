@@ -63,6 +63,95 @@ jobs:
           mv fixtures_benchmark_fast.tar.gz fixtures_benchmark.tar.gz
           python3 capture_eest_tests.py -o eest_tests
 
+      - name: Download benchmark genesis artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download -R ethereum/execution-specs -n benchmark_genesis_benchmark_fast
+          ls -la
+
+      - name: Extract benchmark genesis artifact
+        run: |
+          set -euxo pipefail
+          archive=""
+          for ext in tar.gz tgz zip; do
+            candidate=$(ls *benchmark_genesis_benchmark_fast*.$ext 2>/dev/null || true)
+            if [ -n "$candidate" ]; then
+              archive="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$archive" ]; then
+            echo "No archive found matching *benchmark_genesis_benchmark_fast*.{tar.gz,tgz,zip}" >&2
+            exit 1
+          fi
+
+          echo "Extracting: $archive"
+          case "$archive" in
+            *.tar.gz|*.tgz)
+              tar -xzf "$archive"
+              ;;
+            *.zip)
+              unzip -o "$archive"
+              ;;
+          esac
+          
+          echo "Contents after extraction:"
+          ls -la
+
+      - name: Find largest genesis directory
+        id: genesis-dir
+        run: |
+          set -euxo pipefail
+          
+          # Check for genesis directory in possible locations
+          GENESIS_ROOT=""
+          if [ -d "genesis" ]; then
+            GENESIS_ROOT="genesis"
+          elif [ -d "artifacts/genesis" ]; then
+            GENESIS_ROOT="artifacts/genesis"
+          else
+            echo "Genesis directory not found in expected locations (genesis/ or artifacts/genesis/)" >&2
+            exit 1
+          fi
+          
+          echo "Using genesis root: $GENESIS_ROOT"
+          ls -la "$GENESIS_ROOT"
+
+          LARGEST_DIR=$(du -sh "$GENESIS_ROOT"/* | sort -hr | head -n1 | awk '{print $2}')
+          echo "Largest genesis directory: $LARGEST_DIR"
+          echo "dir=$LARGEST_DIR" >> "$GITHUB_OUTPUT"
+          ls -la "$LARGEST_DIR"
+
+      - name: Copy genesis files to scripts/genesisfiles
+        run: |
+          set -euxo pipefail
+          LARGEST_DIR="${{ steps.genesis-dir.outputs.dir }}"
+          
+          for client_dir in "$LARGEST_DIR"/*; do
+            [ -d "$client_dir" ] || continue
+            client=$(basename "$client_dir")
+            echo "Processing client: $client"
+
+            mkdir -p "scripts/genesisfiles/$client"
+
+            # For nethermind, use chainspec.json
+            if [ "$client" = "nethermind" ] && [ -f "$client_dir/chainspec.json" ]; then
+              cp "$client_dir/chainspec.json" "scripts/genesisfiles/$client/zkevmgenesis.json"
+              echo "  Copied chainspec.json -> scripts/genesisfiles/$client/zkevmgenesis.json"
+            # For other clients, use genesis.json
+            elif [ -f "$client_dir/genesis.json" ]; then
+              cp "$client_dir/genesis.json" "scripts/genesisfiles/$client/zkevmgenesis.json"
+              echo "  Copied genesis.json -> scripts/genesisfiles/$client/zkevmgenesis.json"
+            else
+              echo "  No genesis file found for $client"
+            fi
+          done
+
+          echo "Genesis files copied:"
+          find scripts/genesisfiles -type f -name "zkevmgenesis.json" -exec ls -lh {} \;
+
       - name: Detect repository changes
         id: git-status
         run: |
@@ -80,8 +169,8 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add eest_tests
-          git commit -m "chore: refresh EEST tests"
+          git add eest_tests scripts/genesisfiles
+          git commit -m "chore: refresh EEST tests and genesis files"
           git push
 
       - name: Create pull request
@@ -89,19 +178,21 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: refresh EEST tests"
+          commit-message: "chore: refresh EEST tests and genesis files"
           committer: GitHub Actions <actions@github.com>
           author: GitHub Actions <actions@github.com>
-          title: "chore: refresh EEST tests"
+          title: "chore: refresh EEST tests and genesis files"
           body: |
-            Automated refresh of EEST tests via `capture_eest_tests.py`.
-            - Sources: `eest_tests`
+            Automated refresh of EEST tests and genesis files.
+            - EEST tests: `eest_tests/**`
+            - Genesis files: `scripts/genesisfiles/**/zkevmgenesis.json`
             - Trigger: `${{ github.event_name }}`
           branch: chore/refresh-eest-tests
           delete-branch: true
           add-paths: |
             eest_tests/**
+            scripts/genesisfiles/**
 
       - name: Nothing to commit
         if: steps.git-status.outputs.changed == 'false'
-        run: echo "EEST tests already up to date."
+        run: echo "EEST tests and genesis files already up to date."
