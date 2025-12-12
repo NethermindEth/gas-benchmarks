@@ -202,10 +202,13 @@ jobs:
         id: git-status
         run: |
           git status --short
-          if [[ -n "$(git status --porcelain)" ]]; then
+          # Only check for changes in eest_tests and scripts/genesisfiles
+          if [[ -n "$(git status --porcelain eest_tests scripts/genesisfiles 2>/dev/null)" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected in eest_tests or scripts/genesisfiles"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes in eest_tests or scripts/genesisfiles"
           fi
 
       - name: Commit and push changes directly
@@ -217,6 +220,13 @@ jobs:
           git config user.email "actions@github.com"
           git lfs install
           git add eest_tests scripts/genesisfiles
+          
+          # Only commit if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit after staging"
+            exit 0
+          fi
+          
           git commit -m "chore: refresh EEST tests and genesis files"
           git lfs push --all origin
           git push
