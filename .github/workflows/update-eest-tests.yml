@@ -142,6 +142,13 @@ jobs:
             if [ "$client" = "nethermind" ] && [ -f "$client_dir/chainspec.json" ]; then
               cp "$client_dir/chainspec.json" "scripts/genesisfiles/$client/zkevmgenesis.json"
               echo "  Copied chainspec.json -> scripts/genesisfiles/$client/zkevmgenesis.json"
+            # For go-ethereum, copy to both go-ethereum and geth directories
+            elif [ "$client" = "go-ethereum" ] && [ -f "$client_dir/genesis.json" ]; then
+              cp "$client_dir/genesis.json" "scripts/genesisfiles/$client/zkevmgenesis.json"
+              echo "  Copied genesis.json -> scripts/genesisfiles/$client/zkevmgenesis.json"
+              mkdir -p "scripts/genesisfiles/geth"
+              cp "$client_dir/genesis.json" "scripts/genesisfiles/geth/zkevmgenesis.json"
+              echo "  Copied genesis.json -> scripts/genesisfiles/geth/zkevmgenesis.json"
             # For other clients, use genesis.json
             elif [ -f "$client_dir/genesis.json" ]; then
               cp "$client_dir/genesis.json" "scripts/genesisfiles/$client/zkevmgenesis.json"
