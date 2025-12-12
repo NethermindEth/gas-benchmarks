@@ -7,7 +7,7 @@ on:
         description: 'Commit changes directly to the current branch instead of creating a PR'
         required: false
         type: boolean
-        default: false
+        default: true
   schedule:
     - cron: "0 5 * * 1"
 
@@ -25,7 +25,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
-          #ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Set up Python
