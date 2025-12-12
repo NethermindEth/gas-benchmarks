@@ -7,7 +7,7 @@ on:
         description: 'Commit changes directly to the current branch instead of creating a PR'
         required: false
         type: boolean
-        default: false
+        default: true
   schedule:
     - cron: "0 5 * * 1"
 
@@ -24,6 +24,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Set up Python
@@ -42,55 +43,228 @@ jobs:
       - name: Prepare Nethermind tools
         run: make prepare_tools
 
-      - name: Refresh EEST tests
+      - name: Pull and remove old EEST tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git lfs pull
           rm -rf eest_tests
-          gh run download -R ethereum/execution-spec-tests -n fixtures_benchmark_fast --token ${{ env.GH_TOKEN }}
-          mv fixtures_benchmark_fast.tar.gz fixtures_benchmark.tar.gz
-          python3 capture_eest_tests.py -o eest_tests
+          
+      - name: Create temp directory for EEST fixture artifacts
+        run: mkdir -p "${{ runner.temp }}/eest_artifacts"
+
+      - name: Download EEST fixtures securely
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download -R ethereum/execution-specs -n fixtures_benchmark_fast -D "${{ runner.temp }}/eest_artifacts"
+          ls -la "${{ runner.temp }}/eest_artifacts"
+
+      - name: Capture EEST tests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Securely verify and rename artifact, fail if not a regular file
+          if [ ! -f "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
+            echo "Expected file not found: fixtures_benchmark_fast.tar.gz" >&2
+            exit 1
+          fi
+          if [ -L "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
+            echo "Artifact file is a symbolic link! Aborting." >&2
+            exit 1
+          fi
+          cp "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
+          python3 capture_eest_tests.py -o eest_tests --local-archive "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
+
+      - name: Download benchmark genesis artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download -R ethereum/execution-specs -n benchmark_genesis_benchmark_fast
+          ls -la
+
+      - name: Extract benchmark genesis artifact
+        run: |
+          set -euxo pipefail
+          archive=""
+          for ext in tar.gz tgz zip; do
+            candidate=$(ls benchmark_genesis.$ext 2>/dev/null || true)
+            if [ -n "$candidate" ]; then
+              archive="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$archive" ]; then
+            echo "No archive found matching benchmark_genesis.{tar.gz,tgz,zip}" >&2
+            exit 1
+          fi
+
+          echo "Extracting: $archive"
+          case "$archive" in
+            *.tar.gz|*.tgz)
+              tar -xzf "$archive"
+              ;;
+            *.zip)
+              unzip -o "$archive"
+              ;;
+          esac
+          
+          echo "Contents after extraction:"
+          ls -la
+
+      - name: Find largest genesis directory
+        id: genesis-dir
+        run: |
+          set -euxo pipefail
+          
+          # Check for genesis directory in possible locations
+          GENESIS_ROOT=""
+          if [ -d "genesis" ]; then
+            GENESIS_ROOT="genesis"
+          elif [ -d "artifacts/genesis" ]; then
+            GENESIS_ROOT="artifacts/genesis"
+          else
+            echo "Genesis directory not found in expected locations (genesis/ or artifacts/genesis/)" >&2
+            exit 1
+          fi
+          
+          echo "Using genesis root: $GENESIS_ROOT"
+          ls -la "$GENESIS_ROOT"
+
+          LARGEST_DIR=$(du -sh "$GENESIS_ROOT"/* | sort -hr | head -n1 | awk '{print $2}')
+          echo "Largest genesis directory: $LARGEST_DIR"
+          echo "dir=$LARGEST_DIR" >> "$GITHUB_OUTPUT"
+          ls -la "$LARGEST_DIR"
+
+      - name: Copy genesis files to scripts/genesisfiles
+        run: |
+          set -euxo pipefail
+          LARGEST_DIR="${{ steps.genesis-dir.outputs.dir }}"
+          
+          for client_dir in "$LARGEST_DIR"/*; do
+            [ -d "$client_dir" ] || continue
+            client=$(basename "$client_dir")
+            echo "Processing client: $client"
+
+            mkdir -p "scripts/genesisfiles/$client"
+
+            # For nethermind, use chainspec.json
+            if [ "$client" = "nethermind" ] && [ -f "$client_dir/chainspec.json" ]; then
+              cp "$client_dir/chainspec.json" "scripts/genesisfiles/$client/zkevmgenesis.json"
+              echo "  Copied chainspec.json -> scripts/genesisfiles/$client/zkevmgenesis.json"
+            # For go-ethereum, copy to both go-ethereum and geth directories
+            elif [ "$client" = "go-ethereum" ] && [ -f "$client_dir/genesis.json" ]; then
+              cp "$client_dir/genesis.json" "scripts/genesisfiles/$client/zkevmgenesis.json"
+              echo "  Copied genesis.json -> scripts/genesisfiles/$client/zkevmgenesis.json"
+              mkdir -p "scripts/genesisfiles/geth"
+              cp "$client_dir/genesis.json" "scripts/genesisfiles/geth/zkevmgenesis.json"
+              echo "  Copied genesis.json -> scripts/genesisfiles/geth/zkevmgenesis.json"
+            # For other clients, use genesis.json
+            elif [ -f "$client_dir/genesis.json" ]; then
+              cp "$client_dir/genesis.json" "scripts/genesisfiles/$client/zkevmgenesis.json"
+              echo "  Copied genesis.json -> scripts/genesisfiles/$client/zkevmgenesis.json"
+            else
+              echo "  No genesis file found for $client"
+            fi
+          done
+
+          echo ""
+          echo "Genesis files copied:"
+          find scripts/genesisfiles -type f -name "zkevmgenesis.json" -exec ls -lh {} \;
+
+      - name: Check genesis file changes
+        run: |
+          echo "=== Genesis file changes ==="
+          git status scripts/genesisfiles/
+          echo ""
+          echo "=== Modified/New genesis files ==="
+          git diff --stat scripts/genesisfiles/ || echo "No existing files modified"
+          git ls-files --others --exclude-standard scripts/genesisfiles/ | grep zkevmgenesis.json || echo "No new files"
+
+      - name: Verify Git LFS and stage genesis files
+        run: |
+          echo "=== Git LFS Status ==="
+          git lfs version
+          cat .gitattributes
+          echo ""
+          
+          echo "=== Staging genesis files ==="
+          git add scripts/genesisfiles/
+          
+          echo "=== Verify LFS pointer files ==="
+          for file in scripts/genesisfiles/*/zkevmgenesis.json; do
+            if [ -f "$file" ]; then
+              echo "File: $file"
+              git ls-files -s "$file"
+              if git check-attr filter "$file" | grep -q "lfs"; then
+                echo "  ✓ LFS tracked"
+                head -n 3 "$file" | grep -q "git-lfs.github.com" && echo "  ✓ Is LFS pointer" || echo "  ✗ Not yet an LFS pointer (will be on commit)"
+              else
+                echo "  ✗ Not LFS tracked"
+              fi
+              echo ""
+            fi
+          done
 
       - name: Detect repository changes
         id: git-status
         run: |
           git status --short
-          if [[ -n "$(git status --porcelain)" ]]; then
+          # Only check for changes in eest_tests and scripts/genesisfiles
+          if [[ -n "$(git status --porcelain eest_tests scripts/genesisfiles 2>/dev/null)" ]]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected in eest_tests or scripts/genesisfiles"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes in eest_tests or scripts/genesisfiles"
           fi
 
       - name: Commit and push changes directly
-        if: steps.git-status.outputs.changed == 'true' && github.event_name == 'workflow_dispatch' && inputs.direct-commit == 'true'
+        if: steps.git-status.outputs.changed == 'true' && github.event_name == 'workflow_dispatch' && inputs.direct-commit == true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add eest_tests
-          git commit -m "chore: refresh EEST tests"
+          git lfs install
+          git add eest_tests scripts/genesisfiles
+          
+          # Only commit if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit after staging"
+            exit 0
+          fi
+          
+          git commit -m "chore: refresh EEST tests and genesis files"
+          git lfs push --all origin
           git push
 
+      - name: Configure Git LFS for PR
+        if: steps.git-status.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.direct-commit == true)
+        run: git lfs install
+
       - name: Create pull request
-        if: steps.git-status.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.direct-commit == 'true')
+        if: steps.git-status.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.direct-commit == true)
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: refresh EEST tests"
+          commit-message: "chore: refresh EEST tests and genesis files"
           committer: GitHub Actions <actions@github.com>
+          signoff: true
           author: GitHub Actions <actions@github.com>
-          title: "chore: refresh EEST tests"
+          title: "chore: refresh EEST tests and genesis files"
           body: |
-            Automated refresh of EEST tests via `capture_eest_tests.py`.
-            - Sources: `eest_tests`
+            Automated refresh of EEST tests and genesis files.
+            - EEST tests: `eest_tests/**`
+            - Genesis files: `scripts/genesisfiles/**/zkevmgenesis.json` (tracked with Git LFS)
             - Trigger: `${{ github.event_name }}`
           branch: chore/refresh-eest-tests
           delete-branch: true
           add-paths: |
             eest_tests/**
+            scripts/genesisfiles/**
 
       - name: Nothing to commit
         if: steps.git-status.outputs.changed == 'false'
-        run: echo "EEST tests already up to date."
+        run: echo "EEST tests and genesis files already up to date."

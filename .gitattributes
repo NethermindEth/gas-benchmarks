@@ -1,3 +1,1 @@
-scripts/genesisfiles/geth/zkevmgenesis.json filter=lfs diff=lfs merge=lfs -text
-scripts/genesisfiles/besu/zkevmgenesis.json filter=lfs diff=lfs merge=lfs -text
-scripts/genesisfiles/nethermind/zkevmgenesis.json filter=lfs diff=lfs merge=lfs -text
+scripts/genesisfiles/**/zkevmgenesis.json filter=lfs diff=lfs merge=lfs -text
