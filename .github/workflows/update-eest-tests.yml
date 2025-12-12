@@ -64,7 +64,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mv "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
+          # Securely verify and rename artifact, fail if not a regular file
+          if [ ! -f "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
+            echo "Expected file not found: fixtures_benchmark_fast.tar.gz" >&2
+            exit 1
+          fi
+          if [ -L "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
+            echo "Artifact file is a symbolic link! Aborting." >&2
+            exit 1
+          fi
+          cp "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
           python3 capture_eest_tests.py -o eest_tests --local-archive "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
 
       - name: Download benchmark genesis artifact
