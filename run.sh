@@ -1210,10 +1210,26 @@ for run in $(seq 1 $RUNS); do
       fi
 
       base_prefix="${filename%-gas-value_*}"
-      warmup_candidates=( "$WARMUP_OPCODES_PATH"/"$base_prefix"-gas-value_*.txt )
-      warmup_path="${warmup_candidates[0]}"
+
+      warmup_path=""
+      # Try exact filename in warmup opcodes path
+      for pattern in \
+        "$WARMUP_OPCODES_PATH/$filename" \
+        "$WARMUP_OPCODES_PATH/$base_prefix.txt" \
+        "$WARMUP_OPCODES_PATH"/"$base_prefix"-gas-value_*.txt; do
+        for candidate in $pattern; do
+          if [ -f "$candidate" ]; then
+            warmup_path="$candidate"
+            break 2
+          fi
+        done
+      done
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
+        if [ -z "$warmup_path" ]; then
+          echo "[WARN] No opcode warmup file found for $filename (searched under $WARMUP_OPCODES_PATH)"
+          continue
+        fi
         start_test_timer "opcodes_warmup_${client}_${filename}"
         current_count="${warmup_run_counts[$warmup_path]:-0}"
         if (( current_count >= OPCODES_WARMUP_COUNT )); then
