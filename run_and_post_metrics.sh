@@ -18,6 +18,7 @@
 #   --debug        Enable debug mode with detailed timing
 #   --debug-file   Enable debug mode and save output to specified file
 #   --profile-test Enable test-specific profiling (shows individual test timings)
+#   --max-loops    Optional integer to stop after N iterations (default: unlimited)
 #
 # Example usage:
 #   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --warmup "warmup/mycustom.txt" --debug &
@@ -38,6 +39,7 @@ SNAPSHOT_TEMPLATE=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
+MAX_LOOPS=""
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -238,6 +240,15 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=$value
       shift 2
       ;;
+    --max-loops)
+      if [[ "$2" =~ ^[0-9]+$ && "$2" -gt 0 ]]; then
+        MAX_LOOPS="$2"
+      else
+        echo "Invalid value for --max-loops: $2 (expected positive integer)"
+        exit 1
+      fi
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1"
       exit 1
@@ -248,7 +259,7 @@ done
 
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --max-loops <N>]"
   exit 1
 fi
 
@@ -284,8 +295,10 @@ if [ -n "$DEBUG_FILE" ]; then
   fi
 fi
 
-# Run commands in an infinite loop
+# Run commands in an infinite loop (optionally bounded by --max-loops)
+loops_done=0
 while true; do
+  loops_done=$((loops_done + 1))
   # Start timing for this loop iteration
   LOOP_START_TIME=$(date +%s.%N)
   debug_log "Starting new loop iteration"
@@ -387,5 +400,10 @@ while true; do
   
   debug_log "Loop iteration completed"
   echo "--- End of loop iteration ---"
+
+  if [ -n "$MAX_LOOPS" ] && [ "$loops_done" -ge "$MAX_LOOPS" ]; then
+    echo "[INFO] Reached max loops ($MAX_LOOPS); exiting."
+    exit 0
+  fi
 done
 
