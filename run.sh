@@ -1241,8 +1241,9 @@ for run in $(seq 1 $RUNS); do
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
       end_test_timer "test_run_${client}_${filename}"
 
-      # Capture debug_traceBlockByNumber for the testing payload (unigramTracer)
-      trace_block_number=$(python3 - "$test_file" <<'PY'
+      # Capture debug_traceBlockByNumber for the testing payload (unigramTracer) when enabled
+      if [ "${TRACE_BLOCKS:-false}" = true ]; then
+        trace_block_number=$(python3 - "$test_file" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -1281,20 +1282,21 @@ else:
 PY
 )
 
-      if [ -n "$trace_block_number" ]; then
-        mkdir -p traces
-        trace_file="traces/block_${trace_block_number}.json"
-        trace_payload=$(cat <<EOF
+        if [ -n "$trace_block_number" ]; then
+          mkdir -p traces
+          trace_file="traces/block_${trace_block_number}.json"
+          trace_payload=$(cat <<EOF
 {"jsonrpc":"2.0","id":1,"method":"debug_traceBlockByNumber","params":["$trace_block_number",{"tracer":"unigramTracer"}]}
 EOF
 )
-        echo "[INFO] Capturing unigramTracer trace for block $trace_block_number into $trace_file"
-        if ! curl -s -X POST -H "Content-Type: application/json" --data "$trace_payload" http://127.0.0.1:8545 > "$trace_file"; then
-          echo "[WARN] Failed to capture trace for block $trace_block_number"
-          rm -f "$trace_file"
+          echo "[INFO] Capturing unigramTracer trace for block $trace_block_number into $trace_file"
+          if ! curl -s -X POST -H "Content-Type: application/json" --data "$trace_payload" http://127.0.0.1:8545 > "$trace_file"; then
+            echo "[WARN] Failed to capture trace for block $trace_block_number"
+            rm -f "$trace_file"
+          fi
+        else
+          echo "[WARN] Could not determine blockNumber for $filename; skipping debug_traceBlockByNumber"
         fi
-      else
-        echo "[WARN] Could not determine blockNumber for $filename; skipping debug_traceBlockByNumber"
       fi
 
       echo "" # Line break after each test for logs clarity
