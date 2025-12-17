@@ -207,7 +207,7 @@ def main():
     methods = ['engine_newPayloadV4']
     fields = 'max'
 
-    test_cases = utils.get_test_cases(tests_path)
+    test_cases, test_case_meta = utils.get_test_cases(tests_path, return_metadata=True)
     for client in clients.split(','):
         client_results[client] = {}
         failed_tests[client] = {}
@@ -221,8 +221,10 @@ def main():
                     client_results[client][test_case_name][gas][method] = []
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
+                        variant_meta = test_case_meta.get(test_case_name, {}).get(gas, {})
+                        result_token = variant_meta.get("result_token")
                         responses, results, timestamp, duration, fcu_duration, np_duration = utils.extract_response_and_result(results_paths, client, test_case_name,
-                                                                               gas, run, method, fields)
+                                                                               gas, run, method, fields, result_token=result_token)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
                         # print(test_case_name + " : " + str(timestamp))
@@ -267,9 +269,10 @@ def main():
         with open(f'reports/raw_results_{client}.csv', 'w', newline='') as csvfile:
             # Create a CSV writer object
             csvwriter = csv.writer(csvfile)
-            rows = ['Test Case', 'Gas'] + [f'Run {i} Duration (ms)' for i in range(1, runs + 1)] + ['Description']
+            rows = ['Test Case', 'Gas', 'Opcount'] + [f'Run {i} Duration (ms)' for i in range(1, runs + 1)] + ['Description']
             csvwriter.writerow(rows)
             for test_case_name, test_case_gas in test_cases.items():
+                case_meta = test_case_meta.get(test_case_name, {})
                 for gas in test_case_gas:
                     name = test_case_name
                     description = 'Description not found on metadata file'
@@ -277,8 +280,10 @@ def main():
                         name = metadata[test_case_name]['Title']
                         description = metadata[test_case_name]['Description']
 
-                    gas_value_mgas = test_case_gas.get(gas, gas)
-                    rows = [name, gas_value_mgas] + client_results[client][test_case_name][gas][methods[0]] + [description]
+                    variant_meta = case_meta.get(gas, {})
+                    gas_value_mgas = variant_meta.get("gas_value_mgas", test_case_gas.get(gas, gas))
+                    opcount_value = variant_meta.get("opcount")
+                    rows = [name, gas_value_mgas, opcount_value if opcount_value is not None else ''] + client_results[client][test_case_name][gas][methods[0]] + [description]
                     csvwriter.writerow(rows)
 
     get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
