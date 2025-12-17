@@ -6,7 +6,6 @@
 #   --db-user      The database user.
 #   --db-host      The database host.
 #   --db-password  The database password.
-#   --warmup       The warmup file (default: warmup/warmup-1000bl-16wi-24tx.txt)
 #   --prometheus-endpoint   The Prometheus endpoint URL.
 #   --prometheus-username   The Prometheus basic auth username.
 #   --prometheus-password   The Prometheus basic auth password.
@@ -19,15 +18,12 @@
 #   --debug-file   Enable debug mode and save output to specified file
 #   --profile-test Enable test-specific profiling (shows individual test timings)
 #   --max-loops    Optional integer to stop after N iterations (default: unlimited)
+#   --warmup-opcodes-path Path to opcode warmup payloads directory (default: warmup-tests)
 #
 # Example usage:
-#   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --warmup "warmup/mycustom.txt" --debug &
+#   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --debug &
 #   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --debug-file "debug.log" --profile-test &
-#
-# Default warmup file is set to "warmup/warmup-1000bl-16wi-24tx.txt"
 
-# Default warmup file (empty means skip warmup)
-WARMUP_FILE=""
 TEST_PATHS_JSON='[{"path":"eest_tests","genesis":"zkevmgenesis.json"}]'  # default test path
 DEBUG_ARGS=()
 DEBUG=false
@@ -40,6 +36,7 @@ CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
 MAX_LOOPS=""
+WARMUP_OPCODES_PATH=""
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -173,10 +170,6 @@ while [[ $# -gt 0 ]]; do
       DB_PASSWORD="$2"
       shift 2
       ;;
-    --warmup)
-      WARMUP_FILE="$2"
-      shift 2
-      ;;
     --prometheus-endpoint)
       PROMETHEUS_ENDPOINT="$2"
       shift 2
@@ -240,6 +233,10 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=$value
       shift 2
       ;;
+    --warmup-opcodes-path)
+      WARMUP_OPCODES_PATH="$2"
+      shift 2
+      ;;
     --max-loops)
       if [[ "$2" =~ ^[0-9]+$ && "$2" -gt 0 ]]; then
         MAX_LOOPS="$2"
@@ -259,7 +256,7 @@ done
 
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --max-loops <N>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --max-loops <N>]"
   exit 1
 fi
 
@@ -313,15 +310,8 @@ while true; do
   end_timer "update_performance_images"
   
   start_timer "benchmark_testing"
-  # Run the benchmark testing using specified warmup file
+  # Run the benchmark testing using opcode warmups only
   RUN_CMD=(bash run.sh -T "$TEST_PATHS_JSON" -r 1)
-  if [ -n "$WARMUP_FILE" ]; then
-    if [ -f "$WARMUP_FILE" ]; then
-      RUN_CMD+=(-w "$WARMUP_FILE")
-    else
-      echo "[WARN] Requested warmup file '$WARMUP_FILE' not found; skipping warmup."
-    fi
-  fi
   if [ -n "$NETWORK" ]; then
     RUN_CMD+=(-n "$NETWORK")
   fi
@@ -344,6 +334,9 @@ while true; do
 
   if [ "$RESTART_BEFORE_TESTING" = true ]; then
     RUN_CMD+=(-R true)
+  fi
+  if [ -n "$WARMUP_OPCODES_PATH" ]; then
+    RUN_CMD+=(-W "$WARMUP_OPCODES_PATH")
   fi
 
   if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then

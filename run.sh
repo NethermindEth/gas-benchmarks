@@ -2,7 +2,6 @@
 
 # Default inputs
 WARMUP_OPCODES_PATH="warmup-tests"
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon,nimbus,ethrex"
 RUNS=1
 OPCODES_WARMUP_COUNT=1
@@ -11,7 +10,7 @@ IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"defa
 EXECUTIONS_FILE="executions.json"
 TEST_PATHS_JSON=""
 LEGACY_TEST_PATH="eest_tests"
-LEGACY_GENESIS_PATH="zkevmgenesis.json"
+LEGACY_GENESIS_PATH="zkevm_genesis.json"
 DEBUG=false
 DEBUG_FILE=""
 PROFILE_TEST=false
@@ -22,7 +21,6 @@ USE_OVERLAY=false
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
-SKIP_EMPTY=true
 
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
@@ -237,21 +235,21 @@ end_test_timer() {
 print_timing_summary() {
   if [ "$DEBUG" = true ]; then
     local output_lines=()
-
+    
     # Build the output lines
     output_lines+=("")
     output_lines+=("=== TIMING SUMMARY ===")
     local total_time=$(awk "BEGIN {printf \"%.2f\", $(date +%s.%N) - $SCRIPT_START_TIME}")
     output_lines+=("Total script time: ${total_time}s")
     output_lines+=("")
-
+    
     # Sort the timing entries for consistent output
     local sorted_keys=($(printf '%s\n' "${!STEP_TIMES[@]}" | grep '_duration$' | sort))
-
+    
     for key in "${sorted_keys[@]}"; do
       local step_name="${key%_duration}"
       local duration="${STEP_TIMES[$key]}"
-
+      
       # Show test-specific timings only if PROFILE_TEST is enabled
       if [[ "$step_name" == *"opcodes_warmup_"* || "$step_name" == *"test_run_"* ]]; then
         if [ "$PROFILE_TEST" = true ]; then
@@ -263,10 +261,10 @@ print_timing_summary() {
     done
     output_lines+=("=======================")
     output_lines+=("")
-
+    
     # Print to stdout
     printf '%s\n' "${output_lines[@]}"
-
+    
     # Save to file if specified
     if [ -n "$DEBUG_FILE" ]; then
       printf '%s\n' "${output_lines[@]}" >> "$DEBUG_FILE"
@@ -908,12 +906,11 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FS" opt; do
+while getopts "T:t:g:c:r:i:o:f:n:B:R:FW:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
     g) LEGACY_GENESIS_PATH="$OPTARG" ;;
-    w) WARMUP_FILE="$OPTARG" ;;
     c) CLIENTS="$OPTARG" ;;
     r) RUNS="$OPTARG" ;;
     i) IMAGES="$OPTARG" ;;
@@ -926,24 +923,13 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FS" opt; do
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
-    S) SKIP_EMPTY=true;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty]" >&2
+    W) WARMUP_OPCODES_PATH="$OPTARG" ;;
+    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-W warmup_opcodes_path]" >&2
        exit 1 ;;
   esac
 done
 
 
-
-# Allow passing a file path for -T to avoid long argument lists.
-if [ -n "$TEST_PATHS_JSON" ]; then
-  file_path="$TEST_PATHS_JSON"
-  if [[ "$file_path" == @* ]]; then
-    file_path="${file_path#@}"
-  fi
-  if [ -f "$file_path" ]; then
-    TEST_PATHS_JSON=$(cat "$file_path")
-  fi
-fi
 
 # Fallback to legacy -t/-g if -T not provided
 if [ -z "$TEST_PATHS_JSON" ]; then
@@ -952,7 +938,7 @@ if [ -z "$TEST_PATHS_JSON" ]; then
     exit 1
   fi
 
-  echo "Falling back to legacy mode with -t and -g"
+  echo "âš ď¸Ź  Falling back to legacy mode with -t and -g"
   if [ -n "$LEGACY_GENESIS_PATH" ]; then
     TEST_PATHS_JSON="[ {\"path\": \"$LEGACY_TEST_PATH\", \"genesis\": \"$LEGACY_GENESIS_PATH\"} ]"
   else
@@ -998,13 +984,13 @@ if [ -n "$DEBUG_FILE" ]; then
   # Find next available filename to avoid overwriting
   original_debug_file="$DEBUG_FILE"
   counter=0
-
+  
   while [ -f "$DEBUG_FILE" ]; do
     counter=$((counter + 1))
     # Extract filename and extension
     filename="${original_debug_file%.*}"
     extension="${original_debug_file##*.}"
-
+    
     # Handle files without extension
     if [ "$filename" = "$extension" ]; then
       DEBUG_FILE="${original_debug_file}.${counter}"
@@ -1012,13 +998,13 @@ if [ -n "$DEBUG_FILE" ]; then
       DEBUG_FILE="${filename}.${counter}.${extension}"
     fi
   done
-
+  
   # Create debug file with timestamp header
   echo "=== DEBUG LOG STARTED: $(date) ===" > "$DEBUG_FILE"
   echo "Script: $0" >> "$DEBUG_FILE"
   echo "Args: $*" >> "$DEBUG_FILE"
   echo "=======================================" >> "$DEBUG_FILE"
-
+  
   # Notify user about the actual filename used
   if [ "$DEBUG_FILE" != "$original_debug_file" ]; then
     echo "Debug file '$original_debug_file' already exists, using '$DEBUG_FILE' instead"
@@ -1086,7 +1072,7 @@ for run in $(seq 1 $RUNS); do
   debug_log "Starting run $run/$RUNS"
   for client in "${CLIENT_ARRAY[@]}"; do
     debug_log "Processing client: $client"
-
+    
     # Skip nimbus or ethrex if already run today
     if { [ "$client" = "nimbus" ] || [ "$client" = "ethrex" ]; } && was_executed_today "$client"; then
       echo "Skipping $client - already executed today"
@@ -1163,21 +1149,6 @@ for run in $(seq 1 $RUNS); do
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
     cat results/computer_specs.txt
 
-    warmed=false
-
-    # Warmup
-    if [ "$warmed" = false ] && [ -n "$WARMUP_FILE" ]; then
-      start_timer "warmup_${client}_run_${run}"
-      if [ -f "$WARMUP_FILE" ]; then
-        echo "[INFO] Running warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$WARMUP_FILE\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
-        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
-      else
-        echo "[WARN] Warmup file '$WARMUP_FILE' not found; skipping warmup."
-      fi
-      warmed=true
-      end_timer "warmup_${client}_run_${run}"
-    fi
-
     declare -A warmup_run_counts=()
 
     for i in "${!TEST_FILES[@]}"; do
@@ -1225,8 +1196,8 @@ for run in $(seq 1 $RUNS); do
 
       if [ "$measured" = false ]; then
         echo "Executing preparation script (not measured): $filename"
-        echo "[INFO] Running preparation run_kute command: python3 run_kute.py --output \"$PREPARATION_RESULTS_DIR\" --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT"
-        python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT
+        echo "[INFO] Running preparation run_kute command: python3 run_kute.py --output \"$PREPARATION_RESULTS_DIR\" --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
+        python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
         echo ""
         continue
       fi
@@ -1294,28 +1265,19 @@ for run in $(seq 1 $RUNS); do
       debug_log "Skipped host cache drop (insufficient permissions)"
     fi
 
-    # Only mark the client as executed after the final run to avoid skipping
-    # subsequent runs within the same invocation when RUNS > 1.
-    if [ "$run" -eq "$RUNS" ]; then
-      update_execution_time "$client"
-    fi
+    update_execution_time "$client"
     end_timer "client_${client}_run_${run}"
   done
 done
 end_timer "benchmarks_total"
 
 start_timer "results_processing"
-SKIP_EMPTY_OPT=""
-if [ "$SKIP_EMPTY" = true ]; then
-  SKIP_EMPTY_OPT="--skipEmpty"
-fi
-
 if [ -z "$IMAGES" ]; then
-  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" $SKIP_EMPTY_OPT
-  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" $SKIP_EMPTY_OPT
+  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS"
+  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS"
 else
-  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
-  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
+  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES"
+  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES"
 fi
 end_timer "results_processing"
 
