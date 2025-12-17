@@ -2,7 +2,6 @@
 
 # Default inputs
 WARMUP_OPCODES_PATH="warmup-tests"
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon,nimbus,ethrex"
 RUNS=1
 OPCODES_WARMUP_COUNT=1
@@ -907,12 +906,11 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:F" opt; do
+while getopts "T:t:g:c:r:i:o:f:n:B:R:FW:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
     g) LEGACY_GENESIS_PATH="$OPTARG" ;;
-    w) WARMUP_FILE="$OPTARG" ;;
     c) CLIENTS="$OPTARG" ;;
     r) RUNS="$OPTARG" ;;
     i) IMAGES="$OPTARG" ;;
@@ -925,7 +923,8 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:F" opt; do
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice]" >&2
+    W) WARMUP_OPCODES_PATH="$OPTARG" ;;
+    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-W warmup_opcodes_path]" >&2
        exit 1 ;;
   esac
 done
@@ -1149,21 +1148,6 @@ for run in $(seq 1 $RUNS); do
 
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
     cat results/computer_specs.txt
-
-    warmed=false
-
-    # Warmup
-    if [ "$warmed" = false ] && [ -n "$WARMUP_FILE" ]; then
-      start_timer "warmup_${client}_run_${run}"
-      if [ -f "$WARMUP_FILE" ]; then
-        echo "[INFO] Running warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$WARMUP_FILE\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
-        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
-      else
-        echo "[WARN] Warmup file '$WARMUP_FILE' not found; skipping warmup."
-      fi
-      warmed=true
-      end_timer "warmup_${client}_run_${run}"
-    fi
 
     declare -A warmup_run_counts=()
 
