@@ -4,6 +4,7 @@ import os
 import re
 import logging
 from collections import defaultdict
+from typing import Dict, Optional
 
 import cpuinfo
 import platform
@@ -52,16 +53,55 @@ def read_results(text):
     return sections
 
 
-def extract_response_and_result(results_path, client, test_case_name, gas_used, run, method, field):
-    result_file = f'{results_path}/{client}_results_{run}_{test_case_name}_{gas_used}M.txt'
-    response_file = f'{results_path}/{client}_response_{run}_{test_case_name}_{gas_used}M.txt'
+def extract_response_and_result(
+    results_path,
+    client,
+    test_case_name,
+    gas_used,
+    run,
+    method,
+    field,
+    result_token: Optional[str] = None,
+):
+    """
+    Read the response/result files for a single run.
+
+    The file name pattern historically used a '<test>_<gas>M' suffix, but some
+    scenarios (e.g. all_scenarios_for_analysis) no longer include a gas
+    suffix in the filename. We therefore try multiple candidates in order:
+    - explicit result_token (the actual test filename without extension)
+    - legacy '<test_case_name>_<gas_used>M'
+    - bare '<test_case_name>'
+    """
+
+    candidate_suffixes = []
+    if result_token:
+        candidate_suffixes.append(result_token)
+    candidate_suffixes.append(f"{test_case_name}_{gas_used}M")
+    candidate_suffixes.append(test_case_name)
+
+    result_file = None
+    response_file = None
+    seen_suffixes = set()
+    for suffix in candidate_suffixes:
+        if suffix in seen_suffixes:
+            continue
+        seen_suffixes.add(suffix)
+
+        potential_result = f"{results_path}/{client}_results_{run}_{suffix}.txt"
+        potential_response = f"{results_path}/{client}_response_{run}_{suffix}.txt"
+
+        if os.path.exists(potential_result) and os.path.exists(potential_response):
+            result_file = potential_result
+            response_file = potential_response
+            break
+
     response = True
     result = 0
-    if not os.path.exists(result_file):
-        # print("No result: " + result_file)
+    if not result_file or not os.path.exists(result_file):
         print("No result")
         return False, 0, 0, 0, 0, 0
-    if not os.path.exists(response_file):
+    if not response_file or not os.path.exists(response_file):
         print("No repsonse")
         return False, 0, 0, 0, 0, 0
     # Get the responses from the files
@@ -251,8 +291,40 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
     return True
 
 
-def get_test_cases(tests_path):
-    test_cases = defaultdict(dict)
+def _extract_opcount_from_name(name: str) -> Optional[int]:
+    """
+    Parse an opcount suffix such as 'opcount_50000K' or 'opcount_125M' from a test filename.
+    Returns the integer count (e.g., 50000000) or None if not present.
+    """
+    match = re.search(r"opcount_(\d+)([kKmM]?)", name)
+    if not match:
+        return None
+
+    value = int(match.group(1))
+    suffix = match.group(2).lower()
+    if suffix == "k":
+        value *= 1_000
+    elif suffix == "m":
+        value *= 1_000_000
+    return value
+
+
+def get_test_cases(tests_path: str, return_metadata: bool = False):
+    """
+    Discover test cases and derive their gas usage and optional opcount metadata.
+
+    Args:
+        tests_path: Root directory containing the test payloads.
+        return_metadata: When True, also return a per-variant metadata mapping that includes
+                         the exact result file token, gas_used_mgas, and opcount.
+
+    Returns:
+        If return_metadata is False (default), a mapping of test_case -> {gas_label: gas_used_mgas}.
+        If return_metadata is True, a tuple of (test_cases, metadata) where metadata mirrors
+        the same keys as test_cases but the values are dicts with extra fields.
+    """
+    test_cases: Dict[str, Dict[int, float]] = defaultdict(dict)
+    test_metadata: Dict[str, Dict[int, dict]] = defaultdict(dict)
     pattern = re.compile(r'(?P<base>.+?)_(?P<gas>[0-9]+)M\.txt$')
 
     for root, _, files in os.walk(tests_path):
@@ -264,12 +336,13 @@ def get_test_cases(tests_path):
             if not file.endswith('.txt'):
                 continue
 
+            base_name = os.path.splitext(file)[0]
             m = pattern.match(file)
             if m:
                 test_case_name = m.group('base')
                 gas_label = int(m.group('gas'))  # e.g., "100" from "100M"
             else:
-                test_case_name = os.path.splitext(file)[0]
+                test_case_name = base_name
                 gas_label = 60
 
             file_path = os.path.join(root, file)
@@ -279,10 +352,21 @@ def get_test_cases(tests_path):
             else:
                 gas_used_millions = gas_used_units / 1_000_000.0
 
+            opcount = _extract_opcount_from_name(base_name)
             test_cases[test_case_name][gas_label] = gas_used_millions
+            test_metadata[test_case_name][gas_label] = {
+                "result_token": base_name,
+                "opcount": opcount,
+                "gas_value_mgas": gas_used_millions,
+            }
 
     # Preserve ordering of gas labels for deterministic output
-    return {tc: dict(sorted(gases.items())) for tc, gases in test_cases.items()}
+    sorted_cases = {tc: dict(sorted(gases.items())) for tc, gases in test_cases.items()}
+    sorted_meta = {tc: {k: test_metadata[tc][k] for k in sorted(test_metadata[tc])} for tc in test_metadata}
+
+    if return_metadata:
+        return sorted_cases, sorted_meta
+    return sorted_cases
 
 
 def _extract_gas_used_from_payload(file_path):

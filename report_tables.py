@@ -95,7 +95,7 @@ def main():
     methods = ['engine_newPayloadV4']
     fields = 'max'
 
-    test_cases = utils.get_test_cases(tests_path)
+    test_cases, test_case_meta = utils.get_test_cases(tests_path, return_metadata=True)
     for client in clients.split(','):
         client_results[client] = {}
         failed_tests[client] = {}
@@ -109,8 +109,10 @@ def main():
                     client_results[client][test_case_name][gas][method] = []
                     failed_tests[client][test_case_name][gas][method] = []
                     for run in range(1, runs + 1):
+                        variant_meta = test_case_meta.get(test_case_name, {}).get(gas, {})
+                        result_token = variant_meta.get("result_token")
                         responses, results, timestamp, duration, fcu_duration, np_duration = utils.extract_response_and_result(results_paths, client, test_case_name,
-                                                                               gas, run, method, fields)
+                                                                               gas, run, method, fields, result_token=result_token)
                         client_results[client][test_case_name][gas][method].append(results)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
                         # print(test_case_name + " : " + str(timestamp))
