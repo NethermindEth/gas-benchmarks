@@ -507,10 +507,43 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             f"last={preview_last} reorg=false"
         )
 
-        params: List[Any] = [txrlps, "EMPTY"]
-        payload: Dict[str, Any] = _engine("engine_getPayloadV4", params)
-        exec_payload: Dict[str, Any] = payload.get("executionPayload", {})
-        parent_hash: str = exec_payload.get("parentHash") or "0x" + ("00" * 32)
+        # Retrieve current chain head (parent for the new block)
+        head_block = _rpc("eth_getBlockByNumber", ["latest", False])
+        if not head_block:
+            _log(f"flush failed: could not fetch latest block for group={grp}")
+            return
+            
+        parent_hash = head_block.get("hash")
+        parent_ts_hex = head_block.get("timestamp")
+        parent_ts = int(parent_ts_hex, 16) if parent_ts_hex else int(time.time())
+        
+        # Calculate new timestamp (ensure it's strictly > parent)
+        new_ts = max(int(time.time()), parent_ts + 1)
+
+        # Prepare payload attributes for testing_buildBlockV1
+        payload_attributes = {
+            "timestamp": hex(new_ts),
+            "prevRandao": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
+            "withdrawals": [],
+            "parentBeaconBlockRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        }
+
+        build_block_params = {
+            "parent_block_hash": parent_hash,
+            "payload_attributes": payload_attributes,
+            "transactions": txrlps,
+            "extra_data": "0x",
+        }
+
+        # Use the new optimized endpoint
+        exec_payload_raw = _engine("testing_buildBlockV1", [build_block_params])
+        
+        # Normalize result (unwrap if necessary, though 'testing_' usually returns payload directly or dict with executionPayload)
+        exec_payload = exec_payload_raw.get("executionPayload", exec_payload_raw)
+        
+        # Re-verify parent hash from payload to be safe
+        parent_hash = exec_payload.get("parentHash") or parent_hash
 
         if grp not in _STAGE:
             _STAGE[grp] = 0
@@ -524,6 +557,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             "params": [exec_payload, [], parent_hash, []],
         }
 
+        # Send NewPayload to ensure the node accepts the block we just built
         _engine("engine_newPayloadV4", [exec_payload, [], parent_hash, []])
 
         if file_base == "global-setup":
@@ -1061,4 +1095,3 @@ def response(flow: http.HTTPFlow) -> None:
         globals()["_PENDING_OVERLAY_CONFIRMED"] = True
         _log(f"cleanup confirmation observed for scenario {scenario}")
         return
-
