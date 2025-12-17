@@ -150,6 +150,33 @@ def parse_cpu_ghz(ghz_string: Optional[str]) -> Optional[float]:
     match = re.search(r"([\\d\\.]+)\\s*GHz", ghz_string, re.IGNORECASE)
     return float(match.group(1)) if match else None
 
+def parse_opcount(raw_value: Optional[str]) -> Optional[int]:
+    """
+    Parse an operation count that may include K/M suffixes.
+    Examples:
+      "50000K" -> 50000000
+      "2500000" -> 2500000
+    """
+    if raw_value is None:
+        return None
+
+    value = raw_value.strip()
+    if value == "":
+        return None
+
+    match = re.match(r"^(?P<num>[0-9]+(?:\.[0-9]+)?)(?P<suffix>[kKmM]?)$", value)
+    if not match:
+        raise ValueError(f"Unrecognized opcount format: {raw_value}")
+
+    number_part = float(match.group("num"))
+    suffix = match.group("suffix").lower()
+    if suffix == "k":
+        number_part *= 1_000
+    elif suffix == "m":
+        number_part *= 1_000_000
+
+    return int(number_part)
+
 def parse_specs_from_text(spec_text_content: str) -> Dict[str, Any]:
     """
     Parses computer specifications from a block of text.
@@ -416,11 +443,22 @@ def populate_data_for_client(
                 logging.warning(f"Raw results file is empty or has no header: {raw_csv_path}")
                 return 0
 
-            if len(header) < 3: # Expecting at least 'Test Case', 'Gas', 'Description' and one run column
+            if len(header) < 3: # Expecting at least 'Test Case', 'Gas', (optional Opcount) and one run/description column
                 logging.warning(f"Raw results file {raw_csv_path} has unexpected header format (less than 3 columns): {header}")
                 return 0
 
-            run_column_headers = header[2:-1] if len(header) > 2 else []
+            try:
+                opcount_index = next(i for i, col in enumerate(header) if col.strip().lower() == "opcount")
+            except StopIteration:
+                opcount_index = None
+
+            description_index = len(header) - 1
+            run_start_index = 2 if opcount_index is None else opcount_index + 1
+            if run_start_index >= description_index:
+                logging.warning(f"Raw results file {raw_csv_path} has no run columns between gas/opcount and description. Header: {header}")
+                return 0
+
+            run_column_headers = header[run_start_index:description_index]
             values_are_durations = bool(run_column_headers) and all(
                 any(token in col.lower() for token in ("duration", "time", "ms"))
                 for col in run_column_headers
@@ -432,10 +470,11 @@ def populate_data_for_client(
                     continue
 
                 test_case_name_raw = row[0]
-                raw_gas_value = row[1]
+                raw_gas_value = row[1] if len(row) > 1 else None
+                raw_opcount_value = row[opcount_index] if opcount_index is not None and opcount_index < len(row) else None
                 # raw_run_description is the last column if header > 2, otherwise it might be missing
-                raw_run_description = row[-1] if len(header) > 2 else None # Adjusted access
-                run_values_str = row[2:-1] if len(header) > 2 else [] # Adjusted access
+                raw_run_description = row[description_index] if len(row) > description_index else None # Adjusted access
+                run_values_str = row[run_start_index:description_index] if len(row) >= description_index else [] # Adjusted access
 
                 agg_stats = aggregated_stats_map.get(test_case_name_raw, {})
 
@@ -450,6 +489,13 @@ def populate_data_for_client(
                         gas_value_float = float(raw_gas_value)
                     except ValueError:
                         logging.warning(f"Could not convert gas value '{raw_gas_value}' to float for {test_case_name_raw}. Will keep raw string and skip per-run MGas/s calculation.")
+
+                opcount_value: Optional[int] = None
+                if raw_opcount_value not in ("", None):
+                    try:
+                        opcount_value = parse_opcount(raw_opcount_value)
+                    except ValueError as ve:
+                        logging.warning(f"Could not parse opcount '{raw_opcount_value}' for {test_case_name_raw}: {ve}")
 
                 for run_value_str in run_values_str:
                     try:
@@ -497,6 +543,7 @@ def populate_data_for_client(
                         'n_samples': agg_stats.get('n_samples'),
                         'test_description': agg_stats.get('test_description'),
                         'raw_gas_value': raw_gas_value,
+                        'opcount': opcount_value,
                         'raw_run_duration_ms': raw_run_duration_ms,
                         'raw_run_mgas_s': raw_run_mgas_s,
                         'raw_run_description': raw_run_description, # This is from the raw data row
