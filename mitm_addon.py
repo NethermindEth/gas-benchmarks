@@ -523,10 +523,10 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         # Prepare payload attributes for testing_buildBlockV1
         payload_attributes = {
             "timestamp": hex(new_ts),
-            "prevRandao": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "prevRandao": parent_hash,
             "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
             "withdrawals": [],
-            "parentBeaconBlockRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "parentBeaconBlockRoot": parent_hash,
         }
 
         build_block_params = {
