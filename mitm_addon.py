@@ -518,7 +518,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         parent_ts = int(parent_ts_hex, 16) if parent_ts_hex else int(time.time())
         
         # Calculate new timestamp (ensure it's strictly > parent)
-        new_ts = max(int(time.time()), parent_ts + 1)
+        new_ts = max(int(time.time()), parent_ts + 24 * 60 * 60 + 1)
 
         # Prepare payload attributes for testing_buildBlockV1
         payload_attributes = {
