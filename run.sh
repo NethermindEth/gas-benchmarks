@@ -1271,6 +1271,9 @@ for root in roots:
     if not root.is_dir():
         continue
     for path in root.rglob("*.txt"):
+        normalized = path.as_posix()
+        if "/setup/" in normalized or "/cleanup/" in normalized:
+            continue
         norm = normalize_name(path.name)
         if norm != target_norm:
             continue
