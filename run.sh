@@ -1211,19 +1211,51 @@ for run in $(seq 1 $RUNS); do
 
       base_prefix="${filename%-gas-value_*}"
 
-      warmup_path=""
-      # Try exact filename in warmup opcodes path
-      for pattern in \
-        "$WARMUP_OPCODES_PATH/$filename" \
-        "$WARMUP_OPCODES_PATH/$base_prefix.txt" \
-        "$WARMUP_OPCODES_PATH"/"$base_prefix"-gas-value_*.txt; do
-        for candidate in $pattern; do
-          if [ -f "$candidate" ]; then
-            warmup_path="$candidate"
-            break 2
-          fi
-        done
-      done
+      warmup_path=$(python3 - "$filename" "$WARMUP_OPCODES_PATH" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+filename = sys.argv[1]
+warmup_root = Path(sys.argv[2])
+
+def normalize_name(name: str) -> str:
+    if name.endswith(".txt"):
+        name = name[:-4]
+    name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
+    name = re.sub(r"opcount_[^]-]+", "opcount", name)
+    return name
+
+def parse_opcount(name: str) -> int:
+    m = re.search(r"opcount_([0-9]+)([kKmM]?)", name)
+    if not m:
+        return -1
+    val = int(m.group(1))
+    suffix = m.group(2).lower()
+    if suffix == "k":
+        val *= 1_000
+    elif suffix == "m":
+        val *= 1_000_000
+    return val
+
+target_norm = normalize_name(filename)
+
+best_path = None
+best_opcount = -1
+
+if warmup_root.is_dir():
+    for path in warmup_root.rglob("*.txt"):
+        norm = normalize_name(path.name)
+        if norm != target_norm:
+            continue
+        opc = parse_opcount(path.name)
+        if opc > best_opcount:
+            best_opcount = opc
+            best_path = path
+
+print(str(best_path) if best_path else "")
+PY
+)
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
         if [ -z "$warmup_path" ]; then
