@@ -159,6 +159,10 @@ def main():
         prefix = src_root.name
 
         for src in src_root.rglob(pattern):
+            # Skip setup/cleanup; only take testing payloads
+            normalized = src.as_posix()
+            if "/setup/" in normalized or "/cleanup/" in normalized:
+                continue
             rel = src.relative_to(src_root)
             out = dst_root / prefix / rel
             out.parent.mkdir(parents=True, exist_ok=True)
