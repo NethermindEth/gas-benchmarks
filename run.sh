@@ -1211,13 +1211,13 @@ for run in $(seq 1 $RUNS); do
 
       base_prefix="${filename%-gas-value_*}"
 
-      warmup_path=$(python3 - "$filename" "$WARMUP_OPCODES_PATH" <<'PY'
+      warmup_path=$(python3 - "$filename" "$WARMUP_OPCODES_PATH" "warmup-repricing" "all_scenarios_for_analysis/testing" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 filename = sys.argv[1]
-warmup_root = Path(sys.argv[2])
+roots = [Path(p) for p in sys.argv[2:]]
 
 def normalize_name(name: str) -> str:
     if name.endswith(".txt"):
@@ -1243,8 +1243,10 @@ target_norm = normalize_name(filename)
 best_path = None
 best_opcount = -1
 
-if warmup_root.is_dir():
-    for path in warmup_root.rglob("*.txt"):
+for root in roots:
+    if not root.is_dir():
+        continue
+    for path in root.rglob("*.txt"):
         norm = normalize_name(path.name)
         if norm != target_norm:
             continue
