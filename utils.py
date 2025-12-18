@@ -309,6 +309,16 @@ def _extract_opcount_from_name(name: str) -> Optional[int]:
     return value
 
 
+def _strip_gas_value_suffix(name: str) -> str:
+    """
+    Remove trailing '-gas-value' tokens often present in legacy filenames.
+    Examples:
+      foo-gas-value      -> foo
+      foo-gas-value_100  -> foo
+    """
+    return re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
+
+
 def get_test_cases(tests_path: str, return_metadata: bool = False):
     """
     Discover test cases and derive their gas usage and optional opcount metadata.
@@ -344,6 +354,8 @@ def get_test_cases(tests_path: str, return_metadata: bool = False):
             else:
                 test_case_name = base_name
                 gas_label = 60
+
+            test_case_name = _strip_gas_value_suffix(test_case_name)
 
             file_path = os.path.join(root, file)
             gas_used_units = _extract_gas_used_from_payload(file_path)
