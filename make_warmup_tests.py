@@ -17,6 +17,9 @@ def process_line(line: str, counters: dict, bump: bool) -> str:
 
     payload = obj["params"][0]
 
+    # Force a deterministic, low block number for warmup payloads
+    payload["blockNumber"] = "0x1"
+
     if not bump:
         counters["dropped"] += 1
         return json.dumps(obj) + "\n"

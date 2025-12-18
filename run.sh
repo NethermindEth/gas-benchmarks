@@ -1214,6 +1214,7 @@ for run in $(seq 1 $RUNS); do
       warmup_path=$(python3 - "$filename" "$WARMUP_OPCODES_PATH" "warmup-repricing" "all_scenarios_for_analysis/testing" <<'PY'
 import re
 import sys
+import json
 from pathlib import Path
 
 filename = sys.argv[1]
@@ -1238,10 +1239,33 @@ def parse_opcount(name: str) -> int:
         val *= 1_000_000
     return val
 
+def extract_gas_used(path: Path) -> int:
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            data = json.loads(line)
+            params = data.get("params") or []
+            if params and isinstance(params[0], dict):
+                gas_used = params[0].get("gasUsed")
+                if isinstance(gas_used, str):
+                    gas_used = gas_used.strip()
+                    if not gas_used:
+                        continue
+                    base = 16 if gas_used.lower().startswith("0x") else 10
+                    return int(gas_used, base)
+                if isinstance(gas_used, (int, float)):
+                    return int(gas_used)
+    except Exception:
+        return -1
+    return -1
+
 target_norm = normalize_name(filename)
 
 best_path = None
 best_opcount = -1
+best_gas_used = -1
 
 for root in roots:
     if not root.is_dir():
@@ -1251,8 +1275,10 @@ for root in roots:
         if norm != target_norm:
             continue
         opc = parse_opcount(path.name)
-        if opc > best_opcount:
+        gas_used = extract_gas_used(path)
+        if (opc > best_opcount) or (opc == best_opcount and gas_used > best_gas_used):
             best_opcount = opc
+            best_gas_used = gas_used
             best_path = path
 
 print(str(best_path) if best_path else "")
