@@ -232,16 +232,43 @@ def main():
 
         teardown("geth")
 
-    # Flatten warmup-tests output directory
+    def normalize_name(path: Path) -> str:
+        name = path.name
+        if name.endswith(".txt"):
+            name = name[:-4]
+        name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
+        name = re.sub(r"opcount_[^]-]+", "opcount", name)
+        return name
+
+    def parse_opcount_from_name(path: Path) -> int:
+        m = re.search(r"opcount_([0-9]+)([kKmM]?)", path.name)
+        if not m:
+            return -1
+        val = int(m.group(1))
+        suffix = m.group(2).lower()
+        if suffix == "k":
+            val *= 1_000
+        elif suffix == "m":
+            val *= 1_000_000
+        return val
+
+    # Flatten warmup-tests output directory, keeping only the highest-opcount variant per normalized test name
     for sub in list(dst_root.iterdir()):
         if not sub.is_dir():
             continue
 
+        best_by_norm = {}
         for f in sub.rglob("*.txt"):
+            norm = normalize_name(f)
+            opc = parse_opcount_from_name(f)
+            existing = best_by_norm.get(norm)
+            if existing is None or opc > existing[1]:
+                best_by_norm[norm] = (f, opc)
+
+        for f, _ in best_by_norm.values():
             target = dst_root / f.name
             if target.exists():
-                print(f"⚠️ File already exists in root: {target}, skipping move.")
-                continue
+                target.unlink()
             target.parent.mkdir(parents=True, exist_ok=True)
             f.rename(target)
 
