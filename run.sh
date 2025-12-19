@@ -1212,7 +1212,7 @@ for run in $(seq 1 $RUNS); do
 
       base_prefix="${filename%-gas-value_*}"
 
-      warmup_path=$(python3 - "$filename" "$WARMUP_OPCODES_PATH" "warmup-repricing" "all_scenarios_for_analysis/testing" <<'PY'
+warmup_path=$(python3 - "$filename" "$WARMUP_OPCODES_PATH" "warmup-repricing" "all_scenarios_for_analysis/testing" <<'PY'
 import re
 import sys
 import json
@@ -1262,11 +1262,25 @@ def extract_gas_used(path: Path) -> int:
         return -1
     return -1
 
+def extract_index(path: Path) -> int:
+    """
+    Extract the numeric directory index (e.g., .../testing/000123/file.txt -> 123).
+    If none found, return a large number so real indices always win.
+    """
+    for part in path.parts:
+        if part.isdigit():
+            try:
+                return int(part)
+            except ValueError:
+                continue
+    return 1_000_000_000
+
 target_norm = normalize_name(filename)
 
 best_path = None
 best_opcount = -1
 best_gas_used = -1
+best_index = 1_000_000_000
 
 for root in roots:
     if not root.is_dir():
@@ -1280,7 +1294,13 @@ for root in roots:
             continue
         opc = parse_opcount(path.name)
         gas_used = extract_gas_used(path)
-        if (opc > best_opcount) or (opc == best_opcount and gas_used > best_gas_used):
+        idx = extract_index(path)
+        if (idx < best_index) or (
+            idx == best_index and (
+                opc > best_opcount or (opc == best_opcount and gas_used > best_gas_used)
+            )
+        ):
+            best_index = idx
             best_opcount = opc
             best_gas_used = gas_used
             best_path = path
