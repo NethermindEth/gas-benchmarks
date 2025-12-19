@@ -1299,9 +1299,12 @@ print(name)
 PY
 )
 
-      if [ -z "${warmup_done_by_test[$norm_name]+_}" ]; then
-        warmup_done_by_test[$norm_name]=0
+      # Ensure numeric defaults for counters
+      current_done=${warmup_done_by_test[$norm_name]:-0}
+      if ! [[ $current_done =~ ^[0-9]+$ ]]; then
+        current_done=0
       fi
+      warmup_done_by_test[$norm_name]=$current_done
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
         if [ ${warmup_done_by_test[$norm_name]} -gt 0 ]; then
@@ -1311,6 +1314,9 @@ PY
         else
           start_test_timer "opcodes_warmup_${client}_${filename}"
           current_count="${warmup_run_counts[$warmup_path]:-0}"
+          if ! [[ $current_count =~ ^[0-9]+$ ]]; then
+            current_count=0
+          fi
           if (( current_count < OPCODES_WARMUP_COUNT )); then
             for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
               test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
