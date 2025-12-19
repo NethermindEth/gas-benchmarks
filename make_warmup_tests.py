@@ -259,6 +259,20 @@ def main():
             val *= 1_000_000
         return val
 
+    def extract_index(path: Path) -> int:
+        """
+        Parse the numeric scenario index from the directory structure (e.g., .../testing/000123/file.txt).
+        Falls back to a large number if not found so that real indices always win.
+        """
+        parts = path.parts
+        for i, part in enumerate(parts):
+            if part.isdigit():
+                try:
+                    return int(part)
+                except ValueError:
+                    continue
+        return 1_000_000_000
+
     # Flatten warmup-tests output directory, keeping only the highest-opcount variant per normalized test name
     for sub in list(dst_root.iterdir()):
         if not sub.is_dir():
@@ -268,11 +282,16 @@ def main():
         for f in sub.rglob("*.txt"):
             norm = normalize_name(f)
             opc = parse_opcount_from_name(f)
+            idx = extract_index(f)
             existing = best_by_norm.get(norm)
-            if existing is None or opc > existing[1]:
-                best_by_norm[norm] = (f, opc)
+            if existing is None:
+                best_by_norm[norm] = (f, idx, opc)
+            else:
+                _, best_idx, best_opc = existing
+                if idx < best_idx or (idx == best_idx and opc > best_opc):
+                    best_by_norm[norm] = (f, idx, opc)
 
-        for f, _ in best_by_norm.values():
+        for f, _, _ in best_by_norm.values():
             target = dst_root / f.name
             if target.exists():
                 target.unlink()
