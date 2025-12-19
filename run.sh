@@ -1225,8 +1225,12 @@ roots = [Path(p) for p in sys.argv[2:] if p]
 def normalize_name(name: str) -> str:
     if name.endswith(".txt"):
         name = name[:-4]
+    # Drop gas-value token entirely
     name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
-    name = re.sub(r"opcount_[^]]+", "opcount", name)
+    # Drop opcount segment entirely
+    name = re.sub(r"opcount_[^-]+-?", "", name)
+    # Collapse any double dashes left behind
+    name = re.sub(r"--+", "-", name)
     return name
 
 def parse_opcount(name: str) -> int:
