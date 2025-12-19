@@ -1212,14 +1212,15 @@ for run in $(seq 1 $RUNS); do
 
       base_prefix="${filename%-gas-value_*}"
 
-warmup_path=$(python3 - "$filename" "$WARMUP_OPCODES_PATH" "warmup-repricing" "all_scenarios_for_analysis/testing" <<'PY'
+      IFS=',' read -ra _warmup_roots <<< "$WARMUP_OPCODES_PATH"
+      warmup_path=$(python3 - "$filename" "${_warmup_roots[@]}" <<'PY'
 import re
 import sys
 import json
 from pathlib import Path
 
 filename = sys.argv[1]
-roots = [Path(p) for p in sys.argv[2:]]
+roots = [Path(p) for p in sys.argv[2:] if p]
 
 def normalize_name(name: str) -> str:
     if name.endswith(".txt"):
