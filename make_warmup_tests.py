@@ -148,24 +148,6 @@ def main():
     pattern = args.pattern
 
     counters = {"total": 0, "bumped": 0, "dropped": 0}
-    best_by_norm = {}
-
-    def normalize_key(path: Path) -> str:
-        name = path.name
-        if name.endswith(".txt"):
-            name = name[:-4]
-        name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
-        name = re.sub(r"opcount_[^-]+-?", "", name)
-        return name
-
-    def extract_index(path: Path) -> int:
-        for part in path.parts:
-            if part.isdigit():
-                try:
-                    return int(part)
-                except ValueError:
-                    continue
-        return 1_000_000_000
 
     # Process each source path
     for entry in test_sources:
@@ -179,24 +161,8 @@ def main():
             if "/setup/" in normalized or "/cleanup/" in normalized:
                 continue
 
-            norm_key = normalize_key(src)
-            idx = extract_index(src)
             rel = src.relative_to(src_root)
             out = dst_root / prefix / rel
-
-            existing = best_by_norm.get(norm_key)
-            if existing:
-                existing_idx, existing_out = existing
-                if idx >= existing_idx:
-                    continue
-                if existing_out.exists():
-                    try:
-                        existing_out.unlink()
-                    except OSError:
-                        pass
-
-            best_by_norm[norm_key] = (idx, out)
-
             out.parent.mkdir(parents=True, exist_ok=True)
 
             with src.open() as fin, out.open("w") as fout:
