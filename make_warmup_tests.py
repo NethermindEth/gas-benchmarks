@@ -237,5 +237,25 @@ def main():
 
         teardown("geth")
 
+    # Flatten all generated warmup files into a single top-level directory
+    # (e.g., warmup-repricing/*.txt), keeping the latest copy on name collision.
+    all_txts = list(dst_root.rglob("*.txt"))
+    for txt in all_txts:
+        target = dst_root / txt.name
+        if target.resolve() == txt.resolve():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            target.unlink()
+        txt.rename(target)
+
+    # Remove any now-empty subdirectories
+    for path in sorted(dst_root.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_dir():
+            try:
+                next(path.iterdir())
+            except StopIteration:
+                path.rmdir()
+
 if __name__ == "__main__":
     main()
