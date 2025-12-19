@@ -1222,8 +1222,6 @@ for run in $(seq 1 $RUNS); do
       esc_filename=${esc_filename//\]/\\]}
       esc_filename=${esc_filename//\*/\\*}
       esc_filename=${esc_filename//\?/\\?}
-      esc_filename=${esc_filename//\{/\\{}
-      esc_filename=${esc_filename//\}/\\}}
       for root in "${_warmup_roots[@]}"; do
         [ -z "$root" ] && continue
         candidate="$root/$rel_path"
@@ -1247,8 +1245,6 @@ for run in $(seq 1 $RUNS); do
         esc_base_prefix=${esc_base_prefix//\]/\\]}
         esc_base_prefix=${esc_base_prefix//\*/\\*}
         esc_base_prefix=${esc_base_prefix//\?/\\?}
-        esc_base_prefix=${esc_base_prefix//\{/\\{}
-        esc_base_prefix=${esc_base_prefix//\}/\\}}
         for root in "${_warmup_roots[@]}"; do
           [ -z "$root" ] && continue
           search_dir="$root"
