@@ -1216,6 +1216,7 @@ for run in $(seq 1 $RUNS); do
       rel_path="$normalized_path"
       rel_path="${rel_path#./}"
       rel_path="${rel_path#/}"
+      esc_filename=$(printf '%s\n' "$filename" | sed 's/[][.*?^${}\\|()]/\\&/g')
       for root in "${_warmup_roots[@]}"; do
         [ -z "$root" ] && continue
         candidate="$root/$rel_path"
@@ -1223,7 +1224,7 @@ for run in $(seq 1 $RUNS); do
           warmup_path="$candidate"
           break
         fi
-        found=$(find "$root" -type f -name "$filename" -print -quit 2>/dev/null)
+        found=$(find "$root" -type f -name "$esc_filename" -print -quit 2>/dev/null)
         if [ -n "$found" ]; then
           warmup_path="$found"
           break
@@ -1233,11 +1234,12 @@ for run in $(seq 1 $RUNS); do
       if [ -z "$warmup_path" ] && [ "$base_prefix" != "$filename" ]; then
         rel_dir="${rel_path%/*}"
         [ "$rel_dir" = "$rel_path" ] && rel_dir=""
+        esc_base_prefix=$(printf '%s\n' "$base_prefix" | sed 's/[][.*?^${}\\|()]/\\&/g')
         for root in "${_warmup_roots[@]}"; do
           [ -z "$root" ] && continue
           search_dir="$root"
           [ -n "$rel_dir" ] && search_dir="$root/$rel_dir"
-          found=$(find "$search_dir" -maxdepth 1 -type f -name "$base_prefix-gas-value_*" -print -quit 2>/dev/null)
+          found=$(find "$search_dir" -maxdepth 1 -type f -name "$esc_base_prefix-gas-value_*" -print -quit 2>/dev/null)
           if [ -n "$found" ]; then
             warmup_path="$found"
             break
