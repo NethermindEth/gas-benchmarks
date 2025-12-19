@@ -1300,17 +1300,17 @@ PY
 )
 
       # Ensure numeric defaults for counters
-      current_done=${warmup_done_by_test[$norm_name]:-0}
-      if ! [[ $current_done =~ ^[0-9]+$ ]]; then
-        current_done=0
-      fi
+      current_done="${warmup_done_by_test[$norm_name]:-0}"
+      case "$current_done" in
+        ''|*[!0-9]*) current_done=0 ;;
+      esac
       warmup_done_by_test[$norm_name]=$current_done
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
-        current_done=${warmup_done_by_test[$norm_name]:-0}
-        if ! [[ $current_done =~ ^[0-9]+$ ]]; then
-          current_done=0
-        fi
+        current_done="${warmup_done_by_test[$norm_name]:-0}"
+        case "$current_done" in
+          ''|*[!0-9]*) current_done=0 ;;
+        esac
         if [ $current_done -gt 0 ]; then
           test_debug_log "Warmup already done for $norm_name; skipping opcode warmup"
         elif [ -z "$warmup_path" ]; then
@@ -1318,9 +1318,9 @@ PY
         else
           start_test_timer "opcodes_warmup_${client}_${filename}"
           current_count="${warmup_run_counts[$warmup_path]:-0}"
-          if ! [[ $current_count =~ ^[0-9]+$ ]]; then
-            current_count=0
-          fi
+          case "$current_count" in
+            ''|*[!0-9]*) current_count=0 ;;
+          esac
           if (( current_count < OPCODES_WARMUP_COUNT )); then
             for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
               test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
