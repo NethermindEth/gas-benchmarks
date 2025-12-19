@@ -1150,7 +1150,6 @@ for run in $(seq 1 $RUNS); do
     cat results/computer_specs.txt
 
     declare -A warmup_run_counts=()
-    declare -A warmup_done_by_test=()
 
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
@@ -1213,131 +1212,26 @@ for run in $(seq 1 $RUNS); do
       base_prefix="${filename%-gas-value_*}"
 
       IFS=',' read -ra _warmup_roots <<< "$WARMUP_OPCODES_PATH"
-      warmup_path=$(python3 - "$filename" "${_warmup_roots[@]}" <<'PY'
-import re
-import sys
-import json
-from pathlib import Path
-
-filename = sys.argv[1]
-roots = [Path(p) for p in sys.argv[2:] if p]
-
-def normalize_name(name: str) -> str:
-    if name.endswith(".txt"):
-        name = name[:-4]
-    # Drop gas-value token entirely
-    name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
-    # Drop opcount segment entirely
-    name = re.sub(r"opcount_[^-]+-?", "", name)
-    return name
-
-def parse_opcount(name: str) -> int:
-    m = re.search(r"opcount_([0-9]+)([kKmM]?)", name)
-    if not m:
-        return -1
-    val = int(m.group(1))
-    suffix = m.group(2).lower()
-    if suffix == "k":
-        val *= 1_000
-    elif suffix == "m":
-        val *= 1_000_000
-    return val
-
-def extract_gas_used(path: Path) -> int:
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            data = json.loads(line)
-            params = data.get("params") or []
-            if params and isinstance(params[0], dict):
-                gas_used = params[0].get("gasUsed")
-                if isinstance(gas_used, str):
-                    gas_used = gas_used.strip()
-                    if not gas_used:
-                        continue
-                    base = 16 if gas_used.lower().startswith("0x") else 10
-                    return int(gas_used, base)
-                if isinstance(gas_used, (int, float)):
-                    return int(gas_used)
-    except Exception:
-        return -1
-    return -1
-
-def extract_index(path: Path) -> int:
-    """
-    Extract the numeric directory index (e.g., .../testing/000123/file.txt -> 123).
-    If none found, return a large number so real indices always win.
-    """
-    for part in path.parts:
-        if part.isdigit():
-            try:
-                return int(part)
-            except ValueError:
-                continue
-    return 1_000_000_000
-
-target_norm = normalize_name(filename)
-
-best_path = None
-best_opcount = -1
-best_gas_used = -1
-best_index = 1_000_000_000
-
-for root in roots:
-    if not root.is_dir():
-        continue
-    for path in root.rglob("*.txt"):
-        normalized = path.as_posix()
-        if "/setup/" in normalized or "/cleanup/" in normalized:
-            continue
-        norm = normalize_name(path.name)
-        if norm != target_norm:
-            continue
-        opc = parse_opcount(path.name)
-        gas_used = extract_gas_used(path)
-        idx = extract_index(path)
-        if (idx < best_index) or (
-            idx == best_index and (
-                opc > best_opcount or (opc == best_opcount and gas_used > best_gas_used)
-            )
-        ):
-            best_index = idx
-            best_opcount = opc
-            best_gas_used = gas_used
-            best_path = path
-
-print(str(best_path) if best_path else "")
-PY
-)
-
-      norm_name=$(python3 - "$filename" <<'PY'
-import re, sys
-name = sys.argv[1] if len(sys.argv) > 1 else ""
-if name.endswith(".txt"):
-    name = name[:-4]
-name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
-name = re.sub(r"opcount_[^]]+", "opcount", name)
-print(name)
-PY
-)
-
-      # Ensure numeric defaults for counters
-      current_done="${warmup_done_by_test["$norm_name"]:-0}"
-      case "$current_done" in
-        ''|*[!0-9]*) current_done=0 ;;
-      esac
-      warmup_done_by_test["$norm_name"]=$current_done
+      warmup_path=""
+      rel_path="$normalized_path"
+      rel_path="${rel_path#./}"
+      rel_path="${rel_path#/}"
+      for root in "${_warmup_roots[@]}"; do
+        [ -z "$root" ] && continue
+        candidate="$root/$rel_path"
+        if [ -f "$candidate" ]; then
+          warmup_path="$candidate"
+          break
+        fi
+        found=$(find "$root" -type f -name "$filename" -print -quit 2>/dev/null)
+        if [ -n "$found" ]; then
+          warmup_path="$found"
+          break
+        fi
+      done
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
-        current_done="${warmup_done_by_test["$norm_name"]:-0}"
-        case "$current_done" in
-          ''|*[!0-9]*) current_done=0 ;;
-        esac
-        if [ $current_done -gt 0 ]; then
-          test_debug_log "Warmup already done for $norm_name; skipping opcode warmup"
-        elif [ -z "$warmup_path" ]; then
+        if [ -z "$warmup_path" ]; then
           echo "[WARN] No opcode warmup file found for $filename (searched under $WARMUP_OPCODES_PATH)"
         else
           start_test_timer "opcodes_warmup_${client}_${filename}"
@@ -1355,7 +1249,6 @@ PY
             warmup_run_counts["$warmup_path"]=$current_count
           fi
           end_test_timer "opcodes_warmup_${client}_${filename}"
-          warmup_done_by_test["$norm_name"]=$((current_done + 1))
         fi
       fi
 
