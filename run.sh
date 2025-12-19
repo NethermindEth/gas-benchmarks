@@ -1219,7 +1219,8 @@ import json
 from pathlib import Path
 
 filename = sys.argv[1]
-roots = [Path(p) for p in sys.argv[2:]]
+warmup_roots = [Path(p) for p in sys.argv[2:4]]  # warmup-tests, warmup-repricing
+fallback_root = Path(sys.argv[4])               # main testing dir for rare fallback
 
 def normalize_name(name: str) -> str:
     if name.endswith(".txt"):
@@ -1282,7 +1283,50 @@ best_opcount = -1
 best_gas_used = -1
 best_index = 1_000_000_000
 
-for root in roots:
+def consider_roots(roots):
+    global best_path, best_opcount, best_gas_used, best_index
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*.txt"):
+            normalized = path.as_posix()
+            if "/setup/" in normalized or "/cleanup/" in normalized:
+                continue
+            norm = normalize_name(path.name)
+            if norm != target_norm:
+                continue
+            opc = parse_opcount(path.name)
+            gas_used = extract_gas_used(path)
+            idx = extract_index(path)
+            if (idx < best_index) or (
+                idx == best_index and (
+                    opc > best_opcount or (opc == best_opcount and gas_used > best_gas_used)
+                )
+            ):
+                best_index = idx
+                best_opcount = opc
+                best_gas_used = gas_used
+                best_path = path
+
+# Prefer warmup roots; only if none found, fall back to main testing dir
+consider_roots(warmup_roots)
+if best_path is None:
+    consider_roots([fallback_root])
+
+print(str(best_path) if best_path else "")
+PY
+)
+
+      norm_name=$(python3 - "$filename" <<'PY'
+import re, sys
+name = sys.argv[1] if len(sys.argv) > 1 else ""
+if name.endswith(".txt"):
+    name = name[:-4]
+name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
+name = re.sub(r"opcount_[^]]+", "opcount", name)
+print(name)
+PY
+)
     if not root.is_dir():
         continue
     for path in root.rglob("*.txt"):
