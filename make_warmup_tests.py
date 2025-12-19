@@ -276,7 +276,8 @@ def main():
         if name.endswith(".txt"):
             name = name[:-4]
         name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
-        name = re.sub(r"opcount_[^]-]+", "opcount", name)
+        name = re.sub(r"opcount_[^-]+-?", "", name)
+        name = re.sub(r"--+", "-", name)
         return name
 
     def parse_opcount_from_name(path: Path) -> int:
