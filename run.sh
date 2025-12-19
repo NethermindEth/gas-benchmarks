@@ -1150,6 +1150,7 @@ for run in $(seq 1 $RUNS); do
     cat results/computer_specs.txt
 
     declare -A warmup_run_counts=()
+    declare -A warmup_done_by_test=()
 
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
@@ -1300,14 +1301,14 @@ PY
 )
 
       # Ensure numeric defaults for counters
-      current_done="${warmup_done_by_test[$norm_name]:-0}"
+      current_done="${warmup_done_by_test["$norm_name"]:-0}"
       case "$current_done" in
         ''|*[!0-9]*) current_done=0 ;;
       esac
-      warmup_done_by_test[$norm_name]=$current_done
+      warmup_done_by_test["$norm_name"]=$current_done
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
-        current_done="${warmup_done_by_test[$norm_name]:-0}"
+        current_done="${warmup_done_by_test["$norm_name"]:-0}"
         case "$current_done" in
           ''|*[!0-9]*) current_done=0 ;;
         esac
@@ -1317,7 +1318,7 @@ PY
           echo "[WARN] No opcode warmup file found for $filename (searched under $WARMUP_OPCODES_PATH)"
         else
           start_test_timer "opcodes_warmup_${client}_${filename}"
-          current_count="${warmup_run_counts[$warmup_path]:-0}"
+          current_count="${warmup_run_counts["$warmup_path"]:-0}"
           case "$current_count" in
             ''|*[!0-9]*) current_count=0 ;;
           esac
@@ -1326,11 +1327,12 @@ PY
               test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
               echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
               python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
-              warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
+              current_count=$((current_count + 1))
             done
+            warmup_run_counts["$warmup_path"]=$current_count
           fi
           end_test_timer "opcodes_warmup_${client}_${filename}"
-          warmup_done_by_test[$norm_name]=$((current_done + 1))
+          warmup_done_by_test["$norm_name"]=$((current_done + 1))
         fi
       fi
 
