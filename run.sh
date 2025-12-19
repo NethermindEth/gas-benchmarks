@@ -1288,16 +1288,16 @@ print(str(best_path) if best_path else "")
 PY
 )
 
-      norm_name=$(python3 - <<'PY'
-import re,sys
-name=sys.argv[1]
+      norm_name=$(python3 - "$filename" <<'PY'
+import re, sys
+name = sys.argv[1] if len(sys.argv) > 1 else ""
 if name.endswith(".txt"):
-    name=name[:-4]
-name=re.sub(r"-gas-value(?:_[^-]+)?$","",name)
-name=re.sub(r"opcount_[^]]+","opcount",name)
+    name = name[:-4]
+name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
+name = re.sub(r"opcount_[^]]+", "opcount", name)
 print(name)
 PY
-"$filename")
+)
 
       if [ -z "${warmup_done_by_test[$norm_name]+_}" ]; then
         warmup_done_by_test[$norm_name]=0
