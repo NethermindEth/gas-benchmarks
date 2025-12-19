@@ -1229,6 +1229,21 @@ for run in $(seq 1 $RUNS); do
           break
         fi
       done
+      # Legacy fallback: try matching <base_prefix>-gas-value_* alongside the test
+      if [ -z "$warmup_path" ] && [ "$base_prefix" != "$filename" ]; then
+        rel_dir="${rel_path%/*}"
+        [ "$rel_dir" = "$rel_path" ] && rel_dir=""
+        for root in "${_warmup_roots[@]}"; do
+          [ -z "$root" ] && continue
+          search_dir="$root"
+          [ -n "$rel_dir" ] && search_dir="$root/$rel_dir"
+          found=$(find "$search_dir" -maxdepth 1 -type f -name "$base_prefix-gas-value_*" -print -quit 2>/dev/null)
+          if [ -n "$found" ]; then
+            warmup_path="$found"
+            break
+          fi
+        done
+      fi
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
         if [ -z "$warmup_path" ]; then
