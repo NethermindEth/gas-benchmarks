@@ -1307,7 +1307,11 @@ PY
       warmup_done_by_test[$norm_name]=$current_done
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
-        if [ ${warmup_done_by_test[$norm_name]} -gt 0 ]; then
+        current_done=${warmup_done_by_test[$norm_name]:-0}
+        if ! [[ $current_done =~ ^[0-9]+$ ]]; then
+          current_done=0
+        fi
+        if [ $current_done -gt 0 ]; then
           test_debug_log "Warmup already done for $norm_name; skipping opcode warmup"
         elif [ -z "$warmup_path" ]; then
           echo "[WARN] No opcode warmup file found for $filename (searched under $WARMUP_OPCODES_PATH)"
@@ -1326,7 +1330,7 @@ PY
             done
           fi
           end_test_timer "opcodes_warmup_${client}_${filename}"
-          warmup_done_by_test[$norm_name]=$((warmup_done_by_test[$norm_name] + 1))
+          warmup_done_by_test[$norm_name]=$((current_done + 1))
         fi
       fi
 
