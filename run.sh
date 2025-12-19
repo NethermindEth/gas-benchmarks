@@ -1216,7 +1216,14 @@ for run in $(seq 1 $RUNS); do
       rel_path="$normalized_path"
       rel_path="${rel_path#./}"
       rel_path="${rel_path#/}"
-      esc_filename=$(printf '%s\n' "$filename" | sed 's/[][.*?^${}\\|()]/\\&/g')
+      esc_filename="$filename"
+      esc_filename=${esc_filename//\\/\\\\}
+      esc_filename=${esc_filename//\[/\\[}
+      esc_filename=${esc_filename//\]/\\]}
+      esc_filename=${esc_filename//\*/\\*}
+      esc_filename=${esc_filename//\?/\\?}
+      esc_filename=${esc_filename//\{/\\{}
+      esc_filename=${esc_filename//\}/\\}}
       for root in "${_warmup_roots[@]}"; do
         [ -z "$root" ] && continue
         candidate="$root/$rel_path"
@@ -1234,7 +1241,14 @@ for run in $(seq 1 $RUNS); do
       if [ -z "$warmup_path" ] && [ "$base_prefix" != "$filename" ]; then
         rel_dir="${rel_path%/*}"
         [ "$rel_dir" = "$rel_path" ] && rel_dir=""
-        esc_base_prefix=$(printf '%s\n' "$base_prefix" | sed 's/[][.*?^${}\\|()]/\\&/g')
+        esc_base_prefix="$base_prefix"
+        esc_base_prefix=${esc_base_prefix//\\/\\\\}
+        esc_base_prefix=${esc_base_prefix//\[/\\[}
+        esc_base_prefix=${esc_base_prefix//\]/\\]}
+        esc_base_prefix=${esc_base_prefix//\*/\\*}
+        esc_base_prefix=${esc_base_prefix//\?/\\?}
+        esc_base_prefix=${esc_base_prefix//\{/\\{}
+        esc_base_prefix=${esc_base_prefix//\}/\\}}
         for root in "${_warmup_roots[@]}"; do
           [ -z "$root" ] && continue
           search_dir="$root"
