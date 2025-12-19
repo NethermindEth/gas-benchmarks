@@ -1288,23 +1288,39 @@ print(str(best_path) if best_path else "")
 PY
 )
 
+      norm_name=$(python3 - <<'PY'
+import re,sys
+name=sys.argv[1]
+if name.endswith(".txt"):
+    name=name[:-4]
+name=re.sub(r"-gas-value(?:_[^-]+)?$","",name)
+name=re.sub(r"opcount_[^]]+","opcount",name)
+print(name)
+PY
+"$filename")
+
+      if [ -z "${warmup_done_by_test[$norm_name]+_}" ]; then
+        warmup_done_by_test[$norm_name]=0
+      fi
+
       if (( OPCODES_WARMUP_COUNT > 0 )); then
-        if [ -z "$warmup_path" ]; then
+        if [ ${warmup_done_by_test[$norm_name]} -gt 0 ]; then
+          test_debug_log "Warmup already done for $norm_name; skipping opcode warmup"
+        elif [ -z "$warmup_path" ]; then
           echo "[WARN] No opcode warmup file found for $filename (searched under $WARMUP_OPCODES_PATH)"
-          continue
-        fi
-        start_test_timer "opcodes_warmup_${client}_${filename}"
-        current_count="${warmup_run_counts[$warmup_path]:-0}"
-        if (( current_count >= OPCODES_WARMUP_COUNT )); then
-          echo ""
         else
-          for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-            test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
-            echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
-            python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
-            warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
-          done
+          start_test_timer "opcodes_warmup_${client}_${filename}"
+          current_count="${warmup_run_counts[$warmup_path]:-0}"
+          if (( current_count < OPCODES_WARMUP_COUNT )); then
+            for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
+              test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
+              echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+              python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+              warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
+            done
+          fi
           end_test_timer "opcodes_warmup_${client}_${filename}"
+          warmup_done_by_test[$norm_name]=$((warmup_done_by_test[$norm_name] + 1))
         fi
       fi
 
