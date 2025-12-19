@@ -1237,7 +1237,7 @@ for run in $(seq 1 $RUNS); do
           break
         fi
       done
-      # Legacy fallback: try matching <base_prefix>-gas-value_* alongside the test
+      # Legacy fallback: try matching <base_prefix> alongside the test
       if [ -z "$warmup_path" ] && [ "$base_prefix" != "$filename" ]; then
         rel_dir="${rel_path%/*}"
         [ "$rel_dir" = "$rel_path" ] && rel_dir=""
@@ -1253,7 +1253,7 @@ for run in $(seq 1 $RUNS); do
           [ -z "$root" ] && continue
           search_dir="$root"
           [ -n "$rel_dir" ] && search_dir="$root/$rel_dir"
-          found=$(find "$search_dir" -maxdepth 1 -type f -name "$esc_base_prefix-gas-value_*" -print -quit 2>/dev/null)
+          found=$(find "$search_dir" -maxdepth 1 -type f -name "$esc_base_prefix" -print -quit 2>/dev/null)
           if [ -n "$found" ]; then
             warmup_path="$found"
             break
