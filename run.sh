@@ -1229,8 +1229,6 @@ def normalize_name(name: str) -> str:
     name = re.sub(r"-gas-value(?:_[^-]+)?$", "", name)
     # Drop opcount segment entirely
     name = re.sub(r"opcount_[^-]+-?", "", name)
-    # Collapse any double dashes left behind
-    name = re.sub(r"--+", "-", name)
     return name
 
 def parse_opcount(name: str) -> int:
