@@ -294,6 +294,7 @@ def start_nethermind_container(chain: str, db_dir: Path, jwt_path: Path,
         "--TxPool.Size", "10000",
         "--TxPool.MaxTxSize", "null",
         "--Init.LogRules", "Consensus.Processing.ProcessingStats:Debug",
+        "--Init.BaseDbPath", "/db/mainnet",
         "--Blocks.SingleBlockImprovementOfSlot", "0.10",
     ]
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
@@ -480,13 +481,13 @@ def main():
     )
     parser.add_argument(
         "--eest-repo",
-        default="https://github.com/ethereum/execution-spec-tests",
-        help="Git repository URL for execution-spec-tests (supports forks).",
+        default="https://github.com/ethereum/execution-specs",
+        help="Git repository URL for execution-specs (supports forks).",
     )
     parser.add_argument(
         "--eest-branch",
-        default="main",
-        help="Git branch of execution-spec-tests to checkout before running (default: main).",
+        default="forks/amsterdam",
+        help="Git branch of execution-specs to checkout before running (default: main).",
     )
     args = parser.parse_args()
 
@@ -518,7 +519,7 @@ def main():
     resume_file = control_dir / "resume.json"
 
 
-    repo_dir = Path("execution-spec-tests")
+    repo_dir = Path("execution-specs")
     repo_url = args.eest_repo
     if repo_dir.exists():
         run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
@@ -600,7 +601,7 @@ def main():
             print_container_logs(container_name)
             stop_and_remove_container(container_name)
             raise RuntimeError("JSON-RPC port not reachable")
-        for _ in range(60):
+        for _ in range(240):
             try:
                 _ = rpc_call("http://127.0.0.1:8545", "eth_blockNumber")
                 break
@@ -695,12 +696,12 @@ def main():
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
             f"--gas-benchmark-values={args.gas_benchmark_values}",
-            "--eoa-fund-amount-default", "3100000000000000000",
+            #"--eoa-fund-amount-default", "3100000000000000000",
             "--tx-wait-timeout", "300",
-            "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
+            #"--eoa-start", str(int(args.rpc_seed_key, 16)),
             args.test_path,
             "--",
-            "-m", "benchmark", "-n", "1",
+            "-m", "stateful", "-n", "1",
         ]
         stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")
         if stubs_source:
@@ -805,6 +806,10 @@ def main():
         if return_code is None:
             return_code = tests_proc.returncode
         if return_code != 0:
+            print("STDOUT:")
+            print(tests_proc.stdout)
+            print("STDERR:")
+            print(tests_proc.stderr)
             raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:
             _append_suffix_to_scenarios(payloads_dir, gas_values[0])
