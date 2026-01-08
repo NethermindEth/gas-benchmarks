@@ -4,14 +4,20 @@ import os
 import subprocess
 import tempfile
 
-LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
-PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
-PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
-PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
+LOKI_RW_URL_ENV_VAR = "LOKI_RW_URL"
+LOKI_RW_USERNAME_ENV_VAR = "LOKI_RW_USERNAME"
+LOKI_RW_PASSWORD_ENV_VAR = "LOKI_RW_PASSWORD"
+PROMETHEUS_RW_URL_ENV_VAR = "PROMETHEUS_RW_URL"
+PROMETHEUS_RW_USERNAME_ENV_VAR = "PROMETHEUS_RW_USERNAME"
+PROMETHEUS_RW_PASSWORD_ENV_VAR = "PROMETHEUS_RW_PASSWORD"
+PYROSCOPE_RW_URL_ENV_VAR = "PYROSCOPE_RW_URL"
+PYROSCOPE_RW_USERNAME_ENV_VAR = "PYROSCOPE_RW_USERNAME"
+PYROSCOPE_RW_PASSWORD_ENV_VAR = "PYROSCOPE_RW_PASSWORD"
 
 executables = {
     "kute": "./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute"
 }
+
 
 def get_command_env(
     client: str,
@@ -19,18 +25,39 @@ def get_command_env(
 ):
     command_env = os.environ.copy()
 
-    loki_endpoint = command_env.get(LOKI_ENDPOINT_ENV_VAR, "")
-    prometheus_endpoint = command_env.get(PROMETHEUS_ENDPOINT_ENV_VAR, "")
-    prometheus_username = command_env.get(PROMETHEUS_USERNAME_ENV_VAR, "")
-    prometheus_password = command_env.get(PROMETHEUS_PASSWORD_ENV_VAR, "")
+    loki_rw_url = command_env.get(
+        LOKI_RW_URL_ENV_VAR,
+        "http://loki:3100/loki/api/v1/push",
+    )
+    loki_rw_username = command_env.get(LOKI_RW_USERNAME_ENV_VAR, "")
+    loki_rw_password = command_env.get(LOKI_RW_PASSWORD_ENV_VAR, "")
+    prometheus_rw_url = command_env.get(
+        PROMETHEUS_RW_URL_ENV_VAR,
+        "http://prometheus:9999/api/v1/metrics/write",
+    )
+    prometheus_rw_username = command_env.get(PROMETHEUS_RW_USERNAME_ENV_VAR, "")
+    prometheus_rw_password = command_env.get(PROMETHEUS_RW_PASSWORD_ENV_VAR, "")
+    pyroscope_rw_url = command_env.get(
+        PYROSCOPE_RW_URL_ENV_VAR,
+        "http://pyroscope:4040",
+    )
+    pyroscope_rw_username = command_env.get(PYROSCOPE_RW_USERNAME_ENV_VAR, "")
+    pyroscope_rw_password = command_env.get(PYROSCOPE_RW_PASSWORD_ENV_VAR, "")
 
     test_case_name = os.path.splitext(os.path.split(test_case_file)[-1])[0]
 
-    command_env["GA_LOKI_REMOTE_WRITE_URL"] = loki_endpoint
-    command_env["GA_PROMETHEUS_REMOTE_WRITE_URL"] = prometheus_endpoint
-    command_env["GA_PROMETHEUS_REMOTE_WRITE_USERNAME"] = prometheus_username
-    command_env["GA_PROMETHEUS_REMOTE_WRITE_PASSWORD"] = prometheus_password
+    # Set Grafana Alloy environment variables
+    command_env["GA_LOKI_RW_URL"] = loki_rw_url
+    command_env["GA_LOKI_RW_USERNAME"] = loki_rw_username
+    command_env["GA_LOKI_RW_PASSWORD"] = loki_rw_password
+    command_env["GA_PROMETHEUS_RW_URL"] = prometheus_rw_url
+    command_env["GA_PROMETHEUS_RW_USERNAME"] = prometheus_rw_username
+    command_env["GA_PROMETHEUS_RW_PASSWORD"] = prometheus_rw_password
+    command_env["GA_PYROSCOPE_RW_URL"] = pyroscope_rw_url
+    command_env["GA_PYROSCOPE_RW_USERNAME"] = pyroscope_rw_username
+    command_env["GA_PYROSCOPE_RW_PASSWORD"] = pyroscope_rw_password
     command_env["GA_METRICS_LABELS_INSTANCE"] = f"{client}-{test_case_name}"
+    command_env["GA_METRICS_LABELS_NETWORK"] = "gas-benchmarks-testnet"
     command_env["GA_METRICS_LABELS_TESTNET"] = "gas-benchmarks-testnet"
     command_env["GA_METRICS_LABELS_EXECUTION_CLIENT"] = client
 
@@ -54,7 +81,9 @@ def run_command(
                 lines = original.readlines()
         except OSError:
             lines = []
-        filtered_lines = [line for line in lines if "engine_forkchoiceUpdated" not in line]
+        filtered_lines = [
+            line for line in lines if "engine_forkchoiceUpdated" not in line
+        ]
         if len(filtered_lines) != len(lines):
             temp_file = tempfile.NamedTemporaryFile(
                 mode="w", delete=False, encoding="utf-8", suffix=".txt"
@@ -67,7 +96,7 @@ def run_command(
             temp_path = temp_file.name
     # Add logic here to run the appropriate command for each client
     command = (
-        f"{executables['kute']} -i \"{input_path}\" -s {jwt_secret} -r \"{response}\" -a {ec_url} "
+        f'{executables["kute"]} -i "{input_path}" -s {jwt_secret} -r "{response}" -a {ec_url} '
         f"{kute_extra_arguments} "
     )
     # Prepare env variables
@@ -87,10 +116,12 @@ def run_command(
     print(results.stderr, end="")
     return results.stdout
 
+
 def save_to(output_folder, file_name, content):
     output_path = os.path.join(output_folder, file_name)
     with open(output_path, "w") as file:
         file.write(content)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark script")
@@ -208,9 +239,11 @@ def main():
             )
             save_to(output_folder, f"{client}_results_{run}_{name}.txt", response)
         return
-    else:        
-        test_case_without_extension = os.path.splitext(tests_paths.split('/')[-1])[0]
-        response_file = os.path.join(output_folder, f'{client}_response_{run}_{test_case_without_extension}.txt')
+    else:
+        test_case_without_extension = os.path.splitext(tests_paths.split("/")[-1])[0]
+        response_file = os.path.join(
+            output_folder, f"{client}_response_{run}_{test_case_without_extension}.txt"
+        )
         print(f"Running {client} for the {run} time with test case {tests_paths}")
         response = run_command(
             client,
@@ -221,9 +254,12 @@ def main():
             kute_arguments,
             skip_forkchoice=args.skipForkchoice,
         )
-        save_to(output_folder, f'{client}_results_{run}_{test_case_without_extension}.txt',
-                response)
+        save_to(
+            output_folder,
+            f"{client}_results_{run}_{test_case_without_extension}.txt",
+            response,
+        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
