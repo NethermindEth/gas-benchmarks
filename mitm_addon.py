@@ -17,7 +17,7 @@ from time import perf_counter
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from mitmproxy import http
+from mitmproxy import http, ctx
 
 # ---------------------------------------------------------------------------
 # Configuration & Globals
@@ -53,6 +53,15 @@ if not _MERGED_LOG_PATH.is_absolute():
 
 _NETHERMIND_CONTAINER = _CFG.get("nethermind_container") or "eest-nethermind"
 _LIGHT_LOG = bool(_CFG.get("light_logs", True))
+_MITM_QUIET = bool(_CFG.get("mitm_quiet", True))
+_MITM_TERMLOG_VERBOSITY = _CFG.get("mitm_termlog_verbosity", "error")
+_MITM_EVENTLOG_VERBOSITY = _CFG.get("mitm_eventlog_verbosity", "error")
+_MITM_FLOWLIST_VERBOSITY = _CFG.get("mitm_flowlist_verbosity", "error")
+_MITM_FLOW_DETAIL = _CFG.get("mitm_flow_detail", 0)
+try:
+    _MITM_FLOW_DETAIL = int(_MITM_FLOW_DETAIL)
+except Exception:
+    _MITM_FLOW_DETAIL = 0
 _LIGHT_PREFIX_KEEP = ("[MITM]", "[NM]", "[SENDRAW]", "ERROR", "WARN", "overlay", "PAUSE", "RESUME")
 _NM_LAST_TS: Optional[str] = None
 
@@ -194,6 +203,23 @@ def _log(msg: str, *, to_merged: bool = False) -> None:
             _append_lines(_MERGED_LOG_PATH, [line])
     except Exception:
         pass
+
+
+def _set_mitm_option(name: str, value: Any) -> None:
+    try:
+        if hasattr(ctx.options, name):
+            setattr(ctx.options, name, value)
+    except Exception:
+        pass
+
+
+def _apply_mitm_quiet_options() -> None:
+    if not _MITM_QUIET:
+        return
+    _set_mitm_option("termlog_verbosity", _MITM_TERMLOG_VERBOSITY)
+    _set_mitm_option("console_eventlog_verbosity", _MITM_EVENTLOG_VERBOSITY)
+    _set_mitm_option("console_flowlist_verbosity", _MITM_FLOWLIST_VERBOSITY)
+    _set_mitm_option("flow_detail", _MITM_FLOW_DETAIL)
 
 
 def _capture_nethermind_logs() -> List[str]:
@@ -791,6 +817,7 @@ def _wait_for_resume() -> None:
 
 def load(loader) -> None:
     global _MON_THR, _CONTROL_THREAD
+    _apply_mitm_quiet_options()
     _ensure_dirs_and_cleanup_old()
     globals()['_OVERLAY_PRIMED'] = False
     globals()['_PENDING_OVERLAY'] = None
