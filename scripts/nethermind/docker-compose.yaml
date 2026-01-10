@@ -4,6 +4,7 @@ services:
     environment:
       - TERM=xterm-256color
       - COLORTERM=truecolor
+      - DIAG_WITH=dottrace
     stop_signal: SIGINT 
     stop_grace_period: 30s
     container_name: gas-execution-client
@@ -16,7 +17,8 @@ services:
       - execution_data:/nethermind/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
-      - ./diagfiles:/nethermind/diag
+      - ${CLIENT_ARTIFACTS_DIR:-./artifacts}:/artifacts
+      - ${CLIENT_ARTIFACTS_DIR:-./artifacts}/diag:/nethermind/diag
     ports:
       - "8009:8009"
       - "8545:8545"

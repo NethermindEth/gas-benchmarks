@@ -11,6 +11,7 @@ services:
       - execution_data:/var/lib/besu/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
+      - ${CLIENT_ARTIFACTS_DIR:-./artifacts}:/artifacts
     environment:
       BESU_USER_NAME: root
     user: root

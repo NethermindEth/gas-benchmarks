@@ -9,6 +9,7 @@ services:
       - execution_data:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+      - ${CLIENT_ARTIFACTS_DIR:-./artifacts}:/artifacts
     entrypoint:
       - /bin/sh
       - -c
@@ -27,6 +28,7 @@ services:
     volumes:
       - execution_data:/var/lib/goethereum
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${CLIENT_ARTIFACTS_DIR:-./artifacts}:/artifacts
     ports:
       - "8008:8008/tcp"
       - "8551:8551"
