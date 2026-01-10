@@ -1117,6 +1117,7 @@ for run in $(seq 1 $RUNS); do
       start_test_timer "test_run_${client}_${filename}"
       test_debug_log "Running test: $filename"
       echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
+      sleep 0.25
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
       end_test_timer "test_run_${client}_${filename}"
       echo "" # Line break after each test for logs clarity
