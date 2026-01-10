@@ -82,16 +82,24 @@ jobs:
       DOTNET_INSTALL_DIR: "~/.dotnet"
 
     steps:
-      - name: Ensure git-lfs is installed
+      - name: Ensure git-lfs and zip are installed
         run: |
+          missing=()
           if ! command -v git-lfs >/dev/null 2>&1; then
-            if command -v apt-get >/dev/null 2>&1; then
-              sudo apt-get update
-              sudo apt-get install -y git-lfs
-            else
-              echo "git-lfs not found and apt-get unavailable. Install git-lfs on the runner."
-              exit 1
-            fi
+            missing+=("git-lfs")
+          fi
+          if ! command -v zip >/dev/null 2>&1; then
+            missing+=("zip")
+          fi
+          if [ ${#missing[@]} -eq 0 ]; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+          else
+            echo "Missing: ${missing[*]}. Install them on the runner or provide apt-get."
+            exit 1
           fi
 
       - name: Checkout code
