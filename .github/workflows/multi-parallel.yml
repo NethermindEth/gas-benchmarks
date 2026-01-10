@@ -82,6 +82,18 @@ jobs:
       DOTNET_INSTALL_DIR: "~/.dotnet"
 
     steps:
+      - name: Ensure git-lfs is installed
+        run: |
+          if ! command -v git-lfs >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y git-lfs
+            else
+              echo "git-lfs not found and apt-get unavailable. Install git-lfs on the runner."
+              exit 1
+            fi
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
