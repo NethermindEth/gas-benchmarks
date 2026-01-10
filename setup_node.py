@@ -263,8 +263,8 @@ def set_env(
 
 def copy_genesis_file(source: Path, target: Path) -> None:
     if not source.is_file():
-        print(f"⚠️  Genesis file not found at: {source}, skipping copy")
-        return
+        print(f"❌ Genesis file not found at: {source}")
+        exit(1)
 
     target.parent.mkdir(parents=True, exist_ok=True)
 
