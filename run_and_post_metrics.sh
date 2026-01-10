@@ -38,6 +38,7 @@ SNAPSHOT_TEMPLATE=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
+SKIP_EMPTY=true
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -229,6 +230,10 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=true
       shift
       ;;
+    --skip-empty)
+      SKIP_EMPTY=true
+      shift
+      ;;
     --restarts)
       value=$(parse_bool "$2")
       if [ "$value" = "invalid" ]; then
@@ -248,7 +253,7 @@ done
 
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false>]"
+echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --skip-empty]"
   exit 1
 fi
 
@@ -331,6 +336,10 @@ while true; do
 
   if [ "$RESTART_BEFORE_TESTING" = true ]; then
     RUN_CMD+=(-R true)
+  fi
+
+  if [ "$SKIP_EMPTY" = true ]; then
+    RUN_CMD+=(-S)
   fi
 
   if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then
