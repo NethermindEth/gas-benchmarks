@@ -112,7 +112,8 @@ jobs:
             -r 1 \
             -i '${{ github.event.inputs.images }}' \
             -o "${{ github.event.inputs.opcodes_warmup_count }}" \
-            -f "${{ github.event.inputs.filter }}"
+            -f "${{ github.event.inputs.filter }}" \
+            -W "warmup-repricing"
 
       - name: Dump latest Docker logs for ${{ matrix.client }}
         if: always()
