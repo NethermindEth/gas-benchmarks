@@ -350,7 +350,9 @@ def start_nethermind_container(
         "--Init.LogRules",
         "Consensus.Processing.ProcessingStats:Debug",
         "--Blocks.SingleBlockImprovementOfSlot",
-        "0.10",
+        "10",
+        "--Blocks.SecondsPerSlot",
+        "2",
         "--Merge.NewPayloadBlockProcessingTimeout",
         "70000",
     ]
@@ -865,7 +867,7 @@ def main():
             run_env["PYTHONPATH"] = os.pathsep.join([src_path, existing_path])
         else:
             run_env["PYTHONPATH"] = src_path
-        run_env["EEST_POLL_INTERVAL"] = "0.1"
+        run_env["EEST_POLL_INTERVAL"] = "0.01"
 
         tests_proc = subprocess.Popen(uv_cmd, cwd=str(repo_dir), env=run_env)
         processed_tokens: set[str] = set()
