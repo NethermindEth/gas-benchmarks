@@ -5,7 +5,7 @@ on:
     inputs:
       test:
         description: 'Path to test file'
-        default: 'eest_tests'
+        default: 'repricings_compute'
       warmup:
         description: 'Name of the warm up file'
         type: choice
