@@ -10,7 +10,7 @@ IMAGES='{"nethermind":"default","geth":"default","reth":"default","erigon":"defa
 EXECUTIONS_FILE="executions.json"
 TEST_PATHS_JSON=""
 LEGACY_TEST_PATH="eest_tests"
-LEGACY_GENESIS_PATH="zkevm_genesis.json"
+LEGACY_GENESIS_PATH="zkevmgenesis.json"
 DEBUG=false
 DEBUG_FILE=""
 PROFILE_TEST=false
@@ -21,6 +21,7 @@ USE_OVERLAY=false
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
+SKIP_EMPTY=true
 
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
@@ -938,7 +939,7 @@ if [ -z "$TEST_PATHS_JSON" ]; then
     exit 1
   fi
 
-  echo "âš ď¸Ź  Falling back to legacy mode with -t and -g"
+  echo "Falling back to legacy mode with -t and -g"
   if [ -n "$LEGACY_GENESIS_PATH" ]; then
     TEST_PATHS_JSON="[ {\"path\": \"$LEGACY_TEST_PATH\", \"genesis\": \"$LEGACY_GENESIS_PATH\"} ]"
   else
@@ -1381,12 +1382,17 @@ done
 end_timer "benchmarks_total"
 
 start_timer "results_processing"
+SKIP_EMPTY_OPT=""
+if [ "$SKIP_EMPTY" = true ]; then
+  SKIP_EMPTY_OPT="--skipEmpty"
+fi
+
 if [ -z "$IMAGES" ]; then
-  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS"
-  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS"
+  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" $SKIP_EMPTY_OPT
+  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" $SKIP_EMPTY_OPT
 else
-  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES"
-  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES"
+  python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
+  python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
 fi
 end_timer "results_processing"
 

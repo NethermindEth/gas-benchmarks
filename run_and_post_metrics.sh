@@ -224,6 +224,10 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=true
       shift
       ;;
+    --skip-empty)
+      SKIP_EMPTY=true
+      shift
+      ;;
     --restarts)
       value=$(parse_bool "$2")
       if [ "$value" = "invalid" ]; then
@@ -337,6 +341,10 @@ while true; do
   fi
   if [ -n "$WARMUP_OPCODES_PATH" ]; then
     RUN_CMD+=(-W "$WARMUP_OPCODES_PATH")
+  fi
+
+  if [ "$SKIP_EMPTY" = true ]; then
+    RUN_CMD+=(-S)
   fi
 
   if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then

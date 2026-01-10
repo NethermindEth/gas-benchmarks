@@ -8,11 +8,14 @@ import utils
 import csv
 
 
-def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
+def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images, skip_empty=False):
     # Load the computer specs
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
         computer_spec = text
+    image_overrides = json.loads(images)
+    with open('images.yaml', 'r') as f:
+        default_images = yaml.safe_load(f).get("images", {})
 
     results_to_print = ('<!DOCTYPE html\>' +
                         '<html lang="en">' +
@@ -52,15 +55,12 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
     csv_table = {}
     for client in clients:
         image_to_print = ''
-        image_json = json.loads(images)
-        if client in image_json:
-            if image_json[client] != 'default' and image_json[client] != '':
-                image_to_print = image_json[client]
+        if client in image_overrides:
+            if image_overrides[client] != 'default' and image_overrides[client] != '':
+                image_to_print = image_overrides[client]
         if image_to_print == '':
-            with open('images.yaml', 'r') as f:
-                el_images = yaml.safe_load(f)["images"]
             client_without_tag = client.split("_")[0]
-            image_to_print = el_images[client_without_tag]
+            image_to_print = default_images.get(client_without_tag, client_without_tag)
         results_to_print += f'<h1>{client.capitalize()} - {image_to_print} - Benchmarking Report</h1>' + '\n'
         results_to_print += f'<table id="table_{client}">'
         results_to_print += ('<thread>\n'
@@ -81,7 +81,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              '</tr>\n'
                              '</thread>\n'
                              '<tbody>\n')
-        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
+        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, skip_empty)
         csv_table[client] = gas_table_norm
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'<tr>\n<td class="title">{data[0]}</td>\n'
@@ -185,6 +185,7 @@ def main():
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
                         default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}')
+    parser.add_argument('--skipEmpty', action='store_true', default=True, help='Skip empty results')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -195,6 +196,7 @@ def main():
     tests_path = args.testsPath
     runs = args.runs
     images = args.images
+    skip_empty = args.skipEmpty
 
     # Get the computer spec
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
@@ -286,7 +288,7 @@ def main():
                     rows = [name, gas_value_mgas, opcount_value if opcount_value is not None else ''] + client_results[client][test_case_name][gas][methods[0]] + [description]
                     csvwriter.writerow(rows)
 
-    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
+    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, skip_empty)
 
     print('Done!')
 
