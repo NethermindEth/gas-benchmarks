@@ -1260,6 +1260,7 @@ for run in $(seq 1 $RUNS); do
             for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
               test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
               echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+              sleep 0.25
               python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
               warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
             done
