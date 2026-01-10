@@ -306,14 +306,4 @@ jobs:
           workflow: multi-parallel.yml
           ref: "${{ github.ref }}"
           token: "${{ secrets.GH_TOKEN }}"
-          inputs: >
-            {
-              "test": "${{ github.event.inputs.test }}",
-              "warmup": "${{ github.event.inputs.warmup }}",
-              "runs": "${{ github.event.inputs.runs }}",
-              "images": "${{ github.event.inputs.images }}",
-              "opcodes_warmup_count": "${{ github.event.inputs.opcodes_warmup_count }}",
-              "filter": "${{ github.event.inputs.filter }}",
-              "txt_report": "${{ github.event.inputs.txt_report }}",
-              "genesis": "${{ github.event.inputs.genesis }}"
-            }
+          inputs: ${{ toJson(github.event.inputs) }}
