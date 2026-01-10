@@ -8,7 +8,7 @@ import utils
 import csv
 
 
-def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
+def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images, skip_empty=False):
     # Load the computer specs
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
@@ -81,7 +81,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              '</tr>\n'
                              '</thread>\n'
                              '<tbody>\n')
-        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
+        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, skip_empty)
         csv_table[client] = gas_table_norm
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'<tr>\n<td class="title">{data[0]}</td>\n'
@@ -185,6 +185,7 @@ def main():
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
                         default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}')
+    parser.add_argument('--skipEmpty', action='store_true', default=True, help='Skip empty results')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -195,6 +196,7 @@ def main():
     tests_path = args.testsPath
     runs = args.runs
     images = args.images
+    skip_empty = args.skipEmpty
 
     # Get the computer spec
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
@@ -277,10 +279,15 @@ def main():
                         name = metadata[test_case_name]['Title']
                         description = metadata[test_case_name]['Description']
 
-                    rows = [name, gas] + client_results[client][test_case_name][gas][methods[0]] + [description]
+                    raw_results = client_results[client][test_case_name][gas][methods[0]]
+                    # Skip if all results are 0 (skipped tests)
+                    if skip_empty and all(r == 0 for r in raw_results):
+                        continue
+
+                    rows = [name, gas] + raw_results + [description]
                     csvwriter.writerow(rows)
 
-    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
+    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, skip_empty)
 
     print('Done!')
 
