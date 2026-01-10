@@ -167,6 +167,13 @@ jobs:
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+
+      - name: Docker full prune
+        if: always()
+        run: |
+          docker ps -q | xargs -r docker stop || true
+          docker ps -aq | xargs -r docker rm -f || true
+          docker system prune -af --volumes || true
   combine-results:
     needs: build
     runs-on: ubuntu-latest
