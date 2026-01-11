@@ -129,6 +129,43 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
                 pass
 
 
+def _ensure_testing_placeholders(payload_dir: Path) -> None:
+    setup_dir = payload_dir / "setup"
+    cleanup_dir = payload_dir / "cleanup"
+    testing_dir = payload_dir / "testing"
+
+    indices = set()
+    for phase_dir in (setup_dir, cleanup_dir):
+        if not phase_dir.is_dir():
+            continue
+        for entry in phase_dir.iterdir():
+            if entry.is_dir():
+                indices.add(entry.name)
+
+    if not indices:
+        return
+
+    for idx in sorted(indices):
+        target_dir = testing_dir / idx
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            continue
+        try:
+            entries = list(target_dir.iterdir())
+        except Exception:
+            continue
+        if any(entry.name != ".gitkeep" for entry in entries):
+            continue
+        gitkeep = target_dir / ".gitkeep"
+        if gitkeep.exists():
+            continue
+        try:
+            gitkeep.write_text("", encoding="utf-8")
+        except Exception:
+            pass
+
+
 # --------------------------------------------------------------------------------
 
 def _read_json_file(path: Path):
@@ -958,6 +995,7 @@ def main():
             raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:
             _append_suffix_to_scenarios(payloads_dir, gas_values[0])
+        _ensure_testing_placeholders(payloads_dir)
     finally:
         if not args.keep:
             try:
