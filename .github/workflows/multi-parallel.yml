@@ -297,7 +297,7 @@ jobs:
             --db-port ${{ env.DB_PORT }} \
             --db-user ${{ env.DB_USER }} \
             --db-name monitoring \
-            --table-name repricings3 \
+            --table-name repricings4 \
             --db-password "${{ env.DB_PASSWORD }}" \
             --log-level DEBUG \
             --reports-dir 'extracted-results/reports/'
