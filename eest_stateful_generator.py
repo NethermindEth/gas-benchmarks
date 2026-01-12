@@ -697,7 +697,7 @@ def main():
             f"--rpc-endpoint={tests_rpc}",
             f"--gas-benchmark-values={args.gas_benchmark_values}",
             #"--eoa-fund-amount-default", "3100000000000000000",
-            "--tx-wait-timeout", "300",
+            "--tx-wait-timeout", "5",
             #"--eoa-start", str(int(args.rpc_seed_key, 16)),
             args.test_path,
             "--",
