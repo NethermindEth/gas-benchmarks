@@ -130,20 +130,28 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
 
 
 def _ensure_testing_placeholders(payload_dir: Path) -> None:
-    setup_dir = payload_dir / "setup"
-    cleanup_dir = payload_dir / "cleanup"
     testing_dir = payload_dir / "testing"
 
-    indices = set()
-    for phase_dir in (setup_dir, cleanup_dir):
-        if not phase_dir.is_dir():
-            continue
-        for entry in phase_dir.iterdir():
-            if entry.is_dir():
-                indices.add(entry.name)
-
-    if not indices:
+    indices: set[str] = set()
+    numeric_indices: list[int] = []
+    widths: list[int] = []
+    if not testing_dir.is_dir():
         return
+    for entry in testing_dir.iterdir():
+        if not entry.is_dir():
+            continue
+        indices.add(entry.name)
+        if entry.name.isdigit():
+            numeric_indices.append(int(entry.name))
+            widths.append(len(entry.name))
+
+    if numeric_indices:
+        min_idx = min(numeric_indices)
+        max_idx = max(numeric_indices)
+        pad_width = max(widths) if widths else 0
+        for idx in range(min_idx, max_idx + 1):
+            name = str(idx).zfill(pad_width) if pad_width else str(idx)
+            indices.add(name)
 
     for idx in sorted(indices):
         target_dir = testing_dir / idx
@@ -1029,3 +1037,5 @@ if __name__ == "__main__":
     main()
 
 
+    if not indices:
+        return
