@@ -1035,7 +1035,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-    if not indices:
-        return
