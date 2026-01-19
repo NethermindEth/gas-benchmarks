@@ -293,18 +293,24 @@ The generator supports opcode tracing to capture which opcodes are executed duri
 
 ```sh
 python eest_stateful_generator.py \
-    --chain mainnet \
-    --fork Prague \
-    --rpc-seed-key YOUR_PRIVATE_KEY \
-    --rpc-address YOUR_ADDRESS \
-    --test-path tests \
-    --trace-json \
-    --trace-json-output results_fixed.json
+     --data-dir scripts/nethermind/execution-data \
+     --genesis-path scripts/genesisfiles/nethermind/zkevmgenesis.json \
+     --nethermind-image nethermindeth/nethermind:gp-hacked \
+     --fork Prague \
+     --rpc-seed-key SOMEKEY \
+     --rpc-address SOMEADDRESS \
+     --payload-dir repricings_compute \
+     --eest-repo https://github.com/spencer-tb/execution-specs \
+     --eest-branch feat/fixed-opcode-count-updates \
+     --gas-bump-count 0 \
+     --trace-json \
+     --trace-json-output results.json
 ```
 
 **Options:**
+
 - `--trace-json`: Enable opcode tracing and generate JSON output mapping tests to opcode counts.
-- `--trace-json-output`: Output path for the opcode trace results JSON (default: `opcode_trace_results.json`).
+- `--trace-json-output`: Output path for the opcode trace results JSON.
 
 **Output format:**
 
@@ -341,7 +347,8 @@ python fill_tests_metadata_db.py \
 ```
 
 **Parameters:**
-- `--json-file`: Path to the JSON file containing opcode metrics (e.g., `results_fixed.json`).
+
+- `--json-file`: Path to the JSON file containing opcode metrics (e.g., `results.json`).
 - `--db-host`: PostgreSQL database host.
 - `--db-port`: PostgreSQL database port (default: 5432).
 - `--db-user`: PostgreSQL database user.
@@ -381,6 +388,7 @@ CREATE TABLE test_metadata (
 **Update Behavior:**
 
 When running the script multiple times:
+
 - Tests that exist in the database and the new JSON file will have their `opcodes` updated and `updated_at` timestamp refreshed.
 - Tests that exist in the database but not in the new JSON file remain unchanged.
 - New tests are inserted with both `created_at` and `updated_at` set to the current time.
