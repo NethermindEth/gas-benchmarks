@@ -3,6 +3,7 @@ import argparse
 import os
 import subprocess
 import tempfile
+import time
 
 LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
 PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
@@ -45,6 +46,7 @@ def run_command(
     ec_url,
     kute_extra_arguments,
     skip_forkchoice=False,
+    rerun_syncing=False,
 ):
     input_path = test_case_file
     temp_path = None
@@ -76,9 +78,23 @@ def run_command(
         test_case_file,
     )
 
-    results = subprocess.run(
-        command, shell=True, capture_output=True, text=True, env=command_env
-    )
+    attempts = 0
+    max_attempts = 30
+    retry_backoff_sec = 1
+    while True:
+        results = subprocess.run(
+            command, shell=True, capture_output=True, text=True, env=command_env
+        )
+        if rerun_syncing and \
+                attempts < max_attempts and \
+                os.path.exists(response) and \
+                "SYNCING" in open(response, "r").read().split("\n")[0]:
+            attempts += 1
+            print(f"Rerunning syncing response {attempts} times out of {max_attempts} max with {retry_backoff_sec} seconds backoff")
+            os.remove(response)
+            time.sleep(retry_backoff_sec)
+        else:
+            break
     if temp_path and os.path.exists(temp_path):
         try:
             os.remove(temp_path)
@@ -143,6 +159,11 @@ def main():
         "--skipForkchoice",
         action="store_true",
         help="Ignore engine_forkchoiceUpdated requests contained in the test input.",
+    )
+    parser.add_argument(
+        "--rerunSyncing",
+        action="store_true",
+        help="Rerun a syncing response. Useful when sending preparation payloads to clients that may return SYNCING while still initialising",
     )
 
     # Parse command-line arguments
@@ -220,6 +241,7 @@ def main():
             execution_url,
             kute_arguments,
             skip_forkchoice=args.skipForkchoice,
+            rerun_syncing=args.rerunSyncing,
         )
         save_to(output_folder, f'{client}_results_{run}_{test_case_without_extension}.txt',
                 response)
