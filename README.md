@@ -337,7 +337,7 @@ After generating opcode trace results, you can populate a PostgreSQL database wi
 
 ```sh
 python fill_tests_metadata_db.py \
-    --json-file results_fixed.json \
+    --json-file results.json \
     --db-host <your_db_host> \
     --db-port <your_db_port> \
     --db-user <your_db_user> \

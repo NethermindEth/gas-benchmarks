@@ -199,7 +199,7 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
 
         # Find .txt files in the subdirectory
         for txt_file in subdir.glob("*.txt"):
-            test_name = txt_file.stem  # filename without .txt
+            test_name = txt_file.stem
 
             try:
                 lines = txt_file.read_text(encoding="utf-8").splitlines()
@@ -214,6 +214,7 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
                     continue
                 try:
                     data = json.loads(line)
+                    # Change this for other forks!
                     if data.get("method") == "engine_newPayloadV4":
                         params = data.get("params", [])
                         if params and isinstance(params[0], dict):
