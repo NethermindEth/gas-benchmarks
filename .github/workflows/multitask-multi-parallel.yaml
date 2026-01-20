@@ -46,7 +46,7 @@ env:
   INPUT_WARMUP: ${{ github.event.inputs.warmup || '' }}
   INPUT_CLIENT: ${{ github.event_name == 'push' && 'nethermind' || (github.event.inputs.client || 'nethermind,geth,reth,besu,erigon,nimbus,ethrex') }}
   INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
-  INPUT_PARALLEL_LEVEL: ${{ github.event.inputs.parallel_level || 1 }}
+  INPUT_PARALLEL_LEVEL: ${{ github.event.inputs.parallel_level || 10 }}
   INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}' }}
   INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
   INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
@@ -145,11 +145,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TEST_PATHS_JSON=$(cat shard-tests.json)
           CLIENT="${{ matrix.client }}"
 
           ./run.sh \
-            -T "$TEST_PATHS_JSON" \
+            -T "@shard-tests.json" \
             -w "${{ env.INPUT_WARMUP }}" \
             -c "$CLIENT" \
             -r 1 \

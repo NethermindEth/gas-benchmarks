@@ -797,6 +797,17 @@ done
 
 
 
+# Allow passing a file path for -T to avoid long argument lists.
+if [ -n "$TEST_PATHS_JSON" ]; then
+  file_path="$TEST_PATHS_JSON"
+  if [[ "$file_path" == @* ]]; then
+    file_path="${file_path#@}"
+  fi
+  if [ -f "$file_path" ]; then
+    TEST_PATHS_JSON=$(cat "$file_path")
+  fi
+fi
+
 # Fallback to legacy -t/-g if -T not provided
 if [ -z "$TEST_PATHS_JSON" ]; then
   if [ -z "$LEGACY_TEST_PATH" ]; then
