@@ -1,0 +1,321 @@
+name: Run Parallel Benchmarks with Test Shards
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Path to test file or directory'
+        default: 'eest_tests'
+      warmup:
+        description: 'Name of the warm up file'
+        type: choice
+        options:
+          - ''
+          - warmup/warmup-100bl-16wi-32tx.txt
+          - warmup/warmup-1000bl-16wi-24tx.txt
+          - warmup/warmup-1000bl-16wi-1000tx.txt
+        default: ''
+      client:
+        description: 'Comma-separated list of client names'
+        default: 'nethermind,geth,reth,besu,erigon,nimbus,ethrex'
+      runs:
+        description: 'Number of runs for the application'
+        default: 1
+      parallel_level:
+        description: 'Number of test shards to run in parallel'
+        default: 10
+      images:
+        description: 'JSON map of images for the clients'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
+      opcodes_warmup_count:
+        description: 'Number of opcode-warmup iterations'
+        default: 1
+      filter:
+        description: 'Comma-separated include-only filename patterns'
+        default: ''
+      txt_report:
+        description: 'Mark as true to generate txt report'
+        default: 'false'
+      genesis:
+        description: 'Genesis filename (used for all clients)'
+        default: 'zkevmgenesis.json'
+
+env:
+  INPUT_TEST: ${{ github.event.inputs.test || 'eest_tests' }}
+  INPUT_WARMUP: ${{ github.event.inputs.warmup || '' }}
+  INPUT_CLIENT: ${{ github.event_name == 'push' && 'nethermind' || (github.event.inputs.client || 'nethermind,geth,reth,besu,erigon,nimbus,ethrex') }}
+  INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
+  INPUT_PARALLEL_LEVEL: ${{ github.event.inputs.parallel_level || 1 }}
+  INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}' }}
+  INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
+  INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
+  INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
+  INPUT_GENESIS: ${{ github.event.inputs.genesis || 'zkevmgenesis.json' }}
+
+jobs:
+  set-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix dynamically
+        id: set-matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs="${{ env.INPUT_RUNS }}"
+          clients="${{ env.INPUT_CLIENT }}"
+          parallel_level="${{ env.INPUT_PARALLEL_LEVEL }}"
+
+          if ! [[ "$parallel_level" =~ ^[0-9]+$ ]] || [ "$parallel_level" -lt 1 ]; then
+            parallel_level=1
+          fi
+
+          IFS=',' read -ra client_array <<< "$clients"
+          matrix_elements=()
+
+          for ((i=1; i<=runs; i++)); do
+            for client in "${client_array[@]}"; do
+              for ((shard=0; shard<parallel_level; shard++)); do
+                element="{\"run\":\"$i\",\"client\":\"$client\",\"shard\":\"$shard\",\"shards_total\":\"$parallel_level\"}"
+                matrix_elements+=("$element")
+              done
+            done
+          done
+
+          matrix="{\"include\":[$(IFS=,; echo "${matrix_elements[*]}")]}"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: set-matrix
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+      fail-fast: false
+
+    env:
+      DOTNET_INSTALL_DIR: "~/.dotnet"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Python & .NET
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Make run.sh executable
+        run: chmod +x ./run.sh
+
+      - name: Build test shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/split_tests.py \
+            --tests-path "${{ env.INPUT_TEST }}" \
+            --shard-index "${{ matrix.shard }}" \
+            --shard-total "${{ matrix.shards_total }}" \
+            --genesis "${{ env.INPUT_GENESIS }}" \
+            --output shard-tests.json
+
+          shard_count=$(python3 - <<'PY'
+          import json
+          with open("shard-tests.json", "r", encoding="utf-8") as handle:
+              data = json.load(handle)
+          print(len(data))
+          PY
+          )
+
+          echo "SHARD_TESTS_COUNT=$shard_count" >> "$GITHUB_ENV"
+          if [ "$shard_count" -eq 0 ]; then
+            echo "SKIP_BENCHMARKS=true" >> "$GITHUB_ENV"
+            mkdir -p results
+          fi
+
+      - name: Run benchmarks for client=${{ matrix.client }} shard=${{ matrix.shard }}
+        if: env.SKIP_BENCHMARKS != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_PATHS_JSON=$(cat shard-tests.json)
+          CLIENT="${{ matrix.client }}"
+
+          ./run.sh \
+            -T "$TEST_PATHS_JSON" \
+            -w "${{ env.INPUT_WARMUP }}" \
+            -c "$CLIENT" \
+            -r 1 \
+            -i '${{ env.INPUT_IMAGES }}' \
+            -o "${{ env.INPUT_OPCODES_WARMUP }}" \
+            -f "${{ env.INPUT_FILTER }}"
+
+      - name: Dump latest Docker logs for ${{ matrix.client }}
+        if: always()
+        run: |
+          # Find the newest docker log file for this client
+          LATEST=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
+          LATEST_SYNC=$(ls -1t logs/docker_sync_${{ matrix.client }}_*.log | head -n1 || true)
+          if [[ -n "$LATEST" ]]; then
+            echo "=== Dumping $LATEST ==="
+            cat "$LATEST"
+          else
+            echo "No docker_*.log files found for client=${{ matrix.client }}"
+          fi
+
+          if [[ -n "$LATEST_SYNC" ]]; then
+            echo "=== Dumping $LATEST_SYNC ==="
+            cat "$LATEST_SYNC"
+          else
+            echo "No docker_sync_*.log files found for client=${{ matrix.client }}"
+          fi
+
+      - name: Zip the results folder
+        run: |
+          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
+          CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
+          CLEANED_SHARD=$(echo "${{ matrix.shard }}" | tr -d '\n')
+          echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
+          echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
+          echo "CLEANED_SHARD=$CLEANED_SHARD" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}-shard-${CLEANED_SHARD}.zip results
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-shard-${{ env.CLEANED_SHARD }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-shard-${{ env.CLEANED_SHARD }}.zip
+
+  combine-results:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: combined-results
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Process combined results
+        run: |
+          set -euo pipefail
+          RESULTS_ROOT="extracted-results/results"
+          if [ ! -d "$RESULTS_ROOT" ]; then
+            echo "Results directory not found: $RESULTS_ROOT"
+            exit 1
+          fi
+
+          mapfile -t CLIENTS < <(find "$RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
+          if [ "${#CLIENTS[@]}" -eq 0 ]; then
+            echo "No client result files detected under $RESULTS_ROOT; skipping report generation."
+            mkdir -p reports
+            exit 0
+          fi
+
+          CLIENT_LIST=$(
+            printf "%s\n" "${CLIENTS[@]}" \
+              | xargs -n1 basename \
+              | sed 's/_results_.*//' \
+              | sort -u \
+              | paste -sd',' -
+          )
+
+          if [ -z "$CLIENT_LIST" ]; then
+            echo "Unable to derive client list from results; skipping report generation."
+            mkdir -p reports
+            exit 0
+          fi
+
+          rm -rf reports
+          mkdir -p reports
+
+          RUNS="${{ env.INPUT_RUNS }}"
+          TESTS="${{ env.INPUT_TEST }}"
+          IMAGES='${{ env.INPUT_IMAGES }}'
+
+          python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+          python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+
+      - name: Generate Report
+        if: ${{ env.INPUT_TXT_REPORT == 'true' }}
+        run: |
+          python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ env.INPUT_CLIENT }}" --testsPath ${{ env.INPUT_TEST }}
+
+      - name: Zip the results folder
+        run: |
+          zip -r reports.zip reports
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports.zip
+
+  populate-db:
+    needs: combine-results
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install python dependencies for submodule
+        run: |
+          pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: combined-results
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Populate Benchmark DB
+        run: |
+          python fill_postgres_db.py \
+            --db-host ${{ env.DB_HOST }} \
+            --db-port ${{ env.DB_PORT }} \
+            --db-user ${{ env.DB_USER }} \
+            --db-name monitoring \
+            --table-name gas_benchmarks_ci \
+            --db-password "${{ env.DB_PASSWORD }}" \
+            --log-level DEBUG \
+            --reports-dir 'extracted-results/reports/'
