@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""
+Compare Engine API response hashes across multiple clients.
+
+This script takes multiple JSON hash files (output from hash_capture_addon.py)
+and reports any mismatches or missing tests between clients.
+
+Usage:
+    python3 compare_hashes.py response_hashes/*.json
+    python3 compare_hashes.py response_hashes/nethermind_run_1.json response_hashes/geth_run_1.json
+
+Exit codes:
+    0 - All hashes match across all clients
+    1 - Mismatches found or errors occurred
+"""
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from collections import defaultdict
+from typing import Dict, List, Set, Tuple
+
+
+def load_hash_file(path: Path) -> dict:
+    """Load a hash file and return its contents."""
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def compare_hashes(hash_files: List[Path]) -> Tuple[bool, List[str]]:
+    """
+    Compare hashes across multiple files.
+
+    Returns:
+        Tuple of (all_match: bool, messages: List[str])
+    """
+    messages = []
+    all_match = True
+
+    if len(hash_files) < 2:
+        messages.append("Need at least 2 hash files to compare")
+        return False, messages
+
+    # Load all hash files
+    client_data = {}
+    for path in hash_files:
+        try:
+            data = load_hash_file(path)
+            client = data.get("client", path.stem)
+            run = data.get("run", 1)
+            key = f"{client}_run_{run}"
+            client_data[key] = data
+            messages.append(f"Loaded {path}: {client} run {run} with {len(data.get('tests', {}))} tests")
+        except (json.JSONDecodeError, IOError) as e:
+            messages.append(f"Error loading {path}: {e}")
+            all_match = False
+            continue
+
+    if len(client_data) < 2:
+        messages.append("Need at least 2 valid hash files to compare")
+        return False, messages
+
+    # Collect all test names and methods across all clients
+    all_tests: Set[str] = set()
+    all_methods: Set[str] = set()
+
+    for data in client_data.values():
+        tests = data.get("tests", {})
+        all_tests.update(tests.keys())
+        for test_hashes in tests.values():
+            all_methods.update(test_hashes.keys())
+
+    messages.append(f"\nFound {len(all_tests)} unique tests across {len(client_data)} clients")
+    messages.append(f"Methods tracked: {', '.join(sorted(all_methods))}")
+
+    # Check for missing tests per client
+    messages.append("\n--- Missing Tests ---")
+    missing_found = False
+    for client_key, data in client_data.items():
+        tests = data.get("tests", {})
+        client_tests = set(tests.keys())
+        missing = all_tests - client_tests
+        if missing:
+            missing_found = True
+            messages.append(f"\n{client_key} is missing {len(missing)} tests:")
+            for test in sorted(missing)[:10]:  # Show first 10
+                messages.append(f"  - {test}")
+            if len(missing) > 10:
+                messages.append(f"  ... and {len(missing) - 10} more")
+
+    if not missing_found:
+        messages.append("No missing tests")
+
+    # Compare hashes for each test
+    messages.append("\n--- Hash Comparison ---")
+    mismatches = []
+
+    for test_name in sorted(all_tests):
+        for method in sorted(all_methods):
+            # Collect hashes for this test/method from all clients
+            hashes_by_client: Dict[str, str] = {}
+
+            for client_key, data in client_data.items():
+                tests = data.get("tests", {})
+                if test_name in tests and method in tests[test_name]:
+                    hashes_by_client[client_key] = tests[test_name][method]
+
+            # Skip if fewer than 2 clients have this hash
+            if len(hashes_by_client) < 2:
+                continue
+
+            # Check if all hashes match
+            unique_hashes = set(hashes_by_client.values())
+            if len(unique_hashes) > 1:
+                mismatches.append((test_name, method, hashes_by_client))
+
+    if mismatches:
+        all_match = False
+        messages.append(f"\nFound {len(mismatches)} mismatches:")
+        for test_name, method, hashes in mismatches[:20]:  # Show first 20
+            messages.append(f"\n  Test: {test_name}")
+            messages.append(f"  Method: {method}")
+            for client_key, hash_val in sorted(hashes.items()):
+                messages.append(f"    {client_key}: {hash_val[:16]}...")
+        if len(mismatches) > 20:
+            messages.append(f"\n  ... and {len(mismatches) - 20} more mismatches")
+    else:
+        messages.append("\nAll hashes match across clients!")
+
+    # Summary
+    messages.append("\n--- Summary ---")
+    messages.append(f"Total tests compared: {len(all_tests)}")
+    messages.append(f"Total mismatches: {len(mismatches)}")
+    messages.append(f"Result: {'PASS' if all_match else 'FAIL'}")
+
+    return all_match, messages
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Compare Engine API response hashes across clients"
+    )
+    parser.add_argument(
+        "hash_files",
+        nargs="+",
+        type=Path,
+        help="JSON hash files to compare"
+    )
+    parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Only print mismatches and summary"
+    )
+    parser.add_argument(
+        "-o", "--output",
+        type=Path,
+        help="Write results to file instead of stdout"
+    )
+
+    args = parser.parse_args()
+
+    # Verify files exist
+    for path in args.hash_files:
+        if not path.exists():
+            print(f"Error: File not found: {path}", file=sys.stderr)
+            sys.exit(1)
+
+    all_match, messages = compare_hashes(args.hash_files)
+
+    # Filter messages if quiet mode
+    if args.quiet:
+        messages = [m for m in messages if "mismatch" in m.lower() or "summary" in m.lower() or "result" in m.lower()]
+
+    output = "\n".join(messages)
+
+    if args.output:
+        args.output.write_text(output, encoding="utf-8")
+        print(f"Results written to {args.output}")
+    else:
+        print(output)
+
+    sys.exit(0 if all_match else 1)
+
+
+if __name__ == "__main__":
+    main()

@@ -61,6 +61,10 @@ inputs:
     description: 'PostgreSQL password (pass from caller, typically from a secret)'
     required: false
     default: ''
+  compareHashes:
+    description: 'Capture and compare Engine API request hashes across clients (true/false)'
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -121,6 +125,13 @@ runs:
       working-directory: ${{ github.action_path }}/../../..
       run: mkdir -p results
 
+    - name: Install mitmproxy for hash capture
+      if: ${{ inputs.compareHashes == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install mitmproxy
+
     - name: Run gas-benchmarks
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
@@ -133,9 +144,15 @@ runs:
         IMAGES: ${{ inputs.images }}
         OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
         FILTER: ${{ inputs.filter }}
+        COMPARE_HASHES: ${{ inputs.compareHashes }}
       run: |
         set -euo pipefail
         TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+
+        HASH_FLAG=""
+        if [ "$COMPARE_HASHES" = "true" ]; then
+          HASH_FLAG="-H"
+        fi
 
         ./run.sh \
           -T "$TEST_PATHS_JSON" \
@@ -144,7 +161,17 @@ runs:
           -r "$RUNS" \
           -i "$IMAGES" \
           -o "$OPCODE_WARMUP_COUNT" \
-          -f "$FILTER"
+          -f "$FILTER" \
+          $HASH_FLAG
+
+    - name: Compare Engine API request hashes
+      if: ${{ inputs.compareHashes == 'true' }}
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        echo "Comparing Engine API request hashes across clients..."
+        python3 compare_hashes.py response_hashes/*.json
 
     - name: Generate TXT report (optional)
       if: ${{ inputs.txtReport == 'true' }}
@@ -171,6 +198,7 @@ runs:
           reports
           reports.zip
           results
+          response_hashes
 
     - name: Validate PostgreSQL configuration (optional)
       if: ${{ inputs.postgresHost != '' }}
