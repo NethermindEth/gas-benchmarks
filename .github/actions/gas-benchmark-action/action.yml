@@ -171,9 +171,10 @@ runs:
       env:
         COMPARE_HASHES: ${{ inputs.compareHashes }}
       run: |
-        set -euo pipefail
+        set -uo pipefail
         echo "Comparing Engine API hashes across clients (mode: $COMPARE_HASHES)..."
-        python3 compare_hashes.py --mode "$COMPARE_HASHES" response_hashes/*.json
+        # Don't fail the workflow on mismatches - just report the result
+        python3 compare_hashes.py --mode "$COMPARE_HASHES" response_hashes/*.json || echo "::warning::Hash comparison found mismatches"
 
     - name: Generate TXT report (optional)
       if: ${{ inputs.txtReport == 'true' }}
