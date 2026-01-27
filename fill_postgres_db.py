@@ -169,13 +169,7 @@ def parse_opcount(raw_value: Optional[str]) -> Optional[int]:
         raise ValueError(f"Unrecognized opcount format: {raw_value}")
 
     number_part = float(match.group("num"))
-    suffix = match.group("suffix").lower()
-    if suffix == "k":
-        number_part *= 1_000
-    elif suffix == "m":
-        number_part *= 1_000_000
-
-    return int(number_part)
+    return int(number_part * 1_000)
 
 def parse_specs_from_text(spec_text_content: str) -> Dict[str, Any]:
     """
