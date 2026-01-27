@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """
-Compare Engine API response hashes across multiple clients.
+Compare Engine API hashes across multiple clients.
 
 This script takes multiple JSON hash files (output from hash_capture_addon.py)
 and reports any mismatches or missing tests between clients.
 
+Supports different comparison modes:
+- request: Compare only request hashes (default, backward compatible)
+- response: Compare only response hashes
+- all: Compare both request and response hashes
+
 Usage:
     python3 compare_hashes.py response_hashes/*.json
-    python3 compare_hashes.py response_hashes/nethermind_run_1.json response_hashes/geth_run_1.json
+    python3 compare_hashes.py --mode request response_hashes/*.json
+    python3 compare_hashes.py --mode response response_hashes/*.json
+    python3 compare_hashes.py --mode all response_hashes/*.json
 
 Exit codes:
     0 - All hashes match across all clients
@@ -28,9 +35,34 @@ def load_hash_file(path: Path) -> dict:
         return json.load(f)
 
 
-def compare_hashes(hash_files: List[Path]) -> Tuple[bool, List[str]]:
+def extract_hash(hash_value, hash_type: str) -> str | None:
+    """
+    Extract a specific hash from a hash value.
+
+    Args:
+        hash_value: Either a string (flat hash) or dict with "request"/"response" keys
+        hash_type: One of "request", "response"
+
+    Returns:
+        The hash string or None if not available
+    """
+    if hash_value is None:
+        return None
+    if isinstance(hash_value, str):
+        # Flat hash - assume it matches the requested type for backward compatibility
+        return hash_value
+    if isinstance(hash_value, dict):
+        return hash_value.get(hash_type)
+    return None
+
+
+def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool, List[str]]:
     """
     Compare hashes across multiple files.
+
+    Args:
+        hash_files: List of hash file paths to compare
+        mode: Comparison mode - "request", "response", or "all"
 
     Returns:
         Tuple of (all_match: bool, messages: List[str])
@@ -42,6 +74,8 @@ def compare_hashes(hash_files: List[Path]) -> Tuple[bool, List[str]]:
         messages.append("Need at least 2 hash files to compare")
         return False, messages
 
+    messages.append(f"Comparison mode: {mode}")
+
     # Load all hash files
     client_data = {}
     for path in hash_files:
@@ -49,9 +83,10 @@ def compare_hashes(hash_files: List[Path]) -> Tuple[bool, List[str]]:
             data = load_hash_file(path)
             client = data.get("client", path.stem)
             run = data.get("run", 1)
+            file_mode = data.get("mode", "request")
             key = f"{client}_run_{run}"
             client_data[key] = data
-            messages.append(f"Loaded {path}: {client} run {run} with {len(data.get('tests', {}))} tests")
+            messages.append(f"Loaded {path}: {client} run {run} with {len(data.get('tests', {}))} tests (mode: {file_mode})")
         except (json.JSONDecodeError, IOError) as e:
             messages.append(f"Error loading {path}: {e}")
             all_match = False
@@ -92,35 +127,50 @@ def compare_hashes(hash_files: List[Path]) -> Tuple[bool, List[str]]:
     if not missing_found:
         messages.append("No missing tests")
 
+    # Determine which hash types to compare based on mode
+    hash_types_to_compare = []
+    if mode == "request":
+        hash_types_to_compare = ["request"]
+    elif mode == "response":
+        hash_types_to_compare = ["response"]
+    else:  # mode == "all"
+        hash_types_to_compare = ["request", "response"]
+
     # Compare hashes for each test
     messages.append("\n--- Hash Comparison ---")
     mismatches = []
 
     for test_name in sorted(all_tests):
         for method in sorted(all_methods):
-            # Collect hashes for this test/method from all clients
-            hashes_by_client: Dict[str, str] = {}
+            for hash_type in hash_types_to_compare:
+                # Collect hashes for this test/method/type from all clients
+                hashes_by_client: Dict[str, str] = {}
 
-            for client_key, data in client_data.items():
-                tests = data.get("tests", {})
-                if test_name in tests and method in tests[test_name]:
-                    hashes_by_client[client_key] = tests[test_name][method]
+                for client_key, data in client_data.items():
+                    tests = data.get("tests", {})
+                    if test_name in tests and method in tests[test_name]:
+                        hash_value = tests[test_name][method]
+                        extracted = extract_hash(hash_value, hash_type)
+                        if extracted is not None:
+                            hashes_by_client[client_key] = extracted
 
-            # Skip if fewer than 2 clients have this hash
-            if len(hashes_by_client) < 2:
-                continue
+                # Skip if fewer than 2 clients have this hash
+                if len(hashes_by_client) < 2:
+                    continue
 
-            # Check if all hashes match
-            unique_hashes = set(hashes_by_client.values())
-            if len(unique_hashes) > 1:
-                mismatches.append((test_name, method, hashes_by_client))
+                # Check if all hashes match
+                unique_hashes = set(hashes_by_client.values())
+                if len(unique_hashes) > 1:
+                    mismatches.append((test_name, method, hash_type, hashes_by_client))
 
     if mismatches:
         all_match = False
         messages.append(f"\nFound {len(mismatches)} mismatches:")
-        for test_name, method, hashes in mismatches[:20]:  # Show first 20
+        for test_name, method, hash_type, hashes in mismatches[:20]:  # Show first 20
             messages.append(f"\n  Test: {test_name}")
             messages.append(f"  Method: {method}")
+            if mode == "all":
+                messages.append(f"  Type: {hash_type}")
             for client_key, hash_val in sorted(hashes.items()):
                 messages.append(f"    {client_key}: {hash_val[:16]}...")
         if len(mismatches) > 20:
@@ -130,6 +180,7 @@ def compare_hashes(hash_files: List[Path]) -> Tuple[bool, List[str]]:
 
     # Summary
     messages.append("\n--- Summary ---")
+    messages.append(f"Comparison mode: {mode}")
     messages.append(f"Total tests compared: {len(all_tests)}")
     messages.append(f"Total mismatches: {len(mismatches)}")
     messages.append(f"Result: {'PASS' if all_match else 'FAIL'}")
@@ -139,13 +190,19 @@ def compare_hashes(hash_files: List[Path]) -> Tuple[bool, List[str]]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Compare Engine API response hashes across clients"
+        description="Compare Engine API hashes across clients"
     )
     parser.add_argument(
         "hash_files",
         nargs="+",
         type=Path,
         help="JSON hash files to compare"
+    )
+    parser.add_argument(
+        "-m", "--mode",
+        choices=["request", "response", "all"],
+        default="request",
+        help="Hash type to compare: request, response, or all (default: request)"
     )
     parser.add_argument(
         "-q", "--quiet",
@@ -166,7 +223,7 @@ def main():
             print(f"Error: File not found: {path}", file=sys.stderr)
             sys.exit(1)
 
-    all_match, messages = compare_hashes(args.hash_files)
+    all_match, messages = compare_hashes(args.hash_files, mode=args.mode)
 
     # Filter messages if quiet mode
     if args.quiet:

@@ -1,20 +1,21 @@
 """
-mitmproxy addon to capture and hash Engine API request bodies.
+mitmproxy addon to capture and hash Engine API request and/or response bodies.
 
-This addon intercepts Engine API traffic and captures request body hashes for
+This addon intercepts Engine API traffic and captures hashes for
 engine_newPayloadV4 and engine_forkchoiceUpdatedV3 methods. Hashes are
 mapped to test names via a temp file written by run.sh before each test.
 
-Note: We hash REQUEST bodies (not responses) because Engine API responses are
-just status acknowledgments with the same format for all tests. The request
-bodies contain the actual payload data (blocks, transactions, state roots)
-which differs per test.
+Modes:
+- "request": Hash only request bodies (default, backward compatible)
+- "response": Hash only response bodies
+- "all": Hash both request and response bodies
 
 Configuration is passed via HASH_CAPTURE_CONFIG environment variable as JSON:
 {
     "client": "nethermind",
     "run": 1,
-    "output_dir": "response_hashes"
+    "output_dir": "response_hashes",
+    "mode": "all"  # optional, defaults to "request"
 }
 
 Usage:
@@ -30,6 +31,9 @@ from mitmproxy import http
 
 # Methods to capture
 METHODS_TO_CAPTURE = {"engine_newPayloadV4", "engine_forkchoiceUpdatedV3"}
+
+# Valid capture modes
+VALID_MODES = {"request", "response", "all"}
 
 # Temp file where run.sh writes the current test name
 CURRENT_TEST_FILE = "/tmp/current_test_name.txt"
@@ -89,21 +93,32 @@ def extract_method_from_request(request_body: bytes) -> str:
 
 class HashCaptureAddon:
     """
-    mitmproxy addon to capture and hash Engine API responses.
+    mitmproxy addon to capture and hash Engine API requests and/or responses.
     """
 
     def __init__(self):
         self.config = self._load_config()
+        self.mode = self._get_mode()
         self.hashes = {
             "client": self.config.get("client", "unknown"),
             "run": self.config.get("run", 1),
+            "mode": self.mode,
             "tests": {}
         }
         self.output_file = self._get_output_file()
-        self.pending_requests = {}  # flow.id -> {"method": str, "request_hash": str}
+        self.pending_requests = {}  # flow.id -> {"method": str, "request_hash": str | None}
 
         # Load existing hashes if file exists (to resume/append)
         self._load_existing_hashes()
+        print(f"[hash_capture] Mode: {self.mode}")
+
+    def _get_mode(self) -> str:
+        """Get the capture mode from config, defaulting to 'request'."""
+        mode = self.config.get("mode", "request")
+        if mode not in VALID_MODES:
+            print(f"[hash_capture] Warning: Invalid mode '{mode}', using 'request'")
+            return "request"
+        return mode
 
     def _load_config(self) -> dict:
         """Load configuration from HASH_CAPTURE_CONFIG environment variable."""
@@ -150,7 +165,10 @@ class HashCaptureAddon:
         if flow.request.content:
             method = extract_method_from_request(flow.request.content)
             if method in METHODS_TO_CAPTURE:
-                request_hash = hash_response(flow.request.content)
+                # Calculate request hash if mode requires it
+                request_hash = None
+                if self.mode in ("request", "all"):
+                    request_hash = hash_response(flow.request.content)
                 self.pending_requests[flow.id] = {
                     "method": method,
                     "request_hash": request_hash
@@ -158,7 +176,7 @@ class HashCaptureAddon:
 
     def response(self, flow: http.HTTPFlow):
         """
-        Intercept responses to store the request hash captured earlier.
+        Intercept responses to store captured hashes.
         """
         # Check if this was a request we're tracking
         pending = self.pending_requests.pop(flow.id, None)
@@ -168,22 +186,40 @@ class HashCaptureAddon:
         method = pending["method"]
         request_hash = pending["request_hash"]
 
+        # Calculate response hash if mode requires it
+        response_hash = None
+        if self.mode in ("response", "all") and flow.response and flow.response.content:
+            response_hash = hash_response(flow.response.content)
+
         # Get the current test name
         test_name = get_current_test_name()
         if not test_name:
             print(f"[hash_capture] Warning: No test name found for {method}")
             return
 
-        # Store the request hash
+        # Store the hash(es)
         if test_name not in self.hashes["tests"]:
             self.hashes["tests"][test_name] = {}
 
-        self.hashes["tests"][test_name][method] = request_hash
+        # Store based on mode
+        if self.mode == "request":
+            # Backward compatible: flat hash string
+            self.hashes["tests"][test_name][method] = request_hash
+            print(f"[hash_capture] Captured {method} request for '{test_name}': {request_hash[:16]}...")
+        elif self.mode == "response":
+            # Flat hash string for response only
+            self.hashes["tests"][test_name][method] = response_hash
+            print(f"[hash_capture] Captured {method} response for '{test_name}': {response_hash[:16]}...")
+        else:  # mode == "all"
+            # Nested structure with both hashes
+            self.hashes["tests"][test_name][method] = {
+                "request": request_hash,
+                "response": response_hash
+            }
+            print(f"[hash_capture] Captured {method} for '{test_name}': req={request_hash[:16]}... resp={response_hash[:16]}...")
 
         # Save after each update
         self._save_hashes()
-
-        print(f"[hash_capture] Captured {method} request for '{test_name}': {request_hash[:16]}...")
 
 
 # Create the addon instance

@@ -62,7 +62,7 @@ inputs:
     required: false
     default: ''
   compareHashes:
-    description: 'Capture and compare Engine API request hashes across clients (true/false)'
+    description: 'Capture and compare Engine API hashes across clients. Values: false (disabled), request, response, or all'
     required: false
     default: 'false'
 
@@ -126,7 +126,7 @@ runs:
       run: mkdir -p results
 
     - name: Install mitmproxy for hash capture
-      if: ${{ inputs.compareHashes == 'true' }}
+      if: ${{ inputs.compareHashes != 'false' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -150,8 +150,8 @@ runs:
         TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
 
         HASH_FLAG=""
-        if [ "$COMPARE_HASHES" = "true" ]; then
-          HASH_FLAG="-H"
+        if [ "$COMPARE_HASHES" != "false" ]; then
+          HASH_FLAG="-H $COMPARE_HASHES"
         fi
 
         ./run.sh \
@@ -164,14 +164,16 @@ runs:
           -f "$FILTER" \
           $HASH_FLAG
 
-    - name: Compare Engine API request hashes
-      if: ${{ inputs.compareHashes == 'true' }}
+    - name: Compare Engine API hashes
+      if: ${{ inputs.compareHashes != 'false' }}
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
+      env:
+        COMPARE_HASHES: ${{ inputs.compareHashes }}
       run: |
         set -euo pipefail
-        echo "Comparing Engine API request hashes across clients..."
-        python3 compare_hashes.py response_hashes/*.json
+        echo "Comparing Engine API hashes across clients (mode: $COMPARE_HASHES)..."
+        python3 compare_hashes.py --mode "$COMPARE_HASHES" response_hashes/*.json
 
     - name: Generate TXT report (optional)
       if: ${{ inputs.txtReport == 'true' }}

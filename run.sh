@@ -24,6 +24,7 @@ RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
 SKIP_EMPTY=true
 GENERATE_RESPONSE_HASHES=false
+HASH_CAPTURE_MODE="request"
 HASH_OUTPUT_DIR="response_hashes"
 HASH_CAPTURE_MITM_PID=""
 CURRENT_TEST_NAME_FILE="/tmp/current_test_name.txt"
@@ -533,13 +534,14 @@ start_hash_capture_proxy() {
     --arg client "$client" \
     --argjson run "$run" \
     --arg output_dir "$HASH_OUTPUT_DIR" \
-    '{client: $client, run: $run, output_dir: $output_dir}')
+    --arg mode "$HASH_CAPTURE_MODE" \
+    '{client: $client, run: $run, output_dir: $output_dir, mode: $mode}')
 
   # Create output directory
   mkdir -p "$HASH_OUTPUT_DIR"
 
   # Start mitmproxy in reverse proxy mode
-  echo "[INFO] Starting hash capture proxy for $client run $run..."
+  echo "[INFO] Starting hash capture proxy for $client run $run (mode: $HASH_CAPTURE_MODE)..."
   HASH_CAPTURE_CONFIG="$config_json" mitmdump -q -p 8552 --mode reverse:http://127.0.0.1:8551 -s hash_capture_addon.py &
   HASH_CAPTURE_MITM_PID=$!
 
@@ -972,7 +974,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FSH" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FSH:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -991,8 +993,8 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FSH" opt; do
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
     S) SKIP_EMPTY=true;;
-    H) GENERATE_RESPONSE_HASHES=true ;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty] [-H generateResponseHashes]" >&2
+    H) GENERATE_RESPONSE_HASHES=true; HASH_CAPTURE_MODE="$OPTARG" ;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty] [-H mode (request|response|all)]" >&2
        exit 1 ;;
   esac
 done
