@@ -174,7 +174,9 @@ runs:
         set -uo pipefail
         echo "Comparing Engine API hashes across clients (mode: $COMPARE_HASHES)..."
         # Don't fail the workflow on mismatches - just report the result
-        python3 compare_hashes.py --mode "$COMPARE_HASHES" response_hashes/*.json || echo "::warning::Hash comparison found mismatches"
+        # Output to both console and file for artifact
+        python3 compare_hashes.py --mode "$COMPARE_HASHES" -o response_hashes/comparison_report.txt response_hashes/*.json || echo "::warning::Hash comparison found mismatches"
+        cat response_hashes/comparison_report.txt
 
     - name: Generate TXT report (optional)
       if: ${{ inputs.txtReport == 'true' }}
