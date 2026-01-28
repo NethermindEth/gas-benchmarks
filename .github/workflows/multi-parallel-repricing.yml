@@ -1,20 +1,17 @@
-﻿name: Run Parallel Benchmarks in multiple clients
+name: Run Parallel Benchmarks in multiple clients
 
 on:
   workflow_dispatch:
     inputs:
       test:
         description: 'Path to test file'
-        default: 'eest_tests'
-      client:
-        description: 'Comma-separated list of client names'
-        default: 'nethermind,geth,reth,besu,erigon,nimbus,ethrex'
+        default: 'repricings_compute'
       runs:
         description: 'Number of runs for the application'
         default: 1
       images:
         description: 'JSON map of images for the clients'
-        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
       opcodes_warmup_count:
         description: 'Number of opcode-warmup iterations'
         default: 1
@@ -30,6 +27,7 @@ on:
 
 jobs:
   set-matrix:
+    if: github.ref == 'refs/heads/repricing'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -46,7 +44,7 @@ jobs:
         id: set-matrix
         run: |
           runs=${{ github.event.inputs.runs }}
-          clients="${{ github.event.inputs.client }}"
+          clients="geth,nethermind,erigon,besu,reth"
           IFS=',' read -ra client_array <<< "$clients"
           matrix_elements=()
           
@@ -63,17 +61,38 @@ jobs:
 
   build:
     needs: set-matrix
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, repricing]
 
     strategy:
       # Consume the JSON matrix we just emitted
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
       fail-fast: false
+      max-parallel: 5
 
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
 
     steps:
+      - name: Ensure git-lfs and zip are installed
+        run: |
+          missing=()
+          if ! command -v git-lfs >/dev/null 2>&1; then
+            missing+=("git-lfs")
+          fi
+          if ! command -v zip >/dev/null 2>&1; then
+            missing+=("zip")
+          fi
+          if [ ${#missing[@]} -eq 0 ]; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+          else
+            echo "Missing: ${missing[*]}. Install them on the runner or provide apt-get."
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -103,7 +122,8 @@ jobs:
             -r 1 \
             -i '${{ github.event.inputs.images }}' \
             -o "${{ github.event.inputs.opcodes_warmup_count }}" \
-            -f "${{ github.event.inputs.filter }}"
+            -f "${{ github.event.inputs.filter }}" \
+            -W "warmup-repricing"
 
       - name: Dump latest Docker logs for ${{ matrix.client }}
         if: always()
@@ -138,6 +158,13 @@ jobs:
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+
+      - name: Docker full prune
+        if: always()
+        run: |
+          docker ps -q | xargs -r docker stop || true
+          docker ps -aq | xargs -r docker rm -f || true
+          docker system prune -af --volumes || true
   combine-results:
     needs: build
     runs-on: ubuntu-latest
@@ -198,6 +225,7 @@ jobs:
             mkdir -p reports
             exit 0
           fi
+          echo "CLIENT_LIST=$CLIENT_LIST" >> $GITHUB_ENV
 
           rm -rf reports
           mkdir -p reports
@@ -212,7 +240,7 @@ jobs:
       - name: Generate Report
         if: ${{ github.event.inputs.txt_report == 'true' }}
         run: |
-          python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} 
+          python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath ${{ github.event.inputs.test }} 
 
       - name: Zip the results folder
         run: |
@@ -260,7 +288,20 @@ jobs:
             --db-port ${{ env.DB_PORT }} \
             --db-user ${{ env.DB_USER }} \
             --db-name monitoring \
-            --table-name gas_benchmarks_ci \
+            --table-name repricings_new \
             --db-password "${{ env.DB_PASSWORD }}" \
             --log-level DEBUG \
             --reports-dir 'extracted-results/reports/'
+
+  retrigger:
+    needs: populate-db
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/repricing' && needs.populate-db.result == 'success' }}
+    steps:
+      - name: Retrigger workflow
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: multi-parallel.yml
+          ref: "${{ github.ref }}"
+          token: "${{ secrets.GH_TOKEN }}"
+          inputs: ${{ toJson(github.event.inputs) }}
