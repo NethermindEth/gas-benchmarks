@@ -34,6 +34,19 @@ SKIP_CLEANUP: bool = bool(_CFG.get("skip_cleanup"))
 REUSE_GLOBALS: bool = bool(_CFG.get("reuse_globals"))
 FORK: str = str(_CFG.get("fork") or "Prague")
 
+def _cfg_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return default
+
+EEST_STATEFUL_TESTING: bool = _cfg_bool(_CFG.get("eest_stateful_testing"), False)
+
 
 def _getpayload_method_for_fork(fork: str) -> str:
     fork_name = (fork or "").strip().lower()
@@ -537,7 +550,11 @@ def _dump_pair_to_phase(phase: str, scenario: str, np_body: Dict[str, Any], fcu_
     testing_path = _scenario_file_path("testing", scenario)
     setup_path = _scenario_file_path("setup", scenario)
 
-    if count == 0:
+    if EEST_STATEFUL_TESTING:
+        _append_line(testing_path, np_line)
+        _append_line(testing_path, fcu_line)
+        _log(f"testing append (stateful) → {testing_path}")
+    elif count == 0:
         _overwrite_with_lines(testing_path, [np_line, fcu_line])
         _log(f"testing write (first) → {testing_path}")
     else:
