@@ -298,17 +298,17 @@ def _extract_opcount_from_name(name: str) -> Optional[int]:
     Parse an opcount suffix such as 'opcount_50000K' or 'opcount_125M' from a test filename.
     Returns the integer count (e.g., 50000000) or None if not present.
     """
-    match = re.search(r"opcount_(\d+)([kKmM]?)", name)
+    match = re.search(r"opcount_(\d+(?:\.\d+)?)([kKmM]?)", name)
     if not match:
         return None
 
-    value = int(match.group(1))
+    value = float(match.group(1))
     suffix = match.group(2).lower()
     if suffix == "k":
         value *= 1_000
     elif suffix == "m":
         value *= 1_000_000
-    return value
+    return int(value)
 
 
 def _strip_gas_value_suffix(name: str) -> str:
@@ -361,7 +361,7 @@ def get_test_cases(tests_path: str, return_metadata: bool = False):
 
             file_path = os.path.join(root, file)
             gas_used_units = _extract_gas_used_from_payload(file_path)
-            if gas_used_units is None:
+            if not gas_used_units:
                 gas_used_millions = float(gas_label)
             else:
                 gas_used_millions = gas_used_units / 1_000_000.0
