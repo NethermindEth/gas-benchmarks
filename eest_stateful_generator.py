@@ -218,6 +218,7 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
     print("[INFO] Regenerating gas-bump and funding payloads.")
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
+    getpayload_method = _getpayload_method_for_fork(args.fork)
     try:
         max_count = max(args.gas_bump_count, 1)
         last_log = time.monotonic()
@@ -226,12 +227,24 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
             if idx == 0 or idx == max_count - 1 or now - last_log >= 5:
                 print(f"[DEBUG] Generating gas-bump payload {idx + 1}/{max_count}")
                 last_log = now
-            preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
+            preparation_getpayload(
+                "http://127.0.0.1:8551",
+                jwt_path,
+                "EMPTY",
+                save_path=gas_bump_file,
+                getpayload_method=getpayload_method,
+            )
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
     finalized = ""
     try:
-        finalized = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_file)
+        finalized = preparation_getpayload(
+            "http://127.0.0.1:8551",
+            jwt_path,
+            args.rpc_address,
+            save_path=funding_file,
+            getpayload_method=getpayload_method,
+        )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
     return finalized or ""
@@ -448,16 +461,31 @@ def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: l
 
 # ----------------- changed: append NP and FCU to a single .txt file -----------------
 
-def preparation_getpayload(engine_url: str, jwt_hex_path: Path, rpc_address: str, save_path: Path | None = None):
+def _getpayload_method_for_fork(fork: str) -> str:
+    fork_name = (fork or "").strip().lower()
+    if fork_name == "osaka":
+        return "engine_getPayloadV5"
+    return "engine_getPayloadV4"
+
+
+def preparation_getpayload(
+    engine_url: str,
+    jwt_hex_path: Path,
+    rpc_address: str,
+    save_path: Path | None = None,
+    *,
+    getpayload_method: str = "engine_getPayloadV4",
+):
     """
-    Build a payload on the engine, POST engine_newPayloadV4, then engine_forkchoiceUpdatedV3.
+    Build a payload on the engine (engine_getPayloadV4/V5), POST engine_newPayloadV4,
+    then engine_forkchoiceUpdatedV3.
     If save_path is provided, append TWO minified JSON-RPC lines to that file:
       1) the engine_newPayloadV4 request body
       2) the engine_forkchoiceUpdatedV3 request body
     """
     ZERO32 = "0x" + ("00" * 32)
     txrlp_empty = None
-    payload = _engine_with_jwt(engine_url, jwt_hex_path, "engine_getPayloadV4", [txrlp_empty, rpc_address])
+    payload = _engine_with_jwt(engine_url, jwt_hex_path, getpayload_method, [txrlp_empty, rpc_address])
     exec_payload = payload.get("executionPayload")
     parent_hash = exec_payload.get("parentHash") or ZERO32
 
@@ -852,6 +880,7 @@ def main():
         "rpc_direct": "http://127.0.0.1:8545",
         "engine_url": "http://127.0.0.1:8551",
         "jwt_hex_path": str(jwt_path),
+        "fork": args.fork,
         "finalized_block": finalized_hash or "",
         "payload_dir": str(payloads_dir),
         "reuse_globals": reuse_globals,
