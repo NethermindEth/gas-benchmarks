@@ -970,7 +970,7 @@ def main():
             run_env["PYTHONPATH"] = os.pathsep.join([src_path, existing_path])
         else:
             run_env["PYTHONPATH"] = src_path
-        run_env["EEST_POLL_INTERVAL"] = "5"
+        run_env["EEST_POLL_INTERVAL"] = "0.01"
 
         tests_proc = subprocess.Popen(uv_cmd, cwd=str(repo_dir), env=run_env)
         processed_tokens: set[str] = set()
