@@ -11,9 +11,6 @@ EXECUTIONS_FILE="executions.json"
 TEST_PATHS_JSON=""
 LEGACY_TEST_PATH="eest_tests"
 LEGACY_GENESIS_PATH="zkevmgenesis.json"
-DEBUG=false
-DEBUG_FILE=""
-PROFILE_TEST=false
 NETWORK=""
 SNAPSHOT_ROOT="snapshots"
 OVERLAY_TMP_ROOT="overlay-runtime"
@@ -28,250 +25,12 @@ if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   source "scripts/common/wait_for_rpc.sh"
 fi
 
-# Timing variables
-declare -A STEP_TIMES
 declare -A ACTIVE_OVERLAY_MOUNTS
 declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
 declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
 declare -A RUNNING_CLIENTS
-SCRIPT_START_TIME=$(date +%s.%N)
-
-# Debug logging function
-debug_log() {
-  if [ "$DEBUG" = true ]; then
-    local message="[DEBUG] $1"
-    echo "$message"
-    if [ -n "$DEBUG_FILE" ]; then
-      echo "$message" >> "$DEBUG_FILE"
-    fi
-  fi
-}
-
-# Test-specific debug logging function
-test_debug_log() {
-  if [ "$DEBUG" = true ] && [ "$PROFILE_TEST" = true ]; then
-    local message="[TEST-DEBUG] $1"
-    echo "$message"
-    if [ -n "$DEBUG_FILE" ]; then
-      echo "$message" >> "$DEBUG_FILE"
-    fi
-  fi
-}
-
-hash_json_file() {
-  local file="$1"
-  python3 - "$file" <<'PY'
-import json, sys, hashlib
-from pathlib import Path
-
-def normalize(value):
-    if isinstance(value, dict):
-        return {k: normalize(value[k]) for k in sorted(value)}
-    if isinstance(value, list):
-        return [normalize(v) for v in value]
-    return value
-
-path = Path(sys.argv[1])
-fragments = []
-if path.exists():
-    with path.open("r", encoding="utf-8") as handle:
-        for raw_line in handle:
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                data = json.loads(line)
-            except Exception:
-                fragments.append(line)
-                continue
-            normalized = normalize(data)
-            fragments.append(json.dumps(normalized, separators=(",", ":"), sort_keys=True))
-
-payload = "\n".join(fragments).encode("utf-8")
-print(hashlib.sha256(payload).hexdigest())
-PY
-}
-
-validate_cross_client_results() {
-  local -a requested_clients=()
-  local client
-  for client in "${CLIENT_ARRAY[@]}"; do
-    if [ -n "$client" ]; then
-      requested_clients+=("$client")
-    fi
-  done
-
-  if [ "${#requested_clients[@]}" -le 1 ]; then
-    return 0
-  fi
-
-  shopt -s nullglob
-  local -a result_files=(results/*_response_*.txt)
-  shopt -u nullglob
-
-  if [ "${#result_files[@]}" -eq 0 ]; then
-    echo "[WARN] Cross-client validation skipped: no result files found."
-    return 0
-  fi
-
-  local -A scenario_hashes=()
-  local -A scenario_clients=()
-  local -A scenario_baseline_file=()
-  local -A scenario_baseline_client=()
-  local -A clients_seen=()
-  local -a mismatches=()
-  local -a missing=()
-  local file filename scenario hash
-
-  for file in "${result_files[@]}"; do
-    filename=$(basename "$file")
-    scenario=${filename#*_response_}
-    client=${filename%%_response_*}
-    hash=$(hash_json_file "$file")
-
-    clients_seen["$client"]=1
-    scenario_clients["$scenario"]="${scenario_clients[$scenario]} $client"
-    if [ -z "${scenario_hashes[$scenario]}" ]; then
-      scenario_hashes["$scenario"]="$hash"
-      scenario_baseline_file["$scenario"]="$file"
-      scenario_baseline_client["$scenario"]="$client"
-    elif [ "${scenario_hashes[$scenario]}" != "$hash" ]; then
-      mismatches+=("$scenario|${scenario_baseline_client[$scenario]}|$client|${scenario_baseline_file[$scenario]}|$file")
-    fi
-  done
-
-  local -a active_clients=()
-  for client in "${!clients_seen[@]}"; do
-    active_clients+=("$client")
-  done
-
-  if [ "${#active_clients[@]}" -le 1 ]; then
-    if [ "${#active_clients[@]}" -eq 0 ]; then
-      echo "[WARN] Cross-client validation skipped: no result files were produced."
-    else
-      echo "[WARN] Cross-client validation skipped: only client '${active_clients[0]}' produced results."
-    fi
-    for client in "${requested_clients[@]}"; do
-      if [ -z "${clients_seen[$client]}" ]; then
-        echo "[WARN] No result files found for requested client '$client'."
-      fi
-    done
-    return 0
-  fi
-
-  local scenario scenario_clients_str missing_found=false
-  for scenario in "${!scenario_hashes[@]}"; do
-    scenario_clients_str=" ${scenario_clients[$scenario]} "
-    for client in "${active_clients[@]}"; do
-      if [[ "$scenario_clients_str" != *" $client "* ]]; then
-        missing+=("$scenario|$client")
-        missing_found=true
-      fi
-    done
-  done
-
-  if [ "$missing_found" = false ] && [ "${#mismatches[@]}" -eq 0 ]; then
-    echo "[INFO] Cross-client validation passed across ${#active_clients[@]} clients: ${active_clients[*]}"
-    return 0
-  fi
-
-  echo "[ERROR] Cross-client validation failed."
-  if [ "$missing_found" = true ]; then
-    for entry in "${missing[@]}"; do
-      IFS='|' read -r scenario client <<< "$entry"
-      echo "  Missing results for client '$client' in scenario '$scenario'"
-    done
-  fi
-  if [ "${#mismatches[@]}" -gt 0 ]; then
-    for entry in "${mismatches[@]}"; do
-      IFS='|' read -r scenario base_client client base_file current_file <<< "$entry"
-      echo "  Mismatch detected for scenario '$scenario' between '$base_client' and '$client'"
-      if command -v diff >/dev/null 2>&1; then
-        diff -u "$base_file" "$current_file" | sed 's/^/    /'
-      fi
-    done
-  fi
-
-  return 1
-}
-
-# Timing functions
-start_timer() {
-  local step_name="$1"
-  STEP_TIMES["${step_name}_start"]=$(date +%s.%N)
-  debug_log "Starting: $step_name"
-}
-
-end_timer() {
-  local step_name="$1"
-  local end_time=$(date +%s.%N)
-  local start_time="${STEP_TIMES["${step_name}_start"]}"
-  if [ -n "$start_time" ]; then
-    local duration=$(awk "BEGIN {printf \"%.2f\", $end_time - $start_time}")
-    STEP_TIMES["${step_name}_duration"]=$duration
-    debug_log "Completed: $step_name (${duration}s)"
-  fi
-}
-
-# Test-specific timing functions
-start_test_timer() {
-  local step_name="$1"
-  STEP_TIMES["${step_name}_start"]=$(date +%s.%N)
-  test_debug_log "Starting: $step_name"
-}
-
-end_test_timer() {
-  local step_name="$1"
-  local end_time=$(date +%s.%N)
-  local start_time="${STEP_TIMES["${step_name}_start"]}"
-  if [ -n "$start_time" ]; then
-    local duration=$(awk "BEGIN {printf \"%.2f\", $end_time - $start_time}")
-    STEP_TIMES["${step_name}_duration"]=$duration
-    test_debug_log "Completed: $step_name (${duration}s)"
-  fi
-}
-
-print_timing_summary() {
-  if [ "$DEBUG" = true ]; then
-    local output_lines=()
-    
-    # Build the output lines
-    output_lines+=("")
-    output_lines+=("=== TIMING SUMMARY ===")
-    local total_time=$(awk "BEGIN {printf \"%.2f\", $(date +%s.%N) - $SCRIPT_START_TIME}")
-    output_lines+=("Total script time: ${total_time}s")
-    output_lines+=("")
-    
-    # Sort the timing entries for consistent output
-    local sorted_keys=($(printf '%s\n' "${!STEP_TIMES[@]}" | grep '_duration$' | sort))
-    
-    for key in "${sorted_keys[@]}"; do
-      local step_name="${key%_duration}"
-      local duration="${STEP_TIMES[$key]}"
-      
-      # Show test-specific timings only if PROFILE_TEST is enabled
-      if [[ "$step_name" == *"opcodes_warmup_"* || "$step_name" == *"test_run_"* ]]; then
-        if [ "$PROFILE_TEST" = true ]; then
-          output_lines+=("$(printf "%-30s: %8ss" "$step_name" "$duration")")
-        fi
-      else
-        output_lines+=("$(printf "%-30s: %8ss" "$step_name" "$duration")")
-      fi
-    done
-    output_lines+=("=======================")
-    output_lines+=("")
-    
-    # Print to stdout
-    printf '%s\n' "${output_lines[@]}"
-    
-    # Save to file if specified
-    if [ -n "$DEBUG_FILE" ]; then
-      printf '%s\n' "${output_lines[@]}" >> "$DEBUG_FILE"
-    fi
-  fi
-}
 
 abspath() {
   python3 - <<'PY' "$1"
@@ -424,7 +183,9 @@ for path in ordered + extra_root:
         seen.add(path)
         final.append(path)
 
-sys.stdout.write("\0".join(final))
+# Ensure a trailing NUL so bash read -d '' doesn't drop the last entry.
+if final:
+    sys.stdout.write("\0".join(final) + "\0")
 PY
 }
 
@@ -917,20 +678,28 @@ while getopts "T:t:g:c:r:i:o:f:n:B:R:FW:" opt; do
     i) IMAGES="$OPTARG" ;;
     o) OPCODES_WARMUP_COUNT="$OPTARG" ;;
     f) FILTER="$OPTARG" ;;  # comma-separated exclude patterns
-    d) DEBUG=true ;;
-    D) DEBUG=true; DEBUG_FILE="$OPTARG" ;;
-    p) PROFILE_TEST=true ;;
     n) NETWORK="$OPTARG"; USE_OVERLAY=true ;;
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
     W) WARMUP_OPCODES_PATH="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-W warmup_opcodes_path]" >&2
+    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-F skipForkchoice] [-W warmup_opcodes_path]" >&2
        exit 1 ;;
   esac
 done
 
 
+
+# Allow passing a file path for -T to avoid long argument lists.
+if [ -n "$TEST_PATHS_JSON" ]; then
+  file_path="$TEST_PATHS_JSON"
+  if [[ "$file_path" == @* ]]; then
+    file_path="${file_path#@}"
+  fi
+  if [ -f "$file_path" ]; then
+    TEST_PATHS_JSON=$(cat "$file_path")
+  fi
+fi
 
 # Fallback to legacy -t/-g if -T not provided
 if [ -z "$TEST_PATHS_JSON" ]; then
@@ -981,37 +750,6 @@ trap cleanup_on_exit EXIT INT TERM
 mkdir -p results warmupresults logs
 
 # Initialize debug file if specified
-if [ -n "$DEBUG_FILE" ]; then
-  # Find next available filename to avoid overwriting
-  original_debug_file="$DEBUG_FILE"
-  counter=0
-  
-  while [ -f "$DEBUG_FILE" ]; do
-    counter=$((counter + 1))
-    # Extract filename and extension
-    filename="${original_debug_file%.*}"
-    extension="${original_debug_file##*.}"
-    
-    # Handle files without extension
-    if [ "$filename" = "$extension" ]; then
-      DEBUG_FILE="${original_debug_file}.${counter}"
-    else
-      DEBUG_FILE="${filename}.${counter}.${extension}"
-    fi
-  done
-  
-  # Create debug file with timestamp header
-  echo "=== DEBUG LOG STARTED: $(date) ===" > "$DEBUG_FILE"
-  echo "Script: $0" >> "$DEBUG_FILE"
-  echo "Args: $*" >> "$DEBUG_FILE"
-  echo "=======================================" >> "$DEBUG_FILE"
-  
-  # Notify user about the actual filename used
-  if [ "$DEBUG_FILE" != "$original_debug_file" ]; then
-    echo "Debug file '$original_debug_file' already exists, using '$DEBUG_FILE' instead"
-  fi
-fi
-
 if [ "$SKIP_FORKCHOICE" = true ]; then
   SKIP_FORKCHOICE_OPT=" --skipForkchoice"
 else
@@ -1026,28 +764,21 @@ if [ "$USE_OVERLAY" = true ]; then
 fi
 
 # Set up environment
-start_timer "environment_setup"
 rm -rf results
 mkdir -p results
 mkdir -p warmupresults
 mkdir -p logs
 rm -rf "$PREPARATION_RESULTS_DIR"
 mkdir -p "$PREPARATION_RESULTS_DIR"
-end_timer "environment_setup"
 
 # Initialize executions tracking
-start_timer "executions_init"
 init_executions_file
-end_timer "executions_init"
 
 # Install dependencies
-start_timer "dependencies_install"
 pip install -r requirements.txt
 make prepare_tools
-end_timer "dependencies_install"
 
 # Find test files and their associated genesis paths
-start_timer "test_discovery"
 TEST_FILES=()
 TEST_TO_GENESIS=()
 
@@ -1056,8 +787,6 @@ for i in "${!TEST_PATHS[@]}"; do
   genesis="${GENESIS_PATHS[$i]}"
   append_tests_for_path "$path" "$genesis"
 done
-debug_log "Found ${#TEST_FILES[@]} test files"
-end_timer "test_discovery"
 
 DEFAULT_GENESIS=""
 for genesis_entry in "${TEST_TO_GENESIS[@]}"; do
@@ -1068,11 +797,8 @@ for genesis_entry in "${TEST_TO_GENESIS[@]}"; do
 done
 
 # Run benchmarks
-start_timer "benchmarks_total"
 for run in $(seq 1 $RUNS); do
-  debug_log "Starting run $run/$RUNS"
   for client in "${CLIENT_ARRAY[@]}"; do
-    debug_log "Processing client: $client"
     
     # Skip nimbus or ethrex if already run today
     if { [ "$client" = "nimbus" ] || [ "$client" = "ethrex" ]; } && was_executed_today "$client"; then
@@ -1124,7 +850,6 @@ for run in $(seq 1 $RUNS); do
       volume_name="${client_base}_volume"
     fi
 
-    end_timer "setup_node_${client}"
 
     setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
     if [ -n "$NETWORK" ]; then
@@ -1262,35 +987,25 @@ for run in $(seq 1 $RUNS); do
         if [ -z "$warmup_path" ]; then
           echo "[WARN] No opcode warmup file found for $filename (searched under $WARMUP_OPCODES_PATH)"
         else
-          start_test_timer "opcodes_warmup_${client}_${filename}"
           current_count="${warmup_run_counts["$warmup_path"]:-0}"
           case "$current_count" in
             ''|*[!0-9]*) current_count=0 ;;
           esac
           if (( current_count < OPCODES_WARMUP_COUNT )); then
             for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-              test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
               echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
               python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
               current_count=$((current_count + 1))
             done
             warmup_run_counts["$warmup_path"]=$current_count
           fi
-          end_test_timer "opcodes_warmup_${client}_${filename}"
         fi
       fi
 
       # Actual measured run
-      if drop_host_caches; then
-        test_debug_log "Dropped host caches before scenario $filename"
-      else
-        test_debug_log "Skipped host cache drop before scenario $filename (insufficient permissions)"
-      fi
-      start_test_timer "test_run_${client}_${filename}"
-      test_debug_log "Running test: $filename"
+      drop_host_caches || true
       echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
-      end_test_timer "test_run_${client}_${filename}"
 
       # Capture debug_traceBlockByNumber for the testing payload (unigramTracer) when enabled
       if [ "${TRACE_BLOCKS:-false}" = true ]; then
@@ -1354,7 +1069,6 @@ EOF
     done
 
     # Collect logs & teardown
-    start_timer "teardown_${client}"
     ts=$(date +%s)
     dump_client_logs "$client_base"
     docker_compose_down_for_client "$client_base"
@@ -1365,23 +1079,19 @@ EOF
       cleanup_overlay_for_client "$client_base"
       cleanup_stale_overlay_mounts
     fi
-    end_timer "teardown_${client}"
 
     unset RUNNING_CLIENTS["$client_base"]
 
-    if drop_host_caches; then
-      debug_log "Dropped host caches"
-    else
-      debug_log "Skipped host cache drop (insufficient permissions)"
-    fi
+    drop_host_caches || true
 
-    update_execution_time "$client"
-    end_timer "client_${client}_run_${run}"
+    # Only mark the client as executed after the final run to avoid skipping
+    # subsequent runs within the same invocation when RUNS > 1.
+    if [ "$run" -eq "$RUNS" ]; then
+      update_execution_time "$client"
+    fi
   done
 done
-end_timer "benchmarks_total"
 
-start_timer "results_processing"
 SKIP_EMPTY_OPT=""
 if [ "$SKIP_EMPTY" = true ]; then
   SKIP_EMPTY_OPT="--skipEmpty"
@@ -1394,21 +1104,10 @@ else
   python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
   python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
 fi
-end_timer "results_processing"
-
-start_timer "cross_client_validation"
-if ! validate_cross_client_results; then
-  end_timer "cross_client_validation"
-  exit 1
-fi
-end_timer "cross_client_validation"
 
 # Prepare and zip the results
-start_timer "results_packaging"
 mkdir -p reports/docker
 cp -r results/docker_* reports/docker
 zip -r reports.zip reports
-end_timer "results_packaging"
 
 # Print timing summary at the end
-print_timing_summary

@@ -296,6 +296,7 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
     print("[INFO] Regenerating gas-bump and funding payloads.")
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
+    getpayload_method = _getpayload_method_for_fork(args.fork)
     try:
         max_count = max(args.gas_bump_count, 1)
         last_log = time.monotonic()
@@ -304,12 +305,24 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
             if idx == 0 or idx == max_count - 1 or now - last_log >= 5:
                 print(f"[DEBUG] Generating gas-bump payload {idx + 1}/{max_count}")
                 last_log = now
-            preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
+            preparation_getpayload(
+                "http://127.0.0.1:8551",
+                jwt_path,
+                "EMPTY",
+                save_path=gas_bump_file,
+                getpayload_method=getpayload_method,
+            )
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
     finalized = ""
     try:
-        finalized = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_file)
+        finalized = preparation_getpayload(
+            "http://127.0.0.1:8551",
+            jwt_path,
+            args.rpc_address,
+            save_path=funding_file,
+            getpayload_method=getpayload_method,
+        )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
     return finalized or ""
@@ -537,16 +550,31 @@ def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: l
 
 # ----------------- changed: append NP and FCU to a single .txt file -----------------
 
-def preparation_getpayload(engine_url: str, jwt_hex_path: Path, rpc_address: str, save_path: Path | None = None):
+def _getpayload_method_for_fork(fork: str) -> str:
+    fork_name = (fork or "").strip().lower()
+    if fork_name == "osaka":
+        return "engine_getPayloadV5"
+    return "engine_getPayloadV4"
+
+
+def preparation_getpayload(
+    engine_url: str,
+    jwt_hex_path: Path,
+    rpc_address: str,
+    save_path: Path | None = None,
+    *,
+    getpayload_method: str = "engine_getPayloadV4",
+):
     """
-    Build a payload on the engine, POST engine_newPayloadV4, then engine_forkchoiceUpdatedV3.
+    Build a payload on the engine (engine_getPayloadV4/V5), POST engine_newPayloadV4,
+    then engine_forkchoiceUpdatedV3.
     If save_path is provided, append TWO minified JSON-RPC lines to that file:
       1) the engine_newPayloadV4 request body
       2) the engine_forkchoiceUpdatedV3 request body
     """
     ZERO32 = "0x" + ("00" * 32)
     txrlp_empty = None
-    payload = _engine_with_jwt(engine_url, jwt_hex_path, "engine_getPayloadV4", [txrlp_empty, rpc_address])
+    payload = _engine_with_jwt(engine_url, jwt_hex_path, getpayload_method, [txrlp_empty, rpc_address])
     exec_payload = payload.get("executionPayload")
     parent_hash = exec_payload.get("parentHash") or ZERO32
 
@@ -673,8 +701,12 @@ def main():
     )
     parser.add_argument(
         "--fixed-opcode-count",
-        default="",
-        help="Comma-separated fixed opcode counts to pass to execute remote instead of --gas-benchmark-values.",
+        "--fixed-ocpode-count",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated fixed opcode counts to pass to execute remote instead of --gas-benchmark-values. "
+             "Provide no value to pass an empty flag through.",
     )
     parser.add_argument(
         "--nethermind-image",
@@ -722,6 +754,17 @@ def main():
         "--trace-json-output",
         default="opcode_trace_results.json",
         help="Output path for the opcode trace results JSON (default: opcode_trace_results.json).",
+    parser.add_argument(
+        "--eest-mode",
+        "--eest_mode",
+        dest="eest_mode",
+        default="repricing",
+        help="Mode passed to execute remote via -m (supports repricings/benchmarks/stateful).",
+    )
+    parser.add_argument(
+        "--eest-stateful-testing",
+        action="store_true",
+        help="Keep all testing payloads in the testing/ directory (no migration to setup).",
     )
     args = parser.parse_args()
 
@@ -955,6 +998,8 @@ def main():
         "rpc_direct": "http://127.0.0.1:8545",
         "engine_url": "http://127.0.0.1:8551",
         "jwt_hex_path": str(jwt_path),
+        "fork": args.fork,
+        "eest_stateful_testing": args.eest_stateful_testing,
         "finalized_block": finalized_hash or "",
         "payload_dir": str(payloads_dir),
         "reuse_globals": reuse_globals,
@@ -977,6 +1022,17 @@ def main():
             raise RuntimeError("mitmproxy failed to bind on 8549")
 
         tests_rpc = args.rpc_endpoint or "http://127.0.0.1:8549"
+        mode_key = (args.eest_mode or "").strip().lower()
+        mode_map = {
+            "repricing": "repricing",
+            "repricings": "repricing",
+            "benchmark": "benchmarks",
+            "benchmarks": "benchmarks",
+            "stateful": "stateful",
+        }
+        if mode_key not in mode_map:
+            raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
+        eest_mode = mode_map[mode_key]
         uv_cmd = [
             "uv", "run", "execute", "remote", "-v",
             f"--fork={args.fork}",
@@ -984,19 +1040,21 @@ def main():
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
         ]
-#        if args.fixed_opcode_count:
-#            uv_cmd.append(f"--fixed-opcode-count={args.fixed_opcode_count}")
-#        elif args.gas_benchmark_values:
-#            uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
+        if args.fixed_opcode_count is not None:
+            if args.fixed_opcode_count == "":
+                uv_cmd.append("--fixed-opcode-count=")
+            else:
+                uv_cmd.append(f"--fixed-opcode-count={args.fixed_opcode_count}")
+        elif args.gas_benchmark_values:
+            uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
         uv_cmd += [
             #"--eoa-fund-amount-default", "3100000000000000000",
             "--tx-wait-timeout", "30",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             "--skip-cleanup",
-            "--fixed-opcode-count=1",
             args.test_path,
             "--",
-            "-m", "repricing", "-n", "1",
+            "-m", eest_mode, "-n", "1",
         ]
         if args.parameter_filter:
             uv_cmd.extend(["-k", args.parameter_filter])
@@ -1015,7 +1073,7 @@ def main():
             run_env["PYTHONPATH"] = os.pathsep.join([src_path, existing_path])
         else:
             run_env["PYTHONPATH"] = src_path
-        run_env["EEST_POLL_INTERVAL"] = "0.1"
+        run_env["EEST_POLL_INTERVAL"] = "0.01"
 
         tests_proc = subprocess.Popen(uv_cmd, cwd=str(repo_dir), env=run_env)
         processed_tokens: set[str] = set()

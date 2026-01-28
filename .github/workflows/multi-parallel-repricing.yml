@@ -1,20 +1,20 @@
-﻿name: Run Parallel Benchmarks in multiple clients
+name: Run Parallel Benchmarks in multiple clients
 
 on:
+  push:
+    branches:
+      - repricing
   workflow_dispatch:
     inputs:
       test:
         description: 'Path to test file'
-        default: 'eest_tests'
-      client:
-        description: 'Comma-separated list of client names'
-        default: 'nethermind,geth,reth,besu,erigon,nimbus,ethrex'
+        default: 'repricings_compute'
       runs:
         description: 'Number of runs for the application'
         default: 1
       images:
         description: 'JSON map of images for the clients'
-        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
       opcodes_warmup_count:
         description: 'Number of opcode-warmup iterations'
         default: 1
@@ -28,8 +28,22 @@ on:
         description: 'Genesis filename (used for all clients)'
         default: 'zkevmgenesis.json'
 
+concurrency:
+  group: repricing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  INPUT_TEST: ${{ github.event.inputs.test || 'repricings_compute' }}
+  INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
+  INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
+  INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
+  INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
+  INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
+  INPUT_GENESIS: ${{ github.event.inputs.genesis || 'zkevmgenesis.json' }}
+
 jobs:
   set-matrix:
+    if: github.ref == 'refs/heads/repricing'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -45,8 +59,11 @@ jobs:
       - name: Set matrix dynamically
         id: set-matrix
         run: |
-          runs=${{ github.event.inputs.runs }}
-          clients="${{ github.event.inputs.client }}"
+          runs="${{ env.INPUT_RUNS }}"
+          if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
+            runs=1
+          fi
+          clients="geth,nethermind,erigon,besu,reth"
           IFS=',' read -ra client_array <<< "$clients"
           matrix_elements=()
           
@@ -63,17 +80,38 @@ jobs:
 
   build:
     needs: set-matrix
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, repricing]
 
     strategy:
       # Consume the JSON matrix we just emitted
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
       fail-fast: false
+      max-parallel: 5
 
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
 
     steps:
+      - name: Ensure git-lfs and zip are installed
+        run: |
+          missing=()
+          if ! command -v git-lfs >/dev/null 2>&1; then
+            missing+=("git-lfs")
+          fi
+          if ! command -v zip >/dev/null 2>&1; then
+            missing+=("zip")
+          fi
+          if [ ${#missing[@]} -eq 0 ]; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+          else
+            echo "Missing: ${missing[*]}. Install them on the runner or provide apt-get."
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -92,8 +130,8 @@ jobs:
 
       - name: Run benchmarks for client=${{ matrix.client }}
         run: |
-          GENESIS_FILENAME="${{ github.event.inputs.genesis }}"
-          TEST_PATH="${{ github.event.inputs.test }}"
+          GENESIS_FILENAME="${{ env.INPUT_GENESIS }}"
+          TEST_PATH="${{ env.INPUT_TEST }}"
           CLIENT="${{ matrix.client }}"
           TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
       
@@ -101,9 +139,10 @@ jobs:
             -T "$TEST_PATHS_JSON" \
             -c "$CLIENT" \
             -r 1 \
-            -i '${{ github.event.inputs.images }}' \
-            -o "${{ github.event.inputs.opcodes_warmup_count }}" \
-            -f "${{ github.event.inputs.filter }}"
+            -i '${{ env.INPUT_IMAGES }}' \
+            -o "${{ env.INPUT_OPCODES_WARMUP }}" \
+            -f "${{ env.INPUT_FILTER }}" \
+            -W "warmup-repricing"
 
       - name: Dump latest Docker logs for ${{ matrix.client }}
         if: always()
@@ -138,6 +177,13 @@ jobs:
         with:
           name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
           path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+
+      - name: Docker full prune
+        if: always()
+        run: |
+          docker ps -q | xargs -r docker stop || true
+          docker ps -aq | xargs -r docker rm -f || true
+          docker system prune -af --volumes || true
   combine-results:
     needs: build
     runs-on: ubuntu-latest
@@ -198,21 +244,22 @@ jobs:
             mkdir -p reports
             exit 0
           fi
+          echo "CLIENT_LIST=$CLIENT_LIST" >> $GITHUB_ENV
 
           rm -rf reports
           mkdir -p reports
 
-          RUNS="${{ github.event.inputs.runs }}"
-          TESTS="${{ github.event.inputs.test }}"
-          IMAGES='${{ github.event.inputs.images }}'
+          RUNS="${{ env.INPUT_RUNS }}"
+          TESTS="${{ env.INPUT_TEST }}"
+          IMAGES='${{ env.INPUT_IMAGES }}'
 
           python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
           python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
 
       - name: Generate Report
-        if: ${{ github.event.inputs.txt_report == 'true' }}
+        if: ${{ env.INPUT_TXT_REPORT == 'true' }}
         run: |
-          python3 report_txt.py --resultsPath extracted-results/results/ --clients "${{ github.event.inputs.client }}" --testsPath ${{ github.event.inputs.test }} 
+          python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath "${{ env.INPUT_TEST }}"
 
       - name: Zip the results folder
         run: |
@@ -260,7 +307,20 @@ jobs:
             --db-port ${{ env.DB_PORT }} \
             --db-user ${{ env.DB_USER }} \
             --db-name monitoring \
-            --table-name gas_benchmarks_ci \
+            --table-name repricings_new \
             --db-password "${{ env.DB_PASSWORD }}" \
             --log-level DEBUG \
             --reports-dir 'extracted-results/reports/'
+
+  retrigger:
+    needs: populate-db
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/repricing' && needs.populate-db.result == 'success' }}
+    steps:
+      - name: Retrigger workflow
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: multi-parallel.yml
+          ref: "${{ github.ref }}"
+          token: "${{ secrets.GH_TOKEN }}"
+          inputs: ${{ toJson(github.event.inputs) }}
