@@ -23,6 +23,13 @@ PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
 SKIP_EMPTY=true
+GENERATE_RESPONSE_HASHES=false
+HASH_CAPTURE_MODE="request"
+HASH_OUTPUT_DIR="response_hashes"
+HASH_CAPTURE_LOG_DIR="mitmproxy_logs"
+ENABLE_MITMPROXY_LOGGING=false
+HASH_CAPTURE_MITM_PID=""
+CURRENT_TEST_NAME_FILE="/tmp/current_test_name.txt"
 
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
@@ -59,6 +66,143 @@ test_debug_log() {
       echo "$message" >> "$DEBUG_FILE"
     fi
   fi
+}
+
+hash_json_file() {
+  local file="$1"
+  python3 - "$file" <<'PY'
+import json, sys, hashlib
+from pathlib import Path
+
+def normalize(value):
+    if isinstance(value, dict):
+        return {k: normalize(value[k]) for k in sorted(value)}
+    if isinstance(value, list):
+        return [normalize(v) for v in value]
+    return value
+
+path = Path(sys.argv[1])
+fragments = []
+if path.exists():
+    with path.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except Exception:
+                fragments.append(line)
+                continue
+            normalized = normalize(data)
+            fragments.append(json.dumps(normalized, separators=(",", ":"), sort_keys=True))
+
+payload = "\n".join(fragments).encode("utf-8")
+print(hashlib.sha256(payload).hexdigest())
+PY
+}
+
+validate_cross_client_results() {
+  local -a requested_clients=()
+  local client
+  for client in "${CLIENT_ARRAY[@]}"; do
+    if [ -n "$client" ]; then
+      requested_clients+=("$client")
+    fi
+  done
+
+  if [ "${#requested_clients[@]}" -le 1 ]; then
+    return 0
+  fi
+
+  shopt -s nullglob
+  local -a result_files=(results/*_response_*.txt)
+  shopt -u nullglob
+
+  if [ "${#result_files[@]}" -eq 0 ]; then
+    echo "[WARN] Cross-client validation skipped: no result files found."
+    return 0
+  fi
+
+  local -A scenario_hashes=()
+  local -A scenario_clients=()
+  local -A scenario_baseline_file=()
+  local -A scenario_baseline_client=()
+  local -A clients_seen=()
+  local -a mismatches=()
+  local -a missing=()
+  local file filename scenario hash
+
+  for file in "${result_files[@]}"; do
+    filename=$(basename "$file")
+    scenario=${filename#*_response_}
+    client=${filename%%_response_*}
+    hash=$(hash_json_file "$file")
+
+    clients_seen["$client"]=1
+    scenario_clients["$scenario"]="${scenario_clients[$scenario]} $client"
+    if [ -z "${scenario_hashes[$scenario]}" ]; then
+      scenario_hashes["$scenario"]="$hash"
+      scenario_baseline_file["$scenario"]="$file"
+      scenario_baseline_client["$scenario"]="$client"
+    elif [ "${scenario_hashes[$scenario]}" != "$hash" ]; then
+      mismatches+=("$scenario|${scenario_baseline_client[$scenario]}|$client|${scenario_baseline_file[$scenario]}|$file")
+    fi
+  done
+
+  local -a active_clients=()
+  for client in "${!clients_seen[@]}"; do
+    active_clients+=("$client")
+  done
+
+  if [ "${#active_clients[@]}" -le 1 ]; then
+    if [ "${#active_clients[@]}" -eq 0 ]; then
+      echo "[WARN] Cross-client validation skipped: no result files were produced."
+    else
+      echo "[WARN] Cross-client validation skipped: only client '${active_clients[0]}' produced results."
+    fi
+    for client in "${requested_clients[@]}"; do
+      if [ -z "${clients_seen[$client]}" ]; then
+        echo "[WARN] No result files found for requested client '$client'."
+      fi
+    done
+    return 0
+  fi
+
+  local scenario scenario_clients_str missing_found=false
+  for scenario in "${!scenario_hashes[@]}"; do
+    scenario_clients_str=" ${scenario_clients[$scenario]} "
+    for client in "${active_clients[@]}"; do
+      if [[ "$scenario_clients_str" != *" $client "* ]]; then
+        missing+=("$scenario|$client")
+        missing_found=true
+      fi
+    done
+  done
+
+  # Log missing results as warnings
+  if [ "$missing_found" = true ]; then
+    echo "[WARN] Some clients are missing results for certain scenarios (skipping those scenarios in validation):"
+    for entry in "${missing[@]}"; do
+      IFS='|' read -r scenario client <<< "$entry"
+      echo "  [WARN] Missing results for client '$client' in scenario '$scenario'"
+    done
+  fi
+
+  # Log hash mismatches as warnings
+  if [ "${#mismatches[@]}" -gt 0 ]; then
+    echo "[WARN] Hash mismatches detected between clients:"
+    for entry in "${mismatches[@]}"; do
+      IFS='|' read -r scenario base_client client base_file current_file <<< "$entry"
+      echo "  [WARN] Mismatch detected for scenario '$scenario' between '$base_client' and '$client'"
+      if command -v diff >/dev/null 2>&1; then
+        diff -u "$base_file" "$current_file" | sed 's/^/    /'
+      fi
+    done
+  fi
+
+  echo "[INFO] Cross-client validation completed across ${#active_clients[@]} clients: ${active_clients[*]}"
+  return 0
 }
 
 # Timing functions
@@ -375,6 +519,75 @@ is_measured_file() {
   fi
 
   return 0
+}
+
+# Hash capture proxy functions for response hashing
+start_hash_capture_proxy() {
+  local client="$1"
+  local run="$2"
+
+  if [ "$GENERATE_RESPONSE_HASHES" != true ]; then
+    return 0
+  fi
+
+  # Create config JSON for the mitmproxy addon
+  local config_json
+  # Build config JSON - only include log_dir if logging is enabled
+  if [ "$ENABLE_MITMPROXY_LOGGING" = true ]; then
+    config_json=$(jq -n \
+      --arg client "$client" \
+      --argjson run "$run" \
+      --arg output_dir "$HASH_OUTPUT_DIR" \
+      --arg mode "$HASH_CAPTURE_MODE" \
+      --arg log_dir "$HASH_CAPTURE_LOG_DIR" \
+      '{client: $client, run: $run, output_dir: $output_dir, mode: $mode, log_dir: $log_dir}')
+    mkdir -p "$HASH_CAPTURE_LOG_DIR"
+  else
+    config_json=$(jq -n \
+      --arg client "$client" \
+      --argjson run "$run" \
+      --arg output_dir "$HASH_OUTPUT_DIR" \
+      --arg mode "$HASH_CAPTURE_MODE" \
+      '{client: $client, run: $run, output_dir: $output_dir, mode: $mode}')
+  fi
+
+  # Create output directory
+  mkdir -p "$HASH_OUTPUT_DIR"
+
+  # Start mitmproxy in reverse proxy mode
+  echo "[INFO] Starting hash capture proxy for $client run $run (mode: $HASH_CAPTURE_MODE)..."
+  HASH_CAPTURE_CONFIG="$config_json" mitmdump -q -p 8552 --mode reverse:http://127.0.0.1:8551 -s hash_capture_addon.py &
+  HASH_CAPTURE_MITM_PID=$!
+
+  # Give the proxy time to start
+  sleep 1
+
+  if ! kill -0 "$HASH_CAPTURE_MITM_PID" 2>/dev/null; then
+    echo "[ERROR] Hash capture proxy failed to start"
+    HASH_CAPTURE_MITM_PID=""
+    return 1
+  fi
+
+  echo "[INFO] Hash capture proxy started (PID: $HASH_CAPTURE_MITM_PID)"
+  return 0
+}
+
+stop_hash_capture_proxy() {
+  if [ -n "$HASH_CAPTURE_MITM_PID" ]; then
+    echo "[INFO] Stopping hash capture proxy (PID: $HASH_CAPTURE_MITM_PID)..."
+    kill "$HASH_CAPTURE_MITM_PID" 2>/dev/null || true
+    wait "$HASH_CAPTURE_MITM_PID" 2>/dev/null || true
+    HASH_CAPTURE_MITM_PID=""
+  fi
+}
+
+write_current_test_name() {
+  local test_name="$1"
+  echo "$test_name" > "$CURRENT_TEST_NAME_FILE"
+}
+
+clear_current_test_name() {
+  rm -f "$CURRENT_TEST_NAME_FILE"
 }
 
 append_tests_for_path() {
@@ -718,6 +931,10 @@ cleanup_on_exit() {
   local exit_status=$?
   trap - EXIT INT TERM
 
+  # Stop hash capture proxy if running
+  stop_hash_capture_proxy
+  clear_current_test_name
+
   if command -v docker >/dev/null 2>&1; then
     local client_base client_spec
     if [ "${#RUNNING_CLIENTS[@]}" -gt 0 ]; then
@@ -771,7 +988,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FS" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FSH:L" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -790,7 +1007,9 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FS" opt; do
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
     S) SKIP_EMPTY=true;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty]" >&2
+    H) GENERATE_RESPONSE_HASHES=true; HASH_CAPTURE_MODE="$OPTARG" ;;
+    L) ENABLE_MITMPROXY_LOGGING=true ;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty] [-H mode (request|response|all)] [-L enable mitmproxy logging]" >&2
        exit 1 ;;
   esac
 done
@@ -1023,6 +1242,16 @@ for run in $(seq 1 $RUNS); do
       sleep 5
     fi
 
+    # Start hash capture proxy if enabled
+    HASH_EC_URL_ARG=""
+    if [ "$GENERATE_RESPONSE_HASHES" = true ]; then
+      if start_hash_capture_proxy "$client" "$run"; then
+        HASH_EC_URL_ARG=" --ecURL http://localhost:8552"
+      else
+        echo "[WARN] Hash capture proxy failed to start, proceeding without response hashing"
+      fi
+    fi
+
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
     cat results/computer_specs.txt
 
@@ -1129,11 +1358,18 @@ for run in $(seq 1 $RUNS); do
       fi
       start_test_timer "test_run_${client}_${filename}"
       test_debug_log "Running test: $filename"
-      echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
-      python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
+      # Write test name for hash capture addon
+      if [ "$GENERATE_RESPONSE_HASHES" = true ]; then
+        write_current_test_name "$filename"
+      fi
+      echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT$HASH_EC_URL_ARG"
+      python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT$HASH_EC_URL_ARG
       end_test_timer "test_run_${client}_${filename}"
       echo "" # Line break after each test for logs clarity
     done
+
+    # Stop hash capture proxy if it was started for this client
+    stop_hash_capture_proxy
 
     # Collect logs & teardown
     start_timer "teardown_${client}"
@@ -1181,6 +1417,10 @@ else
   python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
 fi
 end_timer "results_processing"
+
+start_timer "cross_client_validation"
+validate_cross_client_results
+end_timer "cross_client_validation"
 
 # Prepare and zip the results
 start_timer "results_packaging"

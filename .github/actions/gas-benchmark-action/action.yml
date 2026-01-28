@@ -61,6 +61,10 @@ inputs:
     description: 'PostgreSQL password (pass from caller, typically from a secret)'
     required: false
     default: ''
+  compareHashes:
+    description: 'Capture and compare Engine API hashes across clients. Values: false (disabled), request, response, or all'
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -121,6 +125,13 @@ runs:
       working-directory: ${{ github.action_path }}/../../..
       run: mkdir -p results
 
+    - name: Install mitmproxy for hash capture
+      if: ${{ inputs.compareHashes != 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        pip install mitmproxy
+
     - name: Run gas-benchmarks
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
@@ -133,9 +144,21 @@ runs:
         IMAGES: ${{ inputs.images }}
         OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
         FILTER: ${{ inputs.filter }}
+        COMPARE_HASHES: ${{ inputs.compareHashes }}
+        ENABLE_MITMPROXY_LOGS: 'true'
       run: |
         set -euo pipefail
         TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+
+        HASH_FLAG=""
+        if [ "$COMPARE_HASHES" != "false" ]; then
+          HASH_FLAG="-H $COMPARE_HASHES"
+        fi
+
+        LOG_FLAG=""
+        if [ "$ENABLE_MITMPROXY_LOGS" = "true" ]; then
+          LOG_FLAG="-L"
+        fi
 
         ./run.sh \
           -T "$TEST_PATHS_JSON" \
@@ -144,7 +167,26 @@ runs:
           -r "$RUNS" \
           -i "$IMAGES" \
           -o "$OPCODE_WARMUP_COUNT" \
-          -f "$FILTER"
+          -f "$FILTER" \
+          $HASH_FLAG \
+          $LOG_FLAG
+
+    - name: Compare Engine API hashes
+      if: ${{ inputs.compareHashes != 'false' }}
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        COMPARE_HASHES: ${{ inputs.compareHashes }}
+      run: |
+        set -uo pipefail
+        echo "Comparing Engine API hashes across clients (mode: $COMPARE_HASHES)..."
+        # Don't fail the workflow on mismatches - just report the result
+        # Output text report, JSON report (with full hashes), and print to console
+        python3 compare_hashes.py --mode "$COMPARE_HASHES" \
+          -o response_hashes/comparison_report.txt \
+          -j response_hashes/comparison_report.json \
+          response_hashes/*.json || echo "::warning::Hash comparison found mismatches"
+        cat response_hashes/comparison_report.txt
 
     - name: Generate TXT report (optional)
       if: ${{ inputs.txtReport == 'true' }}
@@ -171,6 +213,9 @@ runs:
           reports
           reports.zip
           results
+          response_hashes
+          mitmproxy_logs
+          eest_tests
 
     - name: Validate PostgreSQL configuration (optional)
       if: ${{ inputs.postgresHost != '' }}
