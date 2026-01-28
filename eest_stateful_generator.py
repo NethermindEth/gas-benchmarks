@@ -652,6 +652,11 @@ def main():
         default="",
         help="Pass-through filter string forwarded to execute remote as -k \"...\".",
     )
+    parser.add_argument(
+        "--eest-stateful-testing",
+        action="store_true",
+        help="Keep all testing payloads in the testing/ directory (no migration to setup).",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
@@ -881,6 +886,7 @@ def main():
         "engine_url": "http://127.0.0.1:8551",
         "jwt_hex_path": str(jwt_path),
         "fork": args.fork,
+        "eest_stateful_testing": args.eest_stateful_testing,
         "finalized_block": finalized_hash or "",
         "payload_dir": str(payloads_dir),
         "reuse_globals": reuse_globals,
