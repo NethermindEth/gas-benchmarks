@@ -26,6 +26,8 @@ SKIP_EMPTY=true
 GENERATE_RESPONSE_HASHES=false
 HASH_CAPTURE_MODE="request"
 HASH_OUTPUT_DIR="response_hashes"
+HASH_CAPTURE_LOG_DIR="mitmproxy_logs"
+ENABLE_MITMPROXY_LOGGING=false
 HASH_CAPTURE_MITM_PID=""
 CURRENT_TEST_NAME_FILE="/tmp/current_test_name.txt"
 
@@ -530,12 +532,24 @@ start_hash_capture_proxy() {
 
   # Create config JSON for the mitmproxy addon
   local config_json
-  config_json=$(jq -n \
-    --arg client "$client" \
-    --argjson run "$run" \
-    --arg output_dir "$HASH_OUTPUT_DIR" \
-    --arg mode "$HASH_CAPTURE_MODE" \
-    '{client: $client, run: $run, output_dir: $output_dir, mode: $mode}')
+  # Build config JSON - only include log_dir if logging is enabled
+  if [ "$ENABLE_MITMPROXY_LOGGING" = true ]; then
+    config_json=$(jq -n \
+      --arg client "$client" \
+      --argjson run "$run" \
+      --arg output_dir "$HASH_OUTPUT_DIR" \
+      --arg mode "$HASH_CAPTURE_MODE" \
+      --arg log_dir "$HASH_CAPTURE_LOG_DIR" \
+      '{client: $client, run: $run, output_dir: $output_dir, mode: $mode, log_dir: $log_dir}')
+    mkdir -p "$HASH_CAPTURE_LOG_DIR"
+  else
+    config_json=$(jq -n \
+      --arg client "$client" \
+      --argjson run "$run" \
+      --arg output_dir "$HASH_OUTPUT_DIR" \
+      --arg mode "$HASH_CAPTURE_MODE" \
+      '{client: $client, run: $run, output_dir: $output_dir, mode: $mode}')
+  fi
 
   # Create output directory
   mkdir -p "$HASH_OUTPUT_DIR"
@@ -974,7 +988,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FSH:" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FSH:L" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -994,7 +1008,8 @@ while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FSH:" opt; do
     F) SKIP_FORKCHOICE=true;;
     S) SKIP_EMPTY=true;;
     H) GENERATE_RESPONSE_HASHES=true; HASH_CAPTURE_MODE="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty] [-H mode (request|response|all)]" >&2
+    L) ENABLE_MITMPROXY_LOGGING=true ;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty] [-H mode (request|response|all)] [-L enable mitmproxy logging]" >&2
        exit 1 ;;
   esac
 done

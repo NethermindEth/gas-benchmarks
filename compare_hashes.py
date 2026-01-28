@@ -15,6 +15,7 @@ Usage:
     python3 compare_hashes.py --mode request response_hashes/*.json
     python3 compare_hashes.py --mode response response_hashes/*.json
     python3 compare_hashes.py --mode all response_hashes/*.json
+    python3 compare_hashes.py --mode all -j report.json response_hashes/*.json
 
 Exit codes:
     0 - All hashes match across all clients
@@ -26,7 +27,7 @@ import json
 import sys
 from pathlib import Path
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Any
 
 
 def load_hash_file(path: Path) -> dict:
@@ -56,7 +57,7 @@ def extract_hash(hash_value, hash_type: str) -> str | None:
     return None
 
 
-def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool, List[str]]:
+def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool, List[str], Dict[str, Any]]:
     """
     Compare hashes across multiple files.
 
@@ -65,14 +66,24 @@ def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool,
         mode: Comparison mode - "request", "response", or "all"
 
     Returns:
-        Tuple of (all_match: bool, messages: List[str])
+        Tuple of (all_match: bool, messages: List[str], json_report: dict)
     """
     messages = []
     all_match = True
+    json_report: Dict[str, Any] = {
+        "mode": mode,
+        "clients": [],
+        "total_tests": 0,
+        "total_mismatches": 0,
+        "result": "PASS",
+        "mismatches": [],
+        "missing_tests": {}
+    }
 
     if len(hash_files) < 2:
         messages.append("Need at least 2 hash files to compare")
-        return False, messages
+        json_report["result"] = "ERROR"
+        return False, messages, json_report
 
     messages.append(f"Comparison mode: {mode}")
 
@@ -86,6 +97,7 @@ def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool,
             file_mode = data.get("mode", "request")
             key = f"{client}_run_{run}"
             client_data[key] = data
+            json_report["clients"].append(key)
             messages.append(f"Loaded {path}: {client} run {run} with {len(data.get('tests', {}))} tests (mode: {file_mode})")
         except (json.JSONDecodeError, IOError) as e:
             messages.append(f"Error loading {path}: {e}")
@@ -94,7 +106,8 @@ def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool,
 
     if len(client_data) < 2:
         messages.append("Need at least 2 valid hash files to compare")
-        return False, messages
+        json_report["result"] = "ERROR"
+        return False, messages, json_report
 
     # Collect all test names and methods across all clients
     all_tests: Set[str] = set()
@@ -106,6 +119,7 @@ def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool,
         for test_hashes in tests.values():
             all_methods.update(test_hashes.keys())
 
+    json_report["total_tests"] = len(all_tests)
     messages.append(f"\nFound {len(all_tests)} unique tests across {len(client_data)} clients")
     messages.append(f"Methods tracked: {', '.join(sorted(all_methods))}")
 
@@ -118,6 +132,7 @@ def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool,
         missing = all_tests - client_tests
         if missing:
             missing_found = True
+            json_report["missing_tests"][client_key] = sorted(missing)
             messages.append(f"\n{client_key} is missing {len(missing)} tests:")
             for test in sorted(missing)[:10]:  # Show first 10
                 messages.append(f"  - {test}")
@@ -162,9 +177,19 @@ def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool,
                 unique_hashes = set(hashes_by_client.values())
                 if len(unique_hashes) > 1:
                     mismatches.append((test_name, method, hash_type, hashes_by_client))
+                    # Add to JSON report with full hashes
+                    json_report["mismatches"].append({
+                        "test": test_name,
+                        "method": method,
+                        "type": hash_type,
+                        "hashes": hashes_by_client
+                    })
+
+    json_report["total_mismatches"] = len(mismatches)
 
     if mismatches:
         all_match = False
+        json_report["result"] = "FAIL"
         messages.append(f"\nFound {len(mismatches)} mismatches:")
         for test_name, method, hash_type, hashes in mismatches[:20]:  # Show first 20
             messages.append(f"\n  Test: {test_name}")
@@ -185,7 +210,7 @@ def compare_hashes(hash_files: List[Path], mode: str = "request") -> Tuple[bool,
     messages.append(f"Total mismatches: {len(mismatches)}")
     messages.append(f"Result: {'PASS' if all_match else 'FAIL'}")
 
-    return all_match, messages
+    return all_match, messages, json_report
 
 
 def main():
@@ -212,7 +237,13 @@ def main():
     parser.add_argument(
         "-o", "--output",
         type=Path,
-        help="Write results to file instead of stdout"
+        help="Write text results to file instead of stdout"
+    )
+    parser.add_argument(
+        "-j", "--json",
+        type=Path,
+        dest="json_output",
+        help="Write JSON report with full hashes to file"
     )
 
     args = parser.parse_args()
@@ -223,7 +254,7 @@ def main():
             print(f"Error: File not found: {path}", file=sys.stderr)
             sys.exit(1)
 
-    all_match, messages = compare_hashes(args.hash_files, mode=args.mode)
+    all_match, messages, json_report = compare_hashes(args.hash_files, mode=args.mode)
 
     # Filter messages if quiet mode
     if args.quiet:
@@ -233,9 +264,16 @@ def main():
 
     if args.output:
         args.output.write_text(output, encoding="utf-8")
-        print(f"Results written to {args.output}")
+        print(f"Text results written to {args.output}")
     else:
         print(output)
+
+    # Write JSON report if requested
+    if args.json_output:
+        args.json_output.parent.mkdir(parents=True, exist_ok=True)
+        with args.json_output.open("w", encoding="utf-8") as f:
+            json.dump(json_report, f, indent=2)
+        print(f"JSON report written to {args.json_output}")
 
     sys.exit(0 if all_match else 1)
 

@@ -145,6 +145,7 @@ runs:
         OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
         FILTER: ${{ inputs.filter }}
         COMPARE_HASHES: ${{ inputs.compareHashes }}
+        ENABLE_MITMPROXY_LOGS: 'true'
       run: |
         set -euo pipefail
         TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
@@ -152,6 +153,11 @@ runs:
         HASH_FLAG=""
         if [ "$COMPARE_HASHES" != "false" ]; then
           HASH_FLAG="-H $COMPARE_HASHES"
+        fi
+
+        LOG_FLAG=""
+        if [ "$ENABLE_MITMPROXY_LOGS" = "true" ]; then
+          LOG_FLAG="-L"
         fi
 
         ./run.sh \
@@ -162,7 +168,8 @@ runs:
           -i "$IMAGES" \
           -o "$OPCODE_WARMUP_COUNT" \
           -f "$FILTER" \
-          $HASH_FLAG
+          $HASH_FLAG \
+          $LOG_FLAG
 
     - name: Compare Engine API hashes
       if: ${{ inputs.compareHashes != 'false' }}
@@ -174,8 +181,11 @@ runs:
         set -uo pipefail
         echo "Comparing Engine API hashes across clients (mode: $COMPARE_HASHES)..."
         # Don't fail the workflow on mismatches - just report the result
-        # Output to both console and file for artifact
-        python3 compare_hashes.py --mode "$COMPARE_HASHES" -o response_hashes/comparison_report.txt response_hashes/*.json || echo "::warning::Hash comparison found mismatches"
+        # Output text report, JSON report (with full hashes), and print to console
+        python3 compare_hashes.py --mode "$COMPARE_HASHES" \
+          -o response_hashes/comparison_report.txt \
+          -j response_hashes/comparison_report.json \
+          response_hashes/*.json || echo "::warning::Hash comparison found mismatches"
         cat response_hashes/comparison_report.txt
 
     - name: Generate TXT report (optional)
@@ -204,6 +214,8 @@ runs:
           reports.zip
           results
           response_hashes
+          mitmproxy_logs
+          eest_tests
 
     - name: Validate PostgreSQL configuration (optional)
       if: ${{ inputs.postgresHost != '' }}
