@@ -1,6 +1,9 @@
 name: Run Parallel Benchmarks in multiple clients
 
 on:
+  push:
+    branches:
+      - repricing
   workflow_dispatch:
     inputs:
       test:
