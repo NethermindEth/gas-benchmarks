@@ -16,7 +16,7 @@ services:
       - execution_data:/nethermind/data
       - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
-      - /home/ubuntu/diagfiles:/nethermind/diag
+      - ./diagfiles:/nethermind/diag
     ports:
       - "8009:8009"
       - "8545:8545"
@@ -48,6 +48,7 @@ services:
       - --Merge.NewPayloadBlockProcessingTimeout=70000
       - --Merge.TerminalTotalDifficulty=0
       - --Init.LogRules=Consensus.Processing.ProcessingStats:Debug
+      - --Blocks.CachePrecompilesOnBlockProcessing=false
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
     logging:
       driver: json-file

@@ -154,7 +154,7 @@ def extract_response_and_result(
     return response, float(result), timestamp, total_running_time_ms, fcu_duration_ms, np_duration_ms
 
 
-def get_gas_table(client_results, client, test_cases, gas_set, method, metadata):
+def get_gas_table(client_results, client, test_cases, gas_set, method, metadata, skip_empty=False):
     gas_table_norm = {}
     results_per_test_case = {}
     for test_case, _ in test_cases.items():
@@ -175,6 +175,8 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata)
 
     for test_case, _ in test_cases.items():
         results_norm = results_per_test_case[test_case]
+        if skip_empty and len(results_norm) == 0:
+            continue
         gas_table_norm[test_case] = ['' for _ in range(13)]
         # test_case_name, description, N, MGgas/s, mean, max, min. std, p50, p95, p99
         # (norm) title, description, N , max, min, p50, p95, p99, start_time, end_time, duration_ms, fcu_duration_ms, np_duration_ms

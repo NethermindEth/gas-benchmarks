@@ -85,6 +85,16 @@ cleanup() {
   # Remove script/*/execution-data folders
   debug_log "Removing script/*/execution-data folders..."
   find scripts/ -type d -name "execution-data" -exec rm -r {} + 2>/dev/null || true
+
+  # Stop and remove all containers, then prune Docker resources
+  if command -v docker >/dev/null 2>&1; then
+    debug_log "Stopping all running containers..."
+    docker ps -q | xargs -r docker stop 2>/dev/null || true
+    debug_log "Removing all containers..."
+    docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
+    debug_log "Pruning all Docker resources (including volumes)..."
+    docker system prune -af --volumes 2>/dev/null || true
+  fi
   
   debug_log "Script cleanup completed"
 }
@@ -224,6 +234,10 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=true
       shift
       ;;
+    --skip-empty)
+      SKIP_EMPTY=true
+      shift
+      ;;
     --restarts)
       value=$(parse_bool "$2")
       if [ "$value" = "invalid" ]; then
@@ -337,6 +351,10 @@ while true; do
   fi
   if [ -n "$WARMUP_OPCODES_PATH" ]; then
     RUN_CMD+=(-W "$WARMUP_OPCODES_PATH")
+  fi
+
+  if [ "$SKIP_EMPTY" = true ]; then
+    RUN_CMD+=(-S)
   fi
 
   if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then

@@ -129,6 +129,51 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
                 pass
 
 
+def _ensure_testing_placeholders(payload_dir: Path) -> None:
+    testing_dir = payload_dir / "testing"
+
+    indices: set[str] = set()
+    numeric_indices: list[int] = []
+    widths: list[int] = []
+    if not testing_dir.is_dir():
+        return
+    for entry in testing_dir.iterdir():
+        if not entry.is_dir():
+            continue
+        indices.add(entry.name)
+        if entry.name.isdigit():
+            numeric_indices.append(int(entry.name))
+            widths.append(len(entry.name))
+
+    if numeric_indices:
+        min_idx = min(numeric_indices)
+        max_idx = max(numeric_indices)
+        pad_width = max(widths) if widths else 0
+        for idx in range(min_idx, max_idx + 1):
+            name = str(idx).zfill(pad_width) if pad_width else str(idx)
+            indices.add(name)
+
+    for idx in sorted(indices):
+        target_dir = testing_dir / idx
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            continue
+        try:
+            entries = list(target_dir.iterdir())
+        except Exception:
+            continue
+        if any(entry.name != ".gitkeep" for entry in entries):
+            continue
+        gitkeep = target_dir / ".gitkeep"
+        if gitkeep.exists():
+            continue
+        try:
+            gitkeep.write_text("", encoding="utf-8")
+        except Exception:
+            pass
+
+
 # --------------------------------------------------------------------------------
 
 def _read_json_file(path: Path):
@@ -350,7 +395,9 @@ def start_nethermind_container(
         "--Init.LogRules",
         "Consensus.Processing.ProcessingStats:Debug",
         "--Blocks.SingleBlockImprovementOfSlot",
-        "0.10",
+        "10",
+        "--Blocks.SecondsPerSlot",
+        "2",
         "--Merge.NewPayloadBlockProcessingTimeout",
         "70000",
     ]
@@ -954,6 +1001,7 @@ def main():
             raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:
             _append_suffix_to_scenarios(payloads_dir, gas_values[0])
+        _ensure_testing_placeholders(payloads_dir)
     finally:
         if not args.keep:
             try:
@@ -985,5 +1033,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
