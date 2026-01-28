@@ -327,22 +327,23 @@ class HashCaptureAddon:
             if test_name not in self.hashes["tests"]:
                 self.hashes["tests"][test_name] = {}
 
+            now = datetime.now().strftime("%H:%M")
             # Store based on mode
             if self.mode == "request":
                 # Backward compatible: flat hash string
                 self.hashes["tests"][test_name][method] = request_hash
-                print(f"[hash_capture] Captured {method} request for '{test_name}': {request_hash[:16]}...")
+                print(f"[hash_capture] [{now}] Captured {method} request for '{test_name}': {request_hash[:16]}...")
             elif self.mode == "response":
                 # Flat hash string for response only
                 self.hashes["tests"][test_name][method] = response_hash
-                print(f"[hash_capture] Captured {method} response for '{test_name}': {response_hash[:16]}...")
+                print(f"[hash_capture] [{now}] Captured {method} response for '{test_name}': {response_hash[:16]}...")
             else:  # mode == "all"
                 # Nested structure with both hashes
                 self.hashes["tests"][test_name][method] = {
                     "request": request_hash,
                     "response": response_hash
                 }
-                print(f"[hash_capture] Captured {method} for '{test_name}': req={request_hash[:16]}... resp={response_hash[:16]}...")
+                print(f"[hash_capture] [{now}] Captured {method} for '{test_name}': req={request_hash[:16]}... resp={response_hash[:16]}...")
 
             # Save after each update
             self._save_hashes()
