@@ -176,6 +176,84 @@ def _ensure_testing_placeholders(payload_dir: Path) -> None:
 
 # --------------------------------------------------------------------------------
 
+def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, output_path: Path) -> None:
+    """
+    Process test files in testing_dir and create a JSON mapping test names to opcode counts.
+
+    For each test file:
+    1. Extract blockNumber from the engine_newPayloadV4 request (hex to int)
+    2. Find corresponding opcode-trace-block-{blockNumber}.json
+    3. Extract opcodeCounts from the trace file
+    4. If multiple blocks, merge (sum) opcode counts
+    """
+    results = {}
+
+    if not testing_dir.exists():
+        print(f"[WARN] Testing directory {testing_dir} does not exist")
+        return
+
+    # Iterate through all numbered subdirectories
+    for subdir in sorted(testing_dir.iterdir()):
+        if not subdir.is_dir():
+            continue
+
+        # Find .txt files in the subdirectory
+        for txt_file in subdir.glob("*.txt"):
+            test_name = txt_file.stem
+
+            try:
+                lines = txt_file.read_text(encoding="utf-8").splitlines()
+            except Exception as e:
+                print(f"[WARN] Failed to read {txt_file}: {e}")
+                continue
+
+            # Collect all block numbers from the file
+            block_numbers = []
+            for line in lines:
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    # Change this for other forks!
+                    if data.get("method") == "engine_newPayloadV4":
+                        params = data.get("params", [])
+                        if params and isinstance(params[0], dict):
+                            block_num_hex = params[0].get("blockNumber")
+                            if block_num_hex:
+                                block_numbers.append(int(block_num_hex, 16))
+                except Exception:
+                    continue
+
+            if not block_numbers:
+                print(f"[WARN] No blockNumber found in {txt_file}")
+                continue
+
+            # Merge opcode counts from all blocks
+            merged_counts: dict[str, int] = {}
+            for block_num in block_numbers:
+                trace_file = opcode_tracing_dir / f"opcode-trace-block-{block_num}.json"
+                if not trace_file.exists():
+                    print(f"[WARN] Trace file not found: {trace_file}")
+                    continue
+
+                try:
+                    trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
+                    opcode_counts = trace_data.get("opcodeCounts", {})
+                    for opcode, count in opcode_counts.items():
+                        merged_counts[opcode] = merged_counts.get(opcode, 0) + count
+                except Exception as e:
+                    print(f"[WARN] Failed to parse {trace_file}: {e}")
+                    continue
+
+            if merged_counts:
+                results[test_name] = merged_counts
+
+    # Write output JSON
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    print(f"[INFO] Opcode trace results written to {output_path}")
+
+
 def _read_json_file(path: Path):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -340,6 +418,7 @@ def start_nethermind_container(
     name="eest-nethermind",
     image: str = "nethermindeth/nethermind:gp-hacked",
     genesis_path: Optional[Path] = None,
+    trace_json: bool = False,
 ) -> str:
     subprocess.run(["docker", "pull", image], check=False)
     resolved_db = db_dir.resolve()
@@ -359,6 +438,8 @@ def start_nethermind_container(
         "-v",
         f"{str(resolved_jwt_parent)}:/jwt:ro",
     ]
+    if trace_json:
+        cmd += ["-v", f"{str(Path('opcode-tracing').resolve())}:/test-output"]
     genesis_volume = None
     if genesis_path:
         resolved_genesis = Path(genesis_path).resolve()
@@ -414,6 +495,14 @@ def start_nethermind_container(
         "--Merge.NewPayloadBlockProcessingTimeout",
         "70000",
     ]
+    if trace_json:
+        cmd += [
+            "--OpcodeTracing.Enabled", "true",
+            "--OpcodeTracing.Mode", "Realtime",
+            "--OpcodeTracing.StartBlock", "1",
+            "--OpcodeTracing.EndBlock", "2",
+            "--OpcodeTracing.OutputDirectory", "/test-output",
+        ]
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
 
@@ -657,6 +746,15 @@ def main():
         help="Pass-through filter string forwarded to execute remote as -k \"...\".",
     )
     parser.add_argument(
+        "--trace-json",
+        action="store_true",
+        help="Enable opcode tracing and generate JSON output mapping tests to opcode counts.",
+    )
+    parser.add_argument(
+        "--trace-json-output",
+        default="opcode_trace_results.json",
+        help="Output path for the opcode trace results JSON (default: opcode_trace_results.json).",
+    parser.add_argument(
         "--eest-mode",
         "--eest_mode",
         dest="eest_mode",
@@ -800,6 +898,9 @@ def main():
         scenario_merged = scenario_upper = scenario_work = None
         CLEANUP["scenario_merged"] = CLEANUP["scenario_upper"] = CLEANUP["scenario_work"] = None
 
+    if args.trace_json:
+        Path("opcode-tracing").mkdir(parents=True, exist_ok=True)
+
     stop_and_remove_container("eest-nethermind")
     if use_overlay_base:
         ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
@@ -820,6 +921,7 @@ def main():
             name=container_name,
             image=args.nethermind_image,
             genesis_path=genesis_file,
+            trace_json=args.trace_json,
         )
         if not wait_for_port("127.0.0.1", 8545, timeout=180):
             print("ERROR: 8545 not reachable.")
@@ -1058,6 +1160,12 @@ def main():
 
         if return_code is None:
             return_code = tests_proc.returncode
+        if args.trace_json:
+            generate_opcode_trace_json(
+                testing_dir=Path(payloads_dir / "testing"),
+                opcode_tracing_dir=Path("opcode-tracing"),
+                output_path=Path(args.trace_json_output),
+            )
         if return_code != 0:
             raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:

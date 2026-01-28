@@ -275,7 +275,8 @@ def _capture_nethermind_logs() -> List[str]:
 def _emit_newpayload_event(exec_payload: Dict[str, Any], parent_hash: str) -> None:
     block_hash = exec_payload.get("blockHash") or "unknown"
     txs = exec_payload.get("transactions") or []
-    summary = f"[MITM][NP] block={block_hash} parent={parent_hash} txs={len(txs)}"
+    block_number = exec_payload.get("blockNumber") or "unknown"
+    summary = f"[MITM][NP] block={block_hash} blockNumber={block_number} parent={parent_hash} txs={len(txs)}"
     _log(summary, to_merged=True)
 
     nm_lines = _capture_nethermind_logs()
