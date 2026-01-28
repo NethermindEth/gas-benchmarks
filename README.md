@@ -285,6 +285,141 @@ The tool writes `mitm_config.json` automatically (edit it if you need to tweak d
 
 Important: This feature is still in development (See [PR description](https://github.com/NethermindEth/gas-benchmarks/pull/57)). The script writes `mitm_config.json` automatically; edit it only if you need to customize the generated values.
 
+#### Opcode Tracing
+
+The generator supports opcode tracing to capture which opcodes are executed during each test. This is useful for analyzing gas consumption patterns and test coverage.
+
+**Generate opcode trace JSON:**
+
+```sh
+python eest_stateful_generator.py \
+     --data-dir scripts/nethermind/execution-data \
+     --genesis-path scripts/genesisfiles/nethermind/zkevmgenesis.json \
+     --nethermind-image nethermindeth/nethermind:gp-hacked \
+     --fork Prague \
+     --rpc-seed-key SOMEKEY \
+     --rpc-address SOMEADDRESS \
+     --payload-dir repricings_compute \
+     --eest-repo https://github.com/spencer-tb/execution-specs \
+     --eest-branch feat/fixed-opcode-count-updates \
+     --gas-bump-count 0 \
+     --trace-json \
+     --trace-json-output results.json
+```
+
+**Options:**
+
+- `--trace-json`: Enable opcode tracing and generate JSON output mapping tests to opcode counts.
+- `--trace-json-output`: Output path for the opcode trace results JSON.
+
+**Output format:**
+
+The generated JSON file contains a mapping of test names to their opcode execution counts:
+
+```json
+{
+  "test_arithmetic.py__test_arithmetic[fork_Prague-benchmark_test-opcode_ADD-opcount_1.0K]": {
+    "ADD": 1000,
+    "PUSH1": 28,
+    "JUMPDEST": 8,
+    "STOP": 1,
+    ...
+  },
+  ...
+}
+```
+
+### Populating Test Metadata Database
+
+After generating opcode trace results, you can populate a PostgreSQL database with the test metadata for Grafana visualization.
+
+**Usage:**
+
+```sh
+python fill_tests_metadata_db.py \
+    --json-file results.json \
+    --db-host <your_db_host> \
+    --db-port <your_db_port> \
+    --db-user <your_db_user> \
+    --db-password <your_db_password> \
+    --db-name <your_db_name> \
+    --table-name <target_table_name>
+```
+
+**Parameters:**
+
+- `--json-file`: Path to the JSON file containing opcode metrics (e.g., `results.json`).
+- `--db-host`: PostgreSQL database host.
+- `--db-port`: PostgreSQL database port (default: 5432).
+- `--db-user`: PostgreSQL database user.
+- `--db-password`: PostgreSQL database password.
+- `--db-name`: PostgreSQL database name.
+- `--table-name`: Name of the table to store metrics (default: `test_metadata`).
+- `--clear-existing`: Optional flag to truncate existing data before importing.
+- `--log-level`: Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+
+**Example:**
+
+```sh
+python fill_tests_metadata_db.py \
+    --json-file results_fixed.json \
+    --db-host localhost \
+    --db-port 5432 \
+    --db-user myuser \
+    --db-password "securepassword123" \
+    --db-name benchmarks \
+    --table-name gas_limit_benchmarks_test_metadata
+```
+
+**Database Schema:**
+
+The script creates a table with the following structure:
+
+```sql
+CREATE TABLE test_metadata (
+    id SERIAL PRIMARY KEY,
+    test_name TEXT UNIQUE NOT NULL,
+    opcodes JSONB NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+)
+```
+
+**Update Behavior:**
+
+When running the script multiple times:
+
+- Tests that exist in the database and the new JSON file will have their `opcodes` updated and `updated_at` timestamp refreshed.
+- Tests that exist in the database but not in the new JSON file remain unchanged.
+- New tests are inserted with both `created_at` and `updated_at` set to the current time.
+
+**Grafana Queries:**
+
+Example queries for visualizing opcode data in Grafana:
+
+```sql
+-- Get all opcodes for a specific test
+SELECT test_name, key as opcode, value::int as count
+FROM gas_limit_benchmarks_test_metadata, jsonb_each_text(opcodes)
+WHERE test_name LIKE '%SELFBALANCE%';
+
+-- Top opcodes by total usage across all tests
+SELECT key as opcode, SUM(value::int) as total_count
+FROM gas_limit_benchmarks_test_metadata, jsonb_each_text(opcodes)
+GROUP BY key
+ORDER BY total_count DESC
+LIMIT 20;
+
+-- Compare specific opcodes across tests
+SELECT test_name,
+       opcodes->>'ADD' as "ADD",
+       opcodes->>'MUL' as "MUL",
+       opcodes->>'SLOAD' as "SLOAD"
+FROM gas_limit_benchmarks_test_metadata
+WHERE opcodes ? 'ADD'
+ORDER BY (opcodes->>'ADD')::int DESC;
+```
+
 Contributing: see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Reusable GitHub Action: `gas-benchmark-action`
