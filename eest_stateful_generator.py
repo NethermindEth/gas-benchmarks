@@ -754,6 +754,7 @@ def main():
         "--trace-json-output",
         default="opcode_trace_results.json",
         help="Output path for the opcode trace results JSON (default: opcode_trace_results.json).",
+    )
     parser.add_argument(
         "--eest-mode",
         "--eest_mode",
