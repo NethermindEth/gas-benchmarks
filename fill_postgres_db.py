@@ -152,10 +152,11 @@ def parse_cpu_ghz(ghz_string: Optional[str]) -> Optional[float]:
 
 def parse_opcount(raw_value: Optional[str]) -> Optional[int]:
     """
-    Parse an operation count that may include K/M suffixes.
+    Parse an operation count value and convert it to the raw count.
+    Input values are expected to be in thousands, so always multiply by 1,000.
     Examples:
-      "50000K" -> 50000000
-      "2500000" -> 2500000
+      "50000" -> 50000000
+      "2500000" -> 2500000000
     """
     if raw_value is None:
         return None
@@ -164,7 +165,7 @@ def parse_opcount(raw_value: Optional[str]) -> Optional[int]:
     if value == "":
         return None
 
-    match = re.match(r"^(?P<num>[0-9]+(?:\.[0-9]+)?)(?P<suffix>[kKmM]?)$", value)
+    match = re.match(r"^(?P<num>[0-9]+(?:\.[0-9]+)?)(?P<suffix>[kK]?)$", value)
     if not match:
         raise ValueError(f"Unrecognized opcount format: {raw_value}")
 
