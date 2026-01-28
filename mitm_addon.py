@@ -32,6 +32,17 @@ JWT_HEX_PATH: str = _CFG["jwt_hex_path"]
 FINALIZED_BLOCK: str = _CFG.get("finalized_block") or ""
 SKIP_CLEANUP: bool = bool(_CFG.get("skip_cleanup"))
 REUSE_GLOBALS: bool = bool(_CFG.get("reuse_globals"))
+FORK: str = str(_CFG.get("fork") or "Prague")
+
+
+def _getpayload_method_for_fork(fork: str) -> str:
+    fork_name = (fork or "").strip().lower()
+    if fork_name == "osaka":
+        return "engine_getPayloadV5"
+    return "engine_getPayloadV4"
+
+
+_GETPAYLOAD_METHOD = _getpayload_method_for_fork(FORK)
 
 _DYN_FINALIZED: str = FINALIZED_BLOCK
 
@@ -610,7 +621,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         )
 
         params: List[Any] = [txrlps, "EMPTY"]
-        payload: Dict[str, Any] = _engine("engine_getPayloadV4", params)
+        payload: Dict[str, Any] = _engine(_GETPAYLOAD_METHOD, params)
         exec_payload: Dict[str, Any] = payload.get("executionPayload", {})
         parent_hash: str = exec_payload.get("parentHash") or "0x" + ("00" * 32)
 
