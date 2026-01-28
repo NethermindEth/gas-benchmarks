@@ -48,6 +48,7 @@ services:
       - --Merge.NewPayloadBlockProcessingTimeout=70000
       - --Merge.TerminalTotalDifficulty=0
       - --Init.LogRules=Consensus.Processing.ProcessingStats:Debug
+      - --Blocks.CachePrecompilesOnBlockProcessing=false
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
     logging:
       driver: json-file
