@@ -1,6 +1,9 @@
 name: Run Parallel Benchmarks in multiple clients
 
 on:
+  push:
+    branches:
+      - repricing
   workflow_dispatch:
     inputs:
       test:
@@ -25,6 +28,19 @@ on:
         description: 'Genesis filename (used for all clients)'
         default: 'zkevmgenesis.json'
 
+concurrency:
+  group: repricing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  INPUT_TEST: ${{ github.event.inputs.test || 'repricings_compute' }}
+  INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
+  INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
+  INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
+  INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
+  INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
+  INPUT_GENESIS: ${{ github.event.inputs.genesis || 'zkevmgenesis.json' }}
+
 jobs:
   set-matrix:
     if: github.ref == 'refs/heads/repricing'
@@ -43,7 +59,10 @@ jobs:
       - name: Set matrix dynamically
         id: set-matrix
         run: |
-          runs=${{ github.event.inputs.runs }}
+          runs="${{ env.INPUT_RUNS }}"
+          if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
+            runs=1
+          fi
           clients="geth,nethermind,erigon,besu,reth"
           IFS=',' read -ra client_array <<< "$clients"
           matrix_elements=()
@@ -111,8 +130,8 @@ jobs:
 
       - name: Run benchmarks for client=${{ matrix.client }}
         run: |
-          GENESIS_FILENAME="${{ github.event.inputs.genesis }}"
-          TEST_PATH="${{ github.event.inputs.test }}"
+          GENESIS_FILENAME="${{ env.INPUT_GENESIS }}"
+          TEST_PATH="${{ env.INPUT_TEST }}"
           CLIENT="${{ matrix.client }}"
           TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
       
@@ -120,9 +139,9 @@ jobs:
             -T "$TEST_PATHS_JSON" \
             -c "$CLIENT" \
             -r 1 \
-            -i '${{ github.event.inputs.images }}' \
-            -o "${{ github.event.inputs.opcodes_warmup_count }}" \
-            -f "${{ github.event.inputs.filter }}" \
+            -i '${{ env.INPUT_IMAGES }}' \
+            -o "${{ env.INPUT_OPCODES_WARMUP }}" \
+            -f "${{ env.INPUT_FILTER }}" \
             -W "warmup-repricing"
 
       - name: Dump latest Docker logs for ${{ matrix.client }}
@@ -230,17 +249,17 @@ jobs:
           rm -rf reports
           mkdir -p reports
 
-          RUNS="${{ github.event.inputs.runs }}"
-          TESTS="${{ github.event.inputs.test }}"
-          IMAGES='${{ github.event.inputs.images }}'
+          RUNS="${{ env.INPUT_RUNS }}"
+          TESTS="${{ env.INPUT_TEST }}"
+          IMAGES='${{ env.INPUT_IMAGES }}'
 
           python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
           python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
 
       - name: Generate Report
-        if: ${{ github.event.inputs.txt_report == 'true' }}
+        if: ${{ env.INPUT_TXT_REPORT == 'true' }}
         run: |
-          python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath ${{ github.event.inputs.test }} 
+          python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath "${{ env.INPUT_TEST }}"
 
       - name: Zip the results folder
         run: |
