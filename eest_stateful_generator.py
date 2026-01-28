@@ -612,8 +612,12 @@ def main():
     )
     parser.add_argument(
         "--fixed-opcode-count",
-        default="",
-        help="Comma-separated fixed opcode counts to pass to execute remote instead of --gas-benchmark-values.",
+        "--fixed-ocpode-count",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated fixed opcode counts to pass to execute remote instead of --gas-benchmark-values. "
+             "Provide no value to pass an empty flag through.",
     )
     parser.add_argument(
         "--nethermind-image",
@@ -651,6 +655,13 @@ def main():
         "--parameter_filter",
         default="",
         help="Pass-through filter string forwarded to execute remote as -k \"...\".",
+    )
+    parser.add_argument(
+        "--eest-mode",
+        "--eest_mode",
+        dest="eest_mode",
+        default="repricing",
+        help="Mode passed to execute remote via -m (supports repricings/benchmarks/stateful).",
     )
     parser.add_argument(
         "--eest-stateful-testing",
@@ -909,6 +920,17 @@ def main():
             raise RuntimeError("mitmproxy failed to bind on 8549")
 
         tests_rpc = args.rpc_endpoint or "http://127.0.0.1:8549"
+        mode_key = (args.eest_mode or "").strip().lower()
+        mode_map = {
+            "repricing": "repricing",
+            "repricings": "repricing",
+            "benchmark": "benchmarks",
+            "benchmarks": "benchmarks",
+            "stateful": "stateful",
+        }
+        if mode_key not in mode_map:
+            raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
+        eest_mode = mode_map[mode_key]
         uv_cmd = [
             "uv", "run", "execute", "remote", "-v",
             f"--fork={args.fork}",
@@ -916,19 +938,19 @@ def main():
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
         ]
-#        if args.fixed_opcode_count:
-#            uv_cmd.append(f"--fixed-opcode-count={args.fixed_opcode_count}")
-#        elif args.gas_benchmark_values:
-#            uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
+        if args.fixed_opcode_count is not None:
+            if args.fixed_opcode_count == "":
+                uv_cmd.append("--fixed-opcode-count=")
+            else:
+                uv_cmd.append(f"--fixed-opcode-count={args.fixed_opcode_count}")
         uv_cmd += [
             #"--eoa-fund-amount-default", "3100000000000000000",
             "--tx-wait-timeout", "30",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             "--skip-cleanup",
-            "--fixed-opcode-count=",
             args.test_path,
             "--",
-            "-m", "repricing", "-n", "1",
+            "-m", eest_mode, "-n", "1",
         ]
         if args.parameter_filter:
             uv_cmd.extend(["-k", args.parameter_filter])
