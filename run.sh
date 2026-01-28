@@ -424,7 +424,9 @@ for path in ordered + extra_root:
         seen.add(path)
         final.append(path)
 
-sys.stdout.write("\0".join(final))
+# Ensure a trailing NUL so bash read -d '' doesn't drop the last entry.
+if final:
+    sys.stdout.write("\0".join(final) + "\0")
 PY
 }
 
