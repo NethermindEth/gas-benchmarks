@@ -834,16 +834,14 @@ def main():
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
         ]
-#        if args.fixed_opcode_count:
-#            uv_cmd.append(f"--fixed-opcode-count={args.fixed_opcode_count}")
-#        elif args.gas_benchmark_values:
-#            uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
+        if args.fixed_opcode_count:
+            uv_cmd.append(f"--fixed-opcode-count={args.fixed_opcode_count}")
+        elif args.gas_benchmark_values:
+            uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
         uv_cmd += [
-            #"--eoa-fund-amount-default", "3100000000000000000",
             "--tx-wait-timeout", "30",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             "--skip-cleanup",
-            "--fixed-opcode-count=",
             args.test_path,
             "--",
             "-m", "repricing", "-n", "1",
