@@ -81,10 +81,11 @@ runs:
 
     - name: Set up Docker Action
       uses: docker/setup-docker-action@v4.7.0
+      run: docker version
 
     - name: Set up Docker Compose Action
-        uses: docker/setup-compose-action@v1.2.0
-        run: docker compose version
+      uses: docker/setup-compose-action@v1.2.0
+      run: docker compose version
 
     - name: Ensure scripts are executable
       shell: bash
