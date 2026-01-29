@@ -494,6 +494,8 @@ def start_nethermind_container(
         "2",
         "--Merge.NewPayloadBlockProcessingTimeout",
         "70000",
+        "--Init.BaseDbPath",
+        "/db/mainnet",
     ]
     if trace_json:
         cmd += [
