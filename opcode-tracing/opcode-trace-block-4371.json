@@ -1,17 +1,32 @@
 {
   "metadata": {
     "blockNumber": 4371,
-    "parentHash": "0x18c138a80059b8df2fb67a6018547bc8b6fcf89fcc3e4bca15562b7f1f5cea80",
+    "parentHash": "0x8b4571f2b64bcb0adc545becc39a3b18814089e60bc181843f9e2942210cddb0",
     "timestamp": 4371,
-    "transactionCount": 3,
-    "tracedAt": "2026-01-28T18:05:53.8098478Z"
+    "transactionCount": 1,
+    "tracedAt": "2026-01-29T17:43:20.8427559Z"
   },
   "opcodeCounts": {
-    "CODECOPY": 2,
-    "PUSH1": 4,
-    "PUSH2": 2,
-    "DUP2": 2,
-    "DUP3": 2,
-    "RETURN": 2
+    "STOP": 61,
+    "SUB": 60,
+    "ISZERO": 120,
+    "CALLDATASIZE": 61,
+    "CALLDATACOPY": 1,
+    "CODECOPY": 60,
+    "POP": 60,
+    "JUMPI": 60,
+    "GAS": 60,
+    "JUMPDEST": 120,
+    "PUSH0": 15002,
+    "PUSH1": 540,
+    "PUSH3": 60,
+    "PUSH4": 1,
+    "PUSH20": 60,
+    "PUSH32": 60,
+    "DUP1": 45060,
+    "DUP5": 15000,
+    "SWAP1": 60,
+    "LOG3": 15000,
+    "CALL": 60
   }
 }
