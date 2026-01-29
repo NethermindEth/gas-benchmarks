@@ -728,6 +728,11 @@ def main():
         help="Enable per-scenario overlay + container restarts (true/false, default true).",
     )
     parser.add_argument(
+        "--overlay-root",
+        default=".",
+        help="Base directory for overlay mount folders (default: current directory).",
+    )
+    parser.add_argument(
         "--eest-repo",
         default="https://github.com/ethereum/execution-specs",
         help="Git repository URL for execution-specs (supports forks).",
@@ -873,9 +878,11 @@ def main():
     jwt_path = ensure_jwt(Path("engine-jwt"))
 
     if use_overlay_base:
-        primary_merged = Path("overlay-merged")
-        primary_upper = Path("overlay-upper")
-        primary_work = Path("overlay-work")
+        overlay_root = Path(args.overlay_root).expanduser().resolve()
+        overlay_root.mkdir(parents=True, exist_ok=True)
+        primary_merged = overlay_root / "overlay-merged"
+        primary_upper = overlay_root / "overlay-upper"
+        primary_work = overlay_root / "overlay-work"
         CLEANUP["primary_merged"], CLEANUP["primary_upper"], CLEANUP["primary_work"] = (
             primary_merged,
             primary_upper,
@@ -891,9 +898,9 @@ def main():
         print("[INFO] Overlay reorgs disabled because overlay filesystem is not in use.")
 
     if overlay_reorgs_enabled:
-        scenario_merged = Path("overlay-scenario-merged")
-        scenario_upper = Path("overlay-scenario-upper")
-        scenario_work = Path("overlay-scenario-work")
+        scenario_merged = overlay_root / "overlay-scenario-merged"
+        scenario_upper = overlay_root / "overlay-scenario-upper"
+        scenario_work = overlay_root / "overlay-scenario-work"
         CLEANUP["scenario_merged"], CLEANUP["scenario_upper"], CLEANUP["scenario_work"] = (
             scenario_merged,
             scenario_upper,
