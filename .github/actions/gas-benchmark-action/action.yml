@@ -228,7 +228,6 @@ runs:
           results
           response_hashes
           mitmproxy_logs
-          eest_tests
 
     - name: Validate PostgreSQL configuration (optional)
       if: ${{ inputs.postgresHost != '' }}
