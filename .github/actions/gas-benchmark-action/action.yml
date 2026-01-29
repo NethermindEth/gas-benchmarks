@@ -79,6 +79,9 @@ runs:
       with:
         dotnet-version: '9.0.x'
 
+    - name: Set up Docker
+      uses: docker/setup-docker-action@v4
+
     - name: Ensure scripts are executable
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
