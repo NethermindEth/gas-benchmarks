@@ -825,6 +825,8 @@ def main():
     run(["uv", "sync", "--all-extras"], cwd=str(repo_dir))
     run(["uv", "pip", "install", "-e", ".", "--break-system-packages"], cwd=str(repo_dir))
 
+    snapshot_dir = Path(args.snapshot_dir).expanduser().resolve()
+
     data_dir_path: Optional[Path] = None
     if args.data_dir:
         data_dir_path = Path(args.data_dir).expanduser().resolve()
@@ -842,7 +844,7 @@ def main():
             data_dir_path.mkdir(parents=True, exist_ok=True)
 
     use_overlay_base = data_dir_path is None and genesis_file is None
-    base_data_dir = data_dir_path or Path("execution-data")
+    base_data_dir = data_dir_path or snapshot_dir
 
     if genesis_file is None:
         if not args.no_snapshot:
