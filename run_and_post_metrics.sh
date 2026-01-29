@@ -12,6 +12,7 @@
 #   --network      Network name forwarded to run.sh (e.g. mainnet)
 #   --snapshot-root Base directory for overlay snapshots (can include placeholders)
 #   --snapshot-template Optional template appended to snapshot root (supports <<CLIENT>> / <<NETWORK>>)
+#   --overlay-root  Absolute path for overlay runtime directory (passed to run.sh -O)
 #   --clients      Comma-separated client list forwarded to run.sh
 #   --restarts     true/false to control client restarts (-R flag for run.sh)
 #   --debug        Enable debug logging for this script
@@ -30,6 +31,7 @@ NETWORK=""
 NETWORK_LABEL="all"
 SNAPSHOT_ROOT=""
 SNAPSHOT_TEMPLATE=""
+OVERLAY_ROOT=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
@@ -102,7 +104,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 usage() {
-  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --max-loops <N>]"
+  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --overlay-root <path> --clients <client_list> --restarts <true|false> --max-loops <N>]"
 }
 
 # Debug logging function
@@ -172,6 +174,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --snapshot-root)
       SNAPSHOT_ROOT="$2"
+      shift 2
+      ;;
+    --overlay-root)
+      OVERLAY_ROOT="$2"
       shift 2
       ;;
     --snapshot-template)
@@ -283,6 +289,10 @@ while true; do
   fi
   if [ -n "$snapshot_arg" ]; then
     RUN_CMD+=(-B "$snapshot_arg")
+  fi
+
+  if [ -n "$OVERLAY_ROOT" ]; then
+    RUN_CMD+=(-O "$OVERLAY_ROOT")
   fi
 
   if [ -n "$CLIENTS" ]; then
