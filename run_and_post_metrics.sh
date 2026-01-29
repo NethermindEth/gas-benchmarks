@@ -35,6 +35,8 @@ CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
 MAX_LOOPS=""
 WARMUP_OPCODES_PATH=""
+SKIP_CLEANUP=false
+CLEANUP_ARMED=false
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -64,6 +66,9 @@ sanitize_label() {
 
 # Cleanup function
 cleanup() {
+  if [ "$SKIP_CLEANUP" = true ] || [ "$CLEANUP_ARMED" = false ]; then
+    return
+  fi
   debug_log "Script cleanup initiated"
   
   # Stop and delete the gas-execution-client container
@@ -96,6 +101,10 @@ cleanup() {
 # Set up signal handlers for cleanup
 trap cleanup EXIT INT TERM
 
+usage() {
+  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --max-loops <N>]"
+}
+
 # Debug logging function
 debug_log() {
   if [ "$DEBUG" = true ]; then
@@ -110,6 +119,11 @@ debug_log() {
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --help|-h)
+      SKIP_CLEANUP=true
+      usage
+      exit 0
+      ;;
     --table-name)
       TABLE_NAME="$2"
       shift 2
@@ -205,7 +219,7 @@ done
 
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --max-loops <N>]"
+  usage
   exit 1
 fi
 
@@ -242,6 +256,7 @@ if [ -n "$DEBUG_FILE" ]; then
 fi
 
 # Run commands in an infinite loop (optionally bounded by --max-loops)
+CLEANUP_ARMED=true
 loops_done=0
 while true; do
   loops_done=$((loops_done + 1))
