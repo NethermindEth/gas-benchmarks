@@ -309,6 +309,17 @@ is_mounted() {
   grep -q " $abs_path " /proc/mounts 2>/dev/null
 }
 
+overlay_base_from_lower() {
+  local abs_lower="$1"
+  if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
+    echo "$OVERLAY_TMP_ROOT"
+    return
+  fi
+  local lower_parent
+  lower_parent=$(dirname "$abs_lower")
+  echo "$lower_parent/$OVERLAY_TMP_ROOT"
+}
+
 prepare_overlay_for_client() {
   local client="$1"
   local network="$2"
@@ -337,15 +348,10 @@ prepare_overlay_for_client() {
     return 1
   fi
 
-  local overlay_base="$OVERLAY_TMP_ROOT"
   local abs_lower
   abs_lower=$(abspath "$lower")
-
-  if [[ "$overlay_base" != /* ]]; then
-    local lower_parent
-    lower_parent=$(dirname "$abs_lower")
-    overlay_base="$lower_parent/$overlay_base"
-  fi
+  local overlay_base
+  overlay_base=$(overlay_base_from_lower "$abs_lower")
 
   mkdir -p "$overlay_base"
 
@@ -481,9 +487,9 @@ cleanup_all_overlays() {
 }
 
 cleanup_stale_overlay_mounts() {
-  local base="$OVERLAY_TMP_ROOT"
+  local base="$1"
   if [ -z "$base" ]; then
-    return
+    base="$OVERLAY_TMP_ROOT"
   fi
 
   if [[ "$base" != /* ]]; then
@@ -551,6 +557,53 @@ cleanup_stale_overlay_mounts() {
   done
 
   find "$base" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+}
+
+collect_overlay_bases() {
+  local bases=()
+  if [ -z "$OVERLAY_TMP_ROOT" ]; then
+    return
+  fi
+
+  if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
+    bases+=("$OVERLAY_TMP_ROOT")
+  else
+    if [ "${#CLIENT_ARRAY[@]}" -gt 0 ]; then
+      local client_spec client_base snapshot_root_for_client abs_snapshot parent
+      for client_spec in "${CLIENT_ARRAY[@]}"; do
+        if [ -z "$client_spec" ]; then
+          continue
+        fi
+        client_base=$(echo "$client_spec" | cut -d '_' -f 1)
+        snapshot_root_for_client=$(resolve_snapshot_root_for_client "$client_base" "$NETWORK")
+        if [ -z "$snapshot_root_for_client" ]; then
+          continue
+        fi
+        abs_snapshot=$(abspath "$snapshot_root_for_client")
+        parent=$(dirname "$abs_snapshot")
+        bases+=("$parent/$OVERLAY_TMP_ROOT")
+      done
+    fi
+    if [ "${#bases[@]}" -eq 0 ]; then
+      bases+=("$(abspath "$OVERLAY_TMP_ROOT")")
+    fi
+  fi
+
+  local b
+  declare -A seen
+  for b in "${bases[@]}"; do
+    if [ -n "$b" ] && [ -z "${seen[$b]}" ]; then
+      seen[$b]=1
+      echo "$b"
+    fi
+  done
+}
+
+cleanup_all_stale_overlay_mounts() {
+  local base
+  while IFS= read -r base; do
+    cleanup_stale_overlay_mounts "$base"
+  done < <(collect_overlay_bases)
 }
 
 drop_host_caches() {
@@ -635,8 +688,8 @@ cleanup_on_exit() {
     cleanup_all_overlays
   fi
 
-  if declare -F cleanup_stale_overlay_mounts >/dev/null 2>&1; then
-    cleanup_stale_overlay_mounts
+  if declare -F cleanup_all_stale_overlay_mounts >/dev/null 2>&1; then
+    cleanup_all_stale_overlay_mounts
   fi
 
   exit $exit_status
@@ -758,7 +811,7 @@ else
 fi
 
 if [ "$USE_OVERLAY" = true ]; then
-  cleanup_stale_overlay_mounts
+  cleanup_all_stale_overlay_mounts
   if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
     mkdir -p "$OVERLAY_TMP_ROOT"
   fi
@@ -1078,7 +1131,7 @@ EOF
 
     if [ "$USE_OVERLAY" = true ]; then
       cleanup_overlay_for_client "$client_base"
-      cleanup_stale_overlay_mounts
+      cleanup_all_stale_overlay_mounts
     fi
 
     unset RUNNING_CLIENTS["$client_base"]
