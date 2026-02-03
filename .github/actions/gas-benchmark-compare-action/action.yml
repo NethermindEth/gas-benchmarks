@@ -1,0 +1,247 @@
+name: gas-benchmark-compare-action
+
+description: |
+  Run gas-benchmarks twice with different images and generate a comparison report.
+  This action runs benchmarks sequentially with imagesA and imagesB, then compares results.
+
+inputs:
+  testPath:
+    description: 'Path to benchmark tests inside the gas-benchmarks repo'
+    required: false
+    default: 'eest_tests'
+  genesisFile:
+    description: 'Genesis filename used for all clients (under scripts/genesisfiles/<client>/)'
+    required: false
+    default: ''
+  warmupFile:
+    description: 'Warmup file path; set to empty string to disable warmup'
+    required: false
+    default: 'warmup/warmup-1000bl-16wi-24tx.txt'
+  clients:
+    description: 'Comma-separated list of clients to benchmark (should match keys in imagesA/imagesB)'
+    required: false
+    default: 'nethermind'
+  runs:
+    description: 'Number of benchmark runs to execute per image set'
+    required: false
+    default: '1'
+  opcodeWarmupCount:
+    description: 'Number of opcode warmup iterations per test case'
+    required: false
+    default: '1'
+  filter:
+    description: 'Comma-separated include-only filename patterns for stateful scenarios'
+    required: false
+    default: ''
+  baselineConfig:
+    description: 'JSON config for baseline run: {"images": {"client":"image:tag"}, "label": "Name"}'
+    required: true
+  comparisonConfig:
+    description: 'JSON config for comparison run: {"images": {"client":"image:tag"}, "label": "Name"}'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Ensure scripts are executable
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        chmod +x ./run.sh || true
+
+    - name: Pull LFS files for gas-benchmarks
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        if [ -d .git ]; then
+          git lfs install
+          git lfs pull
+        else
+          echo "Not a git repository, skipping LFS pull."
+        fi
+
+    - name: Install Python dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        pip install -r requirements.txt
+
+    - name: Prepare Kute tools
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        if [ ! -d nethermind ]; then
+          git clone https://github.com/NethermindEth/nethermind nethermind
+          (cd nethermind && git lfs pull || true)
+        fi
+        cd nethermind
+        git checkout e1857d7ca6613ccdc40973899290f565f367e235
+        cd ..
+        dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release --property WarningLevel=0
+
+    - name: Parse config JSON
+      id: parse-config
+      shell: bash
+      env:
+        BASELINE_CONFIG: ${{ inputs.baselineConfig }}
+        COMPARISON_CONFIG: ${{ inputs.comparisonConfig }}
+      run: |
+        set -euo pipefail
+        # Parse baseline config
+        BASELINE_IMAGES=$(echo "$BASELINE_CONFIG" | jq -c '.images')
+        BASELINE_LABEL=$(echo "$BASELINE_CONFIG" | jq -r '.label // "Baseline"')
+        # Parse comparison config
+        COMPARISON_IMAGES=$(echo "$COMPARISON_CONFIG" | jq -c '.images')
+        COMPARISON_LABEL=$(echo "$COMPARISON_CONFIG" | jq -r '.label // "Comparison"')
+        # Export to GITHUB_OUTPUT
+        echo "baseline_images=$BASELINE_IMAGES" >> $GITHUB_OUTPUT
+        echo "baseline_label=$BASELINE_LABEL" >> $GITHUB_OUTPUT
+        echo "comparison_images=$COMPARISON_IMAGES" >> $GITHUB_OUTPUT
+        echo "comparison_label=$COMPARISON_LABEL" >> $GITHUB_OUTPUT
+
+    # === RUN A: Baseline ===
+    - name: Create directories for run A
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        rm -rf results reports reports_a
+        mkdir -p results
+
+    - name: Run benchmarks (Run A - Baseline)
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        TEST_PATH: ${{ inputs.testPath }}
+        GENESIS_FILE: ${{ inputs.genesisFile }}
+        WARMUP_FILE: ${{ inputs.warmupFile }}
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
+        IMAGES: ${{ steps.parse-config.outputs.baseline_images }}
+        OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
+        FILTER: ${{ inputs.filter }}
+      run: |
+        set -euo pipefail
+        echo "=== Starting Baseline Run (A) ==="
+        echo "Images: $IMAGES"
+        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+        ./run.sh \
+          -T "$TEST_PATHS_JSON" \
+          -w "$WARMUP_FILE" \
+          -c "$CLIENTS" \
+          -r "$RUNS" \
+          -i "$IMAGES" \
+          -o "$OPCODE_WARMUP_COUNT" \
+          -f "$FILTER"
+
+    - name: Save reports from run A
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        mkdir -p reports_a
+        if [ -d reports ]; then
+          cp -r reports/* reports_a/ || true
+        fi
+        echo "Reports from run A saved to reports_a/"
+        ls -la reports_a/ || true
+
+    # === RUN B: Comparison ===
+    - name: Create directories for run B
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        rm -rf results reports
+        mkdir -p results
+
+    - name: Run benchmarks (Run B - Comparison)
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        TEST_PATH: ${{ inputs.testPath }}
+        GENESIS_FILE: ${{ inputs.genesisFile }}
+        WARMUP_FILE: ${{ inputs.warmupFile }}
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
+        IMAGES: ${{ steps.parse-config.outputs.comparison_images }}
+        OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
+        FILTER: ${{ inputs.filter }}
+      run: |
+        set -euo pipefail
+        echo "=== Starting Comparison Run (B) ==="
+        echo "Images: $IMAGES"
+        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+        ./run.sh \
+          -T "$TEST_PATHS_JSON" \
+          -w "$WARMUP_FILE" \
+          -c "$CLIENTS" \
+          -r "$RUNS" \
+          -i "$IMAGES" \
+          -o "$OPCODE_WARMUP_COUNT" \
+          -f "$FILTER"
+
+    - name: Save reports from run B
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        mkdir -p reports_b
+        if [ -d reports ]; then
+          cp -r reports/* reports_b/ || true
+        fi
+        echo "Reports from run B saved to reports_b/"
+        ls -la reports_b/ || true
+
+    # === COMPARISON ===
+    - name: Generate comparison report
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        CLIENTS: ${{ inputs.clients }}
+        LABEL_A: ${{ steps.parse-config.outputs.baseline_label }}
+        LABEL_B: ${{ steps.parse-config.outputs.comparison_label }}
+      run: |
+        set -euo pipefail
+        mkdir -p reports_comparison
+        python3 scripts/compare_benchmarks.py \
+          --reports-a reports_a \
+          --reports-b reports_b \
+          --output reports_comparison \
+          --clients "$CLIENTS" \
+          --label-a "$LABEL_A" \
+          --label-b "$LABEL_B"
+
+    - name: Write comparison to GitHub Summary
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        if [ -f reports_comparison/comparison_summary.md ]; then
+          cat reports_comparison/comparison_summary.md >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Package all reports
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        zip -r comparison_reports.zip reports_a reports_b reports_comparison
+
+    - name: Upload comparison artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gas-benchmarks-comparison-outputs
+        path: |
+          reports_a
+          reports_b
+          reports_comparison
+          comparison_reports.zip
