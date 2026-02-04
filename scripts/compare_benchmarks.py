@@ -99,16 +99,17 @@ def format_delta(delta: Optional[float], pct: Optional[float], higher_is_better:
     return f"{sign}{delta:.2f} {indicator}"
 
 
-def truncate_title(title: str, max_len: int = 50) -> str:
-    """Truncate title for readability."""
-    if len(title) <= max_len:
+def truncate_title(title: str, max_len: int = 0) -> str:
+    """Truncate title for readability. If max_len is 0 or None, return full title."""
+    if not max_len or max_len <= 0 or len(title) <= max_len:
         return title
     return title[:max_len - 3] + "..."
 
 
 def generate_unified_table(data_a: dict, data_b: dict,
                            label_a: str, label_b: str,
-                           client: str, metrics: List[str]) -> str:
+                           client: str, metrics: List[str],
+                           max_title_length: int = 0) -> str:
     """Generate a single unified markdown comparison table."""
     lines = []
 
@@ -137,7 +138,7 @@ def generate_unified_table(data_a: dict, data_b: dict,
         row_a = data_a.get(title, {})
         row_b = data_b.get(title, {})
 
-        row_parts = [f"| {truncate_title(title)}"]
+        row_parts = [f"| {truncate_title(title, max_title_length)}"]
 
         for metric_key in metrics:
             if metric_key not in METRIC_CONFIG:
@@ -218,16 +219,8 @@ def write_comparison_csv(data_a: dict, data_b: dict, client: str,
     print(f"Written comparison CSV to {csv_path}")
 
 
-def write_github_summary(content: str, summary_file: str = None):
-    """Write content to GitHub Actions summary."""
-    if summary_file is None:
-        summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
-
-    if summary_file:
-        with open(summary_file, 'a') as f:
-            f.write(content + "\n\n")
-
-    # Also print to stdout
+def print_summary(content: str):
+    """Print summary to stdout for logging."""
     print(content)
 
 
@@ -251,6 +244,8 @@ def main():
     parser.add_argument('--label-b', default='Comparison', help='Label for second run')
     parser.add_argument('--metrics', default='min,max,duration',
                         help='Comma-separated metrics to display (available: min,max,p50,p95,p99,duration,fcu,np)')
+    parser.add_argument('--max-title-length', type=int, default=0,
+                        help='Maximum title length in table (0 = no truncation, default: 0)')
 
     args = parser.parse_args()
 
@@ -286,14 +281,15 @@ def main():
             continue
 
         # Generate single unified comparison table
-        table = generate_unified_table(data_a, data_b, args.label_a, args.label_b, client, metrics)
+        table = generate_unified_table(data_a, data_b, args.label_a, args.label_b, client, metrics,
+                                       args.max_title_length)
         full_summary.append(table)
 
         # Write per-client comparison CSV (always includes all metrics)
         write_comparison_csv(data_a, data_b, client, args.output, args.label_a, args.label_b)
 
     summary_content = "\n".join(full_summary)
-    write_github_summary(summary_content)
+    print_summary(summary_content)
 
     # Also save to file
     summary_path = os.path.join(args.output, 'comparison_summary.md')
