@@ -216,6 +216,7 @@ runs:
         LABEL_A: ${{ steps.parse-config.outputs.baseline_label }}
         LABEL_B: ${{ steps.parse-config.outputs.comparison_label }}
         METRICS: ${{ inputs.metrics }}
+        MAX_TITLE_LENGTH: 0
       run: |
         set -euo pipefail
         mkdir -p reports_comparison
@@ -226,7 +227,8 @@ runs:
           --clients "$CLIENTS" \
           --label-a "$LABEL_A" \
           --label-b "$LABEL_B" \
-          --metrics "$METRICS"
+          --metrics "$METRICS" \
+          --max-title-length "$MAX_TITLE_LENGTH"
 
     - name: Write comparison to GitHub Summary
       shell: bash
