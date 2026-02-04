@@ -8,35 +8,33 @@ Usage:
         --reports-b reports_b \
         --output reports_comparison \
         --clients nethermind \
-        --label-a "Baseline" \
-        --label-b "New Version"
+        --label-a "v1.36.0" \
+        --label-b "v1.35.8" \
+        --metrics "min,max,duration"
 """
 
 import argparse
 import csv
 import os
-from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 
-# Metrics where higher is better (MGas/s)
-HIGHER_IS_BETTER = {
-    'Max (MGas/s)',
-    'p50 (MGas/s)',
-    'p95 (MGas/s)',
-    'p99 (MGas/s)',
-    'Min (MGas/s)',
+# Metric configuration: name -> (csv_column, short_name, higher_is_better)
+METRIC_CONFIG = {
+    'min': ('Min (MGas/s)', 'Min', True),
+    'max': ('Max (MGas/s)', 'Max', True),
+    'p50': ('p50 (MGas/s)', 'p50', True),
+    'p95': ('p95 (MGas/s)', 'p95', True),
+    'p99': ('p99 (MGas/s)', 'p99', True),
+    'duration': ('Duration (ms)', 'Dur', False),
+    'fcu': ('FCU time (ms)', 'FCU', False),
+    'np': ('NP time (ms)', 'NP', False),
 }
 
-# Metrics where lower is better (time in ms)
-LOWER_IS_BETTER = {
-    'Duration (ms)',
-    'FCU time (ms)',
-    'NP time (ms)',
-}
+DEFAULT_METRICS = ['min', 'max', 'duration']
 
-# All metrics to compare
-ALL_METRICS = list(HIGHER_IS_BETTER) + list(LOWER_IS_BETTER)
+# All metrics for CSV export
+ALL_METRICS = list(METRIC_CONFIG.keys())
 
 
 def load_benchmark_csv(csv_path: str) -> dict:
@@ -72,10 +70,12 @@ def calculate_delta(a_val: Optional[float], b_val: Optional[float]) -> tuple:
     return delta, pct
 
 
-def format_val(val: Optional[float]) -> str:
+def format_val(val: Optional[float], is_duration: bool = False) -> str:
     """Format value for display."""
     if val is None:
         return "N/A"
+    if is_duration:
+        return f"{val:.0f}"
     return f"{val:.2f}"
 
 
@@ -99,24 +99,36 @@ def format_delta(delta: Optional[float], pct: Optional[float], higher_is_better:
     return f"{sign}{delta:.2f} {indicator}"
 
 
-def truncate_title(title: str, max_len: int = 60) -> str:
+def truncate_title(title: str, max_len: int = 50) -> str:
     """Truncate title for readability."""
     if len(title) <= max_len:
         return title
     return title[:max_len - 3] + "..."
 
 
-def generate_comparison_table(data_a: dict, data_b: dict,
-                               label_a: str, label_b: str,
-                               client: str) -> str:
-    """Generate markdown comparison table."""
+def generate_unified_table(data_a: dict, data_b: dict,
+                           label_a: str, label_b: str,
+                           client: str, metrics: List[str]) -> str:
+    """Generate a single unified markdown comparison table."""
     lines = []
-    lines.append(f"## {client.capitalize()} Comparison: {label_a} vs {label_b}")
+
+    # Header with clear A/B labeling
+    lines.append(f"## {client.capitalize()} Comparison: {label_a} (A) vs {label_b} (B)")
     lines.append("")
 
-    # Header - focus on key metrics
-    lines.append("| Test | p50 A | p50 B | p50 Delta | p95 A | p95 B | p95 Delta | Max A | Max B | Max Delta |")
-    lines.append("|------|-------|-------|-----------|-------|-------|-----------|-------|-------|-----------|")
+    # Build dynamic header based on selected metrics
+    header_parts = ["| Test"]
+    separator_parts = ["|------"]
+
+    for metric_key in metrics:
+        if metric_key not in METRIC_CONFIG:
+            continue
+        _, short_name, _ = METRIC_CONFIG[metric_key]
+        header_parts.extend([f" {short_name} A", f" {short_name} B", f" {short_name} Delta"])
+        separator_parts.extend(["-------", "-------", "-----------"])
+
+    lines.append(" |".join(header_parts) + " |")
+    lines.append(" |".join(separator_parts) + "|")
 
     # Match tests by title
     all_titles = sorted(set(data_a.keys()) | set(data_b.keys()))
@@ -125,73 +137,38 @@ def generate_comparison_table(data_a: dict, data_b: dict,
         row_a = data_a.get(title, {})
         row_b = data_b.get(title, {})
 
-        # Extract metrics (higher is better for MGas/s)
-        p50_a = safe_float(row_a.get('p50 (MGas/s)'))
-        p50_b = safe_float(row_b.get('p50 (MGas/s)'))
-        p95_a = safe_float(row_a.get('p95 (MGas/s)'))
-        p95_b = safe_float(row_b.get('p95 (MGas/s)'))
-        max_a = safe_float(row_a.get('Max (MGas/s)'))
-        max_b = safe_float(row_b.get('Max (MGas/s)'))
+        row_parts = [f"| {truncate_title(title)}"]
 
-        p50_delta, p50_pct = calculate_delta(p50_a, p50_b)
-        p95_delta, p95_pct = calculate_delta(p95_a, p95_b)
-        max_delta, max_pct = calculate_delta(max_a, max_b)
+        for metric_key in metrics:
+            if metric_key not in METRIC_CONFIG:
+                continue
+            csv_col, _, higher_is_better = METRIC_CONFIG[metric_key]
+            is_duration = not higher_is_better
 
-        short_title = truncate_title(title)
+            val_a = safe_float(row_a.get(csv_col))
+            val_b = safe_float(row_b.get(csv_col))
+            delta, pct = calculate_delta(val_a, val_b)
 
-        lines.append(
-            f"| {short_title} | "
-            f"{format_val(p50_a)} | {format_val(p50_b)} | {format_delta(p50_delta, p50_pct, True)} | "
-            f"{format_val(p95_a)} | {format_val(p95_b)} | {format_delta(p95_delta, p95_pct, True)} | "
-            f"{format_val(max_a)} | {format_val(max_b)} | {format_delta(max_delta, max_pct, True)} |"
-        )
+            row_parts.extend([
+                f" {format_val(val_a, is_duration)}",
+                f" {format_val(val_b, is_duration)}",
+                f" {format_delta(delta, pct, higher_is_better)}"
+            ])
 
-    lines.append("")
-    lines.append("**Legend:** ^ = improvement, v = regression (for MGas/s: higher is better)")
-    lines.append("")
-
-    return "\n".join(lines)
-
-
-def generate_duration_table(data_a: dict, data_b: dict,
-                            label_a: str, label_b: str,
-                            client: str) -> str:
-    """Generate markdown table for duration metrics."""
-    lines = []
-    lines.append(f"### {client.capitalize()} Duration Metrics")
-    lines.append("")
-
-    lines.append("| Test | Duration A | Duration B | Delta | FCU A | FCU B | Delta | NP A | NP B | Delta |")
-    lines.append("|------|------------|------------|-------|-------|-------|-------|------|------|-------|")
-
-    all_titles = sorted(set(data_a.keys()) | set(data_b.keys()))
-
-    for title in all_titles:
-        row_a = data_a.get(title, {})
-        row_b = data_b.get(title, {})
-
-        dur_a = safe_float(row_a.get('Duration (ms)'))
-        dur_b = safe_float(row_b.get('Duration (ms)'))
-        fcu_a = safe_float(row_a.get('FCU time (ms)'))
-        fcu_b = safe_float(row_b.get('FCU time (ms)'))
-        np_a = safe_float(row_a.get('NP time (ms)'))
-        np_b = safe_float(row_b.get('NP time (ms)'))
-
-        dur_delta, dur_pct = calculate_delta(dur_a, dur_b)
-        fcu_delta, fcu_pct = calculate_delta(fcu_a, fcu_b)
-        np_delta, np_pct = calculate_delta(np_a, np_b)
-
-        short_title = truncate_title(title)
-
-        lines.append(
-            f"| {short_title} | "
-            f"{format_val(dur_a)} | {format_val(dur_b)} | {format_delta(dur_delta, dur_pct, False)} | "
-            f"{format_val(fcu_a)} | {format_val(fcu_b)} | {format_delta(fcu_delta, fcu_pct, False)} | "
-            f"{format_val(np_a)} | {format_val(np_b)} | {format_delta(np_delta, np_pct, False)} |"
-        )
+        lines.append(" |".join(row_parts) + " |")
 
     lines.append("")
-    lines.append("**Legend:** ^ = improvement, v = regression (for duration: lower is better)")
+    lines.append("**Legend:** ^ = improvement, v = regression")
+
+    # Build legend for metric types
+    mgas_metrics = [METRIC_CONFIG[m][1] for m in metrics if m in METRIC_CONFIG and METRIC_CONFIG[m][2]]
+    duration_metrics = [METRIC_CONFIG[m][1] for m in metrics if m in METRIC_CONFIG and not METRIC_CONFIG[m][2]]
+
+    if mgas_metrics:
+        lines.append(f"- For MGas/s ({', '.join(mgas_metrics)}): higher is better")
+    if duration_metrics:
+        lines.append(f"- For Duration ({', '.join(duration_metrics)}): lower is better")
+
     lines.append("")
 
     return "\n".join(lines)
@@ -199,19 +176,19 @@ def generate_duration_table(data_a: dict, data_b: dict,
 
 def write_comparison_csv(data_a: dict, data_b: dict, client: str,
                          output_dir: str, label_a: str, label_b: str):
-    """Write detailed comparison CSV file."""
+    """Write detailed comparison CSV file with all metrics."""
     csv_path = os.path.join(output_dir, f'comparison_{client}.csv')
 
     all_titles = sorted(set(data_a.keys()) | set(data_b.keys()))
 
     headers = ['Title']
-    for metric in ALL_METRICS:
-        metric_name = metric.replace(' (MGas/s)', '').replace(' (ms)', '')
+    for metric_key in ALL_METRICS:
+        csv_col, short_name, _ = METRIC_CONFIG[metric_key]
         headers.extend([
-            f'{metric_name} {label_a}',
-            f'{metric_name} {label_b}',
-            f'{metric_name} Delta',
-            f'{metric_name} Delta %',
+            f'{short_name} {label_a}',
+            f'{short_name} {label_b}',
+            f'{short_name} Delta',
+            f'{short_name} Delta %',
         ])
 
     with open(csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -223,14 +200,15 @@ def write_comparison_csv(data_a: dict, data_b: dict, client: str,
             row_b = data_b.get(title, {})
 
             row = [title]
-            for metric in ALL_METRICS:
-                val_a = safe_float(row_a.get(metric))
-                val_b = safe_float(row_b.get(metric))
+            for metric_key in ALL_METRICS:
+                csv_col, _, _ = METRIC_CONFIG[metric_key]
+                val_a = safe_float(row_a.get(csv_col))
+                val_b = safe_float(row_b.get(csv_col))
                 delta, pct = calculate_delta(val_a, val_b)
 
                 row.extend([
-                    format_val(val_a) if val_a is not None else '',
-                    format_val(val_b) if val_b is not None else '',
+                    f'{val_a:.2f}' if val_a is not None else '',
+                    f'{val_b:.2f}' if val_b is not None else '',
                     f'{delta:.2f}' if delta is not None else '',
                     f'{pct:.2f}' if pct is not None else '',
                 ])
@@ -253,6 +231,16 @@ def write_github_summary(content: str, summary_file: str = None):
     print(content)
 
 
+def parse_metrics(metrics_str: str) -> List[str]:
+    """Parse comma-separated metrics string into list."""
+    metrics = [m.strip().lower() for m in metrics_str.split(',')]
+    valid_metrics = [m for m in metrics if m in METRIC_CONFIG]
+    if not valid_metrics:
+        print(f"Warning: No valid metrics found in '{metrics_str}', using defaults: {DEFAULT_METRICS}")
+        return DEFAULT_METRICS
+    return valid_metrics
+
+
 def main():
     parser = argparse.ArgumentParser(description='Compare benchmark results')
     parser.add_argument('--reports-a', required=True, help='Path to baseline reports')
@@ -261,10 +249,14 @@ def main():
     parser.add_argument('--clients', required=True, help='Comma-separated client list')
     parser.add_argument('--label-a', default='Baseline', help='Label for first run')
     parser.add_argument('--label-b', default='Comparison', help='Label for second run')
+    parser.add_argument('--metrics', default='min,max,duration',
+                        help='Comma-separated metrics to display (available: min,max,p50,p95,p99,duration,fcu,np)')
 
     args = parser.parse_args()
 
     os.makedirs(args.output, exist_ok=True)
+
+    metrics = parse_metrics(args.metrics)
 
     full_summary = []
     full_summary.append("# Gas Benchmark Comparison Results")
@@ -293,15 +285,11 @@ def main():
             full_summary.append("")
             continue
 
-        # Generate throughput comparison table
-        table = generate_comparison_table(data_a, data_b, args.label_a, args.label_b, client)
+        # Generate single unified comparison table
+        table = generate_unified_table(data_a, data_b, args.label_a, args.label_b, client, metrics)
         full_summary.append(table)
 
-        # Generate duration comparison table
-        duration_table = generate_duration_table(data_a, data_b, args.label_a, args.label_b, client)
-        full_summary.append(duration_table)
-
-        # Write per-client comparison CSV
+        # Write per-client comparison CSV (always includes all metrics)
         write_comparison_csv(data_a, data_b, client, args.output, args.label_a, args.label_b)
 
     summary_content = "\n".join(full_summary)

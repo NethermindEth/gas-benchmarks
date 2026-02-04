@@ -39,6 +39,10 @@ inputs:
   comparisonConfig:
     description: 'JSON config for comparison run: {"images": {"client":"image:tag"}, "label": "Name"}'
     required: true
+  metrics:
+    description: 'Comma-separated metrics to display in comparison table (available: min,max,p50,p95,p99,duration,fcu,np)'
+    required: false
+    default: 'min,max,duration'
 
 runs:
   using: composite
@@ -211,6 +215,7 @@ runs:
         CLIENTS: ${{ inputs.clients }}
         LABEL_A: ${{ steps.parse-config.outputs.baseline_label }}
         LABEL_B: ${{ steps.parse-config.outputs.comparison_label }}
+        METRICS: ${{ inputs.metrics }}
       run: |
         set -euo pipefail
         mkdir -p reports_comparison
@@ -220,7 +225,8 @@ runs:
           --output reports_comparison \
           --clients "$CLIENTS" \
           --label-a "$LABEL_A" \
-          --label-b "$LABEL_B"
+          --label-b "$LABEL_B" \
+          --metrics "$METRICS"
 
     - name: Write comparison to GitHub Summary
       shell: bash
