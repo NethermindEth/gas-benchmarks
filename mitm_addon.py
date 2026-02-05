@@ -50,12 +50,24 @@ EEST_STATEFUL_TESTING: bool = _cfg_bool(_CFG.get("eest_stateful_testing"), False
 
 def _getpayload_method_for_fork(fork: str) -> str:
     fork_name = (fork or "").strip().lower()
-    if fork_name == "osaka":
+    if fork_name in {"osaka", "fusaka"}:
         return "engine_getPayloadV5"
     return "engine_getPayloadV4"
 
 
 _GETPAYLOAD_METHOD = _getpayload_method_for_fork(FORK)
+
+
+def _newpayload_method_for_fork(fork: str) -> str:
+    fork_name = (fork or "").strip().lower()
+    if fork_name in {"osaka"}:
+        return "engine_newPayloadV5"
+    if fork_name in {"fusaka"}:
+        return "engine_newPayloadV4"
+    return "engine_newPayloadV4"
+
+
+_NEWPAYLOAD_METHOD = _newpayload_method_for_fork(FORK)
 
 _DYN_FINALIZED: str = FINALIZED_BLOCK
 
@@ -484,6 +496,69 @@ def _log_txpool_summary() -> None:
         _log(f"txpool summarize error: {e}")
 
 
+def _hex_to_bytes(value: Any) -> Optional[bytes]:
+    if not isinstance(value, str):
+        return None
+    v = value[2:] if value.startswith("0x") else value
+    if len(v) % 2 == 1:
+        v = "0" + v
+    try:
+        return bytes.fromhex(v)
+    except Exception:
+        return None
+
+
+def _kzg_commitment_to_versioned_hash(commitment_hex: Any) -> Optional[str]:
+    raw = _hex_to_bytes(commitment_hex)
+    if raw is None:
+        return None
+    digest = hashlib.sha256(raw).digest()
+    versioned = b"\x01" + digest[1:]
+    return "0x" + versioned.hex()
+
+
+def _extract_blob_versioned_hashes(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> List[str]:
+    for key in ("blobVersionedHashes", "blob_versioned_hashes", "versionedHashes", "versioned_hashes"):
+        hashes = payload.get(key)
+        if isinstance(hashes, list) and hashes:
+            return [h for h in hashes if isinstance(h, str)]
+
+    bundle = payload.get("blobsBundle") or payload.get("blobs_bundle") or {}
+    commitments = None
+    if isinstance(bundle, dict):
+        commitments = bundle.get("commitments")
+    if isinstance(commitments, list) and commitments:
+        computed: List[str] = []
+        for c in commitments:
+            vh = _kzg_commitment_to_versioned_hash(c)
+            if vh:
+                computed.append(vh)
+        if computed:
+            return computed
+
+    return []
+
+
+def _extract_execution_requests(payload: Dict[str, Any]) -> List[Any]:
+    for key in ("executionRequests", "execution_requests"):
+        reqs = payload.get(key)
+        if isinstance(reqs, list):
+            return reqs
+    return []
+
+
+def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> Optional[str]:
+    for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
+        val = exec_payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return None
+
+
 # ---------------------------------------------------------------------------
 # File IO helpers for new layout
 # ---------------------------------------------------------------------------
@@ -659,8 +734,21 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         params: List[Any] = [txrlps, "EMPTY"]
         payload: Dict[str, Any] = _engine(_GETPAYLOAD_METHOD, params)
-        exec_payload: Dict[str, Any] = payload.get("executionPayload", {})
+        exec_payload: Dict[str, Any] = payload.get("executionPayload") if isinstance(payload, dict) else {}
+        if not exec_payload and isinstance(payload, dict) and isinstance(payload.get("parentHash"), str):
+            exec_payload = payload
+        if not isinstance(exec_payload, dict):
+            exec_payload = {}
         parent_hash: str = exec_payload.get("parentHash") or "0x" + ("00" * 32)
+        blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
+        parent_beacon_block_root = _extract_parent_beacon_block_root(payload, exec_payload)
+        if not parent_beacon_block_root:
+            parent_beacon_block_root = parent_hash
+            _log("WARN missing parentBeaconBlockRoot; falling back to parentHash")
+        execution_requests = _extract_execution_requests(payload)
+        blob_gas_used = exec_payload.get("blobGasUsed")
+        if blob_versioned_hashes == [] and blob_gas_used not in (None, 0, "0x0", "0x00"):
+            _log("WARN blobGasUsed present but no blobVersionedHashes found")
 
         if grp not in _STAGE:
             _STAGE[grp] = 0
@@ -670,11 +758,11 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         np_body = {
             "jsonrpc": "2.0",
             "id": int(time.time()),
-            "method": "engine_newPayloadV4",
-            "params": [exec_payload, [], parent_hash, []],
+            "method": _NEWPAYLOAD_METHOD,
+            "params": [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
         }
 
-        _engine("engine_newPayloadV4", [exec_payload, [], parent_hash, []])
+        _engine(_NEWPAYLOAD_METHOD, [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests])
         _emit_newpayload_event(exec_payload, parent_hash)
 
         if file_base == "global-setup":
