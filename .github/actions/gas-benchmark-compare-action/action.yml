@@ -103,16 +103,42 @@ runs:
         COMPARISON_CONFIG: ${{ inputs.comparisonConfig }}
       run: |
         set -euo pipefail
-        # Parse baseline config
+
+        echo "=== Parsing baseline config ==="
+        echo "Raw BASELINE_CONFIG: $BASELINE_CONFIG"
         BASELINE_IMAGES=$(echo "$BASELINE_CONFIG" | jq -c '.images')
         BASELINE_LABEL=$(echo "$BASELINE_CONFIG" | jq -r '.label // "Baseline"')
-        # Parse comparison config
+        echo "Parsed BASELINE_IMAGES: $BASELINE_IMAGES"
+        echo "Parsed BASELINE_LABEL: $BASELINE_LABEL"
+
+        echo "=== Parsing comparison config ==="
+        echo "Raw COMPARISON_CONFIG: $COMPARISON_CONFIG"
         COMPARISON_IMAGES=$(echo "$COMPARISON_CONFIG" | jq -c '.images')
         COMPARISON_LABEL=$(echo "$COMPARISON_CONFIG" | jq -r '.label // "Comparison"')
-        # Export to GITHUB_OUTPUT
-        echo "baseline_images=$BASELINE_IMAGES" >> $GITHUB_OUTPUT
+        echo "Parsed COMPARISON_IMAGES: $COMPARISON_IMAGES"
+        echo "Parsed COMPARISON_LABEL: $COMPARISON_LABEL"
+
+        # Verify configs are different
+        if [ "$BASELINE_IMAGES" = "$COMPARISON_IMAGES" ]; then
+          echo "WARNING: BASELINE_IMAGES and COMPARISON_IMAGES are identical!"
+          echo "This will result in comparing the same benchmark results."
+        fi
+
+        # Export to GITHUB_OUTPUT using heredoc for proper handling of special characters
+        {
+          echo "baseline_images<<EOF"
+          echo "$BASELINE_IMAGES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
         echo "baseline_label=$BASELINE_LABEL" >> $GITHUB_OUTPUT
-        echo "comparison_images=$COMPARISON_IMAGES" >> $GITHUB_OUTPUT
+
+        {
+          echo "comparison_images<<EOF"
+          echo "$COMPARISON_IMAGES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
         echo "comparison_label=$COMPARISON_LABEL" >> $GITHUB_OUTPUT
 
     # === RUN A: Baseline ===
@@ -138,7 +164,9 @@ runs:
       run: |
         set -euo pipefail
         echo "=== Starting Baseline Run (A) ==="
-        echo "Images: $IMAGES"
+        echo "IMAGES env var: $IMAGES"
+        echo "IMAGES type check: $(echo "$IMAGES" | jq -r 'type' 2>/dev/null || echo 'not valid JSON')"
+        echo "IMAGES content: $(echo "$IMAGES" | jq -r '.' 2>/dev/null || echo "$IMAGES")"
         TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
         ./run.sh \
           -T "$TEST_PATHS_JSON" \
@@ -184,7 +212,9 @@ runs:
       run: |
         set -euo pipefail
         echo "=== Starting Comparison Run (B) ==="
-        echo "Images: $IMAGES"
+        echo "IMAGES env var: $IMAGES"
+        echo "IMAGES type check: $(echo "$IMAGES" | jq -r 'type' 2>/dev/null || echo 'not valid JSON')"
+        echo "IMAGES content: $(echo "$IMAGES" | jq -r '.' 2>/dev/null || echo "$IMAGES")"
         TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
         ./run.sh \
           -T "$TEST_PATHS_JSON" \
@@ -206,6 +236,39 @@ runs:
         fi
         echo "Reports from run B saved to reports_b/"
         ls -la reports_b/ || true
+
+    - name: Verify reports are different
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        CLIENTS: ${{ inputs.clients }}
+      run: |
+        echo "=== Verifying reports_a and reports_b are different ==="
+        for client in ${CLIENTS//,/ }; do
+          csv_a="reports_a/output_${client}.csv"
+          csv_b="reports_b/output_${client}.csv"
+
+          if [ -f "$csv_a" ] && [ -f "$csv_b" ]; then
+            echo "Comparing $csv_a and $csv_b:"
+            echo "  Size A: $(stat -c%s "$csv_a" 2>/dev/null || stat -f%z "$csv_a")"
+            echo "  Size B: $(stat -c%s "$csv_b" 2>/dev/null || stat -f%z "$csv_b")"
+
+            if diff -q "$csv_a" "$csv_b" > /dev/null 2>&1; then
+              echo "  WARNING: Files are IDENTICAL! This indicates a problem."
+              echo "  First 5 lines of both files:"
+              echo "  --- $csv_a ---"
+              head -5 "$csv_a"
+              echo "  --- $csv_b ---"
+              head -5 "$csv_b"
+            else
+              echo "  OK: Files are different (as expected)"
+            fi
+          else
+            echo "WARNING: Missing CSV files for client $client"
+            [ ! -f "$csv_a" ] && echo "  Missing: $csv_a"
+            [ ! -f "$csv_b" ] && echo "  Missing: $csv_b"
+          fi
+        done
 
     # === COMPARISON ===
     - name: Generate comparison report
