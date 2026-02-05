@@ -70,6 +70,17 @@ if not _LOG_FILE_PATH.is_absolute():
     _LOG_FILE_PATH = _LOG_FILE_PATH.resolve()
 _LOG_FILE = str(_LOG_FILE_PATH)
 
+_FULL_LOG_RAW = _CFG.get("mitm_full_log_path") or _CFG.get("full_log_path")
+_FULL_LOG_PATH = pathlib.Path(_FULL_LOG_RAW).expanduser() if _FULL_LOG_RAW else _LOG_FILE_PATH.with_name("mitm_full.log")
+if not _FULL_LOG_PATH.is_absolute():
+    _FULL_LOG_PATH = _FULL_LOG_PATH.resolve()
+if "mitm_full_log" in _CFG:
+    _FULL_LOG_ENABLED = _cfg_bool(_CFG.get("mitm_full_log"), False)
+elif "full_log" in _CFG:
+    _FULL_LOG_ENABLED = _cfg_bool(_CFG.get("full_log"), False)
+else:
+    _FULL_LOG_ENABLED = bool(_FULL_LOG_RAW)
+
 _MERGED_LOG_RAW = _CFG.get("merged_log_path")
 _MERGED_LOG_PATH = pathlib.Path(_MERGED_LOG_RAW).expanduser() if _MERGED_LOG_RAW else _LOG_FILE_PATH.with_name("mitm_nethermind.log")
 if not _MERGED_LOG_PATH.is_absolute():
@@ -218,15 +229,21 @@ def _now_ts() -> str:
 
 def _log(msg: str, *, to_merged: bool = False) -> None:
     try:
+        line = f"{_now_ts()} {msg}"
+        if _FULL_LOG_ENABLED:
+            _append_lines(_FULL_LOG_PATH, [line])
         if _LIGHT_LOG and not to_merged:
             if not msg.startswith(_LIGHT_PREFIX_KEEP):
                 return
-        line = f"{_now_ts()} {msg}"
         _append_lines(_LOG_FILE_PATH, [line])
         if to_merged:
             _append_lines(_MERGED_LOG_PATH, [line])
     except Exception:
         pass
+
+
+def _should_log_verbose() -> bool:
+    return _FULL_LOG_ENABLED or not _LIGHT_LOG
 
 
 def _set_mitm_option(name: str, value: Any) -> None:
@@ -285,6 +302,8 @@ def _emit_newpayload_event(exec_payload: Dict[str, Any], parent_hash: str) -> No
         prefixed = [f"{ts_prefix} [NM] {ln}" for ln in nm_lines]
         _append_lines(_MERGED_LOG_PATH, prefixed)
         _append_lines(_LOG_FILE_PATH, prefixed)
+        if _FULL_LOG_ENABLED:
+            _append_lines(_FULL_LOG_PATH, prefixed)
 
 
 def _http_post_json(url: str, obj: Any, timeout: int = 90, headers: Optional[Dict[str, str]] = None) -> Any:
@@ -321,7 +340,7 @@ def _engine(method: str, params: List[Any]) -> Any:
     token = _jwt_from_file()
     body = {"jsonrpc": "2.0", "id": int(time.time()), "method": method, "params": params}
 
-    if not _LIGHT_LOG:
+    if _should_log_verbose():
         # Log with redacted Authorization
         eng_hdrs = {"Content-Type": "application/json", "Authorization": "Bearer <redacted>"}
         _log(
@@ -330,7 +349,7 @@ def _engine(method: str, params: List[Any]) -> Any:
         )
 
     j = _http_post_json(ENGINE_URL, body, timeout=90, headers={"Authorization": f"Bearer {token}"})
-    if not _LIGHT_LOG:
+    if _should_log_verbose():
         try:
             _log(
                 f"RESP POST {_ENGINE_HOST}:{_ENGINE_PORT}{_ENGINE_PATH} "
@@ -1077,7 +1096,7 @@ def request(flow: http.HTTPFlow) -> None:
             body_text = (
                 flow.request.content[:4096].decode("utf-8", errors="ignore") if flow.request.content else ""
             )
-        if not _LIGHT_LOG:
+        if _should_log_verbose():
             _log(
                 f"REQ POST {flow.request.host}:{flow.request.port}{flow.request.path} "
                 f"headers={json.dumps(hdrs)} body_preview={body_text[:2048]}"
@@ -1087,7 +1106,7 @@ def request(flow: http.HTTPFlow) -> None:
 
     if flow.request.method.upper() != "POST":
         duration = perf_counter() - start_time
-        if not _LIGHT_LOG:
+        if _should_log_verbose():
             _log(f"REQ non-POST handled in {duration:.4f}s")
         return
 
@@ -1144,7 +1163,7 @@ def response(flow: http.HTTPFlow) -> None:
             body_text = (
                 flow.response.content[:4096].decode("utf-8", errors="ignore") if flow.response.content else ""
             )
-        if not _LIGHT_LOG:
+        if _should_log_verbose():
             _log(
                 f"RESP POST {flow.request.host}:{flow.request.port}{flow.request.path} "
                 f"status={flow.response.status_code} headers={json.dumps(hdrs)} "
@@ -1162,7 +1181,7 @@ def response(flow: http.HTTPFlow) -> None:
 
     if flow.request.method.upper() != "POST":
         duration = perf_counter() - start_time
-        if not _LIGHT_LOG:
+        if _should_log_verbose():
             _log(f"RESP non-POST handled in {duration:.4f}s")
         return
 

@@ -1016,6 +1016,8 @@ def main():
         "payload_dir": str(payloads_dir),
         "reuse_globals": reuse_globals,
         "mitm_log_path": str(Path("mitm.log").resolve()),
+        "mitm_full_log_path": str(Path("mitm_full.log").resolve()),
+        "mitm_full_log": True,
         "merged_log_path": str(Path("mitm_nethermind.log").resolve()),
         "nethermind_container": container_name,
         "light_logs": True,
