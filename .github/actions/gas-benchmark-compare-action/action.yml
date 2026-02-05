@@ -147,6 +147,8 @@ runs:
       working-directory: ${{ github.action_path }}/../../..
       run: |
         rm -rf results reports reports_a reports_a_run* reports_b reports_b_run*
+        # Clean execution-data directories (files may be owned by root from containers)
+        sudo rm -rf scripts/*/execution-data 2>/dev/null || true
         mkdir -p results
 
     - name: Run benchmarks (Run A - Baseline)
@@ -230,6 +232,8 @@ runs:
       working-directory: ${{ github.action_path }}/../../..
       run: |
         rm -rf results reports
+        # Clean execution-data directories (files may be owned by root from containers)
+        sudo rm -rf scripts/*/execution-data 2>/dev/null || true
         mkdir -p results
 
     - name: Run benchmarks (Run B - Comparison)
