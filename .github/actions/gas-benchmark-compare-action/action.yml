@@ -120,7 +120,7 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       run: |
-        rm -rf results reports reports_a
+        rm -rf results reports reports_a reports_b
         mkdir -p results
 
     - name: Run benchmarks (Run A - Baseline)
