@@ -845,11 +845,8 @@ def main():
         if not resolved_candidate.is_file():
             raise SystemExit(f"Genesis file not found at {resolved_candidate}")
         genesis_file = resolved_candidate
-        if data_dir_path is None:
-            data_dir_path = Path("scripts/nethermind/execution-data").resolve()
-            data_dir_path.mkdir(parents=True, exist_ok=True)
 
-    use_overlay_base = data_dir_path is None and genesis_file is None
+    use_overlay_base = data_dir_path is None
     base_data_dir = data_dir_path or snapshot_dir
 
     if genesis_file is None:
