@@ -37,7 +37,6 @@ services:
       - 8551
     command:
       - --syncmode=full
-      - --gcmode=archive
       - --snapshot=false
       - --nat=none
       - --http
