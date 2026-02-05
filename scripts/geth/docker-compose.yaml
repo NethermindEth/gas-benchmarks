@@ -63,6 +63,7 @@ services:
       - --metrics
       - --metrics.port=8008
       - --verbosity=3
+      - --networkid=12159
     logging:
       driver: json-file
       options:
