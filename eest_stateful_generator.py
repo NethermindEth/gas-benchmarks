@@ -931,12 +931,12 @@ def main():
             genesis_path=genesis_file,
             trace_json=args.trace_json,
         )
-        if not wait_for_port("127.0.0.1", 8545, timeout=180):
+        if not wait_for_port("127.0.0.1", 8545, timeout=300):
             print("ERROR: 8545 not reachable.")
             print_container_logs(container_name)
             stop_and_remove_container(container_name)
             raise RuntimeError("JSON-RPC port not reachable")
-        for _ in range(60):
+        for _ in range(180):
             try:
                 _ = rpc_call("http://127.0.0.1:8545", "eth_blockNumber")
                 break
