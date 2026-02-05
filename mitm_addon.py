@@ -60,10 +60,6 @@ _GETPAYLOAD_METHOD = _getpayload_method_for_fork(FORK)
 
 def _newpayload_method_for_fork(fork: str) -> str:
     fork_name = (fork or "").strip().lower()
-    if fork_name in {"osaka"}:
-        return "engine_newPayloadV5"
-    if fork_name in {"fusaka"}:
-        return "engine_newPayloadV4"
     return "engine_newPayloadV4"
 
 
