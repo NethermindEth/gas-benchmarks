@@ -22,7 +22,7 @@ inputs:
     required: false
     default: 'nethermind'
   runs:
-    description: 'Number of benchmark runs to execute per image set'
+    description: 'Number of independent benchmark iterations to average (each iteration produces a separate report, then all are averaged)'
     required: false
     default: '1'
   opcodeWarmupCount:
@@ -142,11 +142,11 @@ runs:
         echo "comparison_label=$COMPARISON_LABEL" >> $GITHUB_OUTPUT
 
     # === RUN A: Baseline ===
-    - name: Create directories for run A
+    - name: Clean directories for run A
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       run: |
-        rm -rf results reports reports_a reports_b
+        rm -rf results reports reports_a reports_a_run* reports_b reports_b_run*
         mkdir -p results
 
     - name: Run benchmarks (Run A - Baseline)
@@ -164,33 +164,68 @@ runs:
       run: |
         set -euo pipefail
         echo "=== Starting Baseline Run (A) ==="
-        echo "IMAGES env var: $IMAGES"
-        echo "IMAGES type check: $(echo "$IMAGES" | jq -r 'type' 2>/dev/null || echo 'not valid JSON')"
-        echo "IMAGES content: $(echo "$IMAGES" | jq -r '.' 2>/dev/null || echo "$IMAGES")"
-        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
-        ./run.sh \
-          -T "$TEST_PATHS_JSON" \
-          -w "$WARMUP_FILE" \
-          -c "$CLIENTS" \
-          -r "$RUNS" \
-          -i "$IMAGES" \
-          -o "$OPCODE_WARMUP_COUNT" \
-          -f "$FILTER"
+        echo "IMAGES: $IMAGES"
+        echo "Number of iterations: $RUNS"
 
-    - name: Save reports from run A
+        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+
+        for run_num in $(seq 1 $RUNS); do
+          echo ""
+          echo "=========================================="
+          echo "=== Baseline Run A - Iteration $run_num/$RUNS ==="
+          echo "=========================================="
+
+          # Clean results and reports for this iteration
+          rm -rf results reports
+          mkdir -p results
+
+          # Run benchmark (single iteration)
+          ./run.sh \
+            -T "$TEST_PATHS_JSON" \
+            -w "$WARMUP_FILE" \
+            -c "$CLIENTS" \
+            -r 1 \
+            -i "$IMAGES" \
+            -o "$OPCODE_WARMUP_COUNT" \
+            -f "$FILTER"
+
+          # Save reports for this iteration
+          mkdir -p "reports_a_run${run_num}"
+          if [ -d reports ]; then
+            cp -r reports/* "reports_a_run${run_num}/"
+            echo "Saved reports to reports_a_run${run_num}/"
+            ls -la "reports_a_run${run_num}/"
+          fi
+        done
+
+    - name: Average reports for Run A
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
+      env:
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
       run: |
         set -euo pipefail
-        mkdir -p reports_a
-        if [ -d reports ]; then
-          cp -r reports/* reports_a/ || true
+        echo "=== Averaging reports for Run A ==="
+
+        if [ "$RUNS" -eq 1 ]; then
+          # Single run - just copy directly
+          mkdir -p reports_a
+          cp -r reports_a_run1/* reports_a/
+          echo "Single run - copied reports_a_run1 to reports_a"
+        else
+          # Multiple runs - calculate averages
+          python3 scripts/average_reports.py \
+            --input-pattern "reports_a_run*" \
+            --output reports_a \
+            --clients "$CLIENTS"
         fi
-        echo "Reports from run A saved to reports_a/"
-        ls -la reports_a/ || true
+
+        echo "Final reports_a contents:"
+        ls -la reports_a/
 
     # === RUN B: Comparison ===
-    - name: Create directories for run B
+    - name: Clean directories for run B
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       run: |
@@ -212,30 +247,65 @@ runs:
       run: |
         set -euo pipefail
         echo "=== Starting Comparison Run (B) ==="
-        echo "IMAGES env var: $IMAGES"
-        echo "IMAGES type check: $(echo "$IMAGES" | jq -r 'type' 2>/dev/null || echo 'not valid JSON')"
-        echo "IMAGES content: $(echo "$IMAGES" | jq -r '.' 2>/dev/null || echo "$IMAGES")"
-        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
-        ./run.sh \
-          -T "$TEST_PATHS_JSON" \
-          -w "$WARMUP_FILE" \
-          -c "$CLIENTS" \
-          -r "$RUNS" \
-          -i "$IMAGES" \
-          -o "$OPCODE_WARMUP_COUNT" \
-          -f "$FILTER"
+        echo "IMAGES: $IMAGES"
+        echo "Number of iterations: $RUNS"
 
-    - name: Save reports from run B
+        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+
+        for run_num in $(seq 1 $RUNS); do
+          echo ""
+          echo "=========================================="
+          echo "=== Comparison Run B - Iteration $run_num/$RUNS ==="
+          echo "=========================================="
+
+          # Clean results and reports for this iteration
+          rm -rf results reports
+          mkdir -p results
+
+          # Run benchmark (single iteration)
+          ./run.sh \
+            -T "$TEST_PATHS_JSON" \
+            -w "$WARMUP_FILE" \
+            -c "$CLIENTS" \
+            -r 1 \
+            -i "$IMAGES" \
+            -o "$OPCODE_WARMUP_COUNT" \
+            -f "$FILTER"
+
+          # Save reports for this iteration
+          mkdir -p "reports_b_run${run_num}"
+          if [ -d reports ]; then
+            cp -r reports/* "reports_b_run${run_num}/"
+            echo "Saved reports to reports_b_run${run_num}/"
+            ls -la "reports_b_run${run_num}/"
+          fi
+        done
+
+    - name: Average reports for Run B
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
+      env:
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
       run: |
         set -euo pipefail
-        mkdir -p reports_b
-        if [ -d reports ]; then
-          cp -r reports/* reports_b/ || true
+        echo "=== Averaging reports for Run B ==="
+
+        if [ "$RUNS" -eq 1 ]; then
+          # Single run - just copy directly
+          mkdir -p reports_b
+          cp -r reports_b_run1/* reports_b/
+          echo "Single run - copied reports_b_run1 to reports_b"
+        else
+          # Multiple runs - calculate averages
+          python3 scripts/average_reports.py \
+            --input-pattern "reports_b_run*" \
+            --output reports_b \
+            --clients "$CLIENTS"
         fi
-        echo "Reports from run B saved to reports_b/"
-        ls -la reports_b/ || true
+
+        echo "Final reports_b contents:"
+        ls -la reports_b/
 
     - name: Verify reports are different
       shell: bash
@@ -305,6 +375,8 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       run: |
+        # Include individual run reports if they exist
+        zip -r comparison_reports.zip reports_a reports_b reports_comparison reports_a_run* reports_b_run* 2>/dev/null || \
         zip -r comparison_reports.zip reports_a reports_b reports_comparison
 
     - name: Upload comparison artifacts
@@ -314,5 +386,7 @@ runs:
         path: |
           reports_a
           reports_b
+          reports_a_run*
+          reports_b_run*
           reports_comparison
           comparison_reports.zip
