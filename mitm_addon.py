@@ -572,7 +572,13 @@ def _minified_json_line(obj: Any) -> str:
     return json.dumps(obj, separators=(",", ":"))
 
 
-def _read_hook_block_from_setup_global() -> Optional[str]:
+def _read_hook_block_for_first_setup() -> Optional[str]:
+    # Preferred hook source: funding anchor passed by generator config.
+    funding_anchor = (FINALIZED_BLOCK or "").strip()
+    if funding_anchor:
+        return funding_anchor
+
+    # Legacy fallback: derive hook from setup-global-test payload file.
     if not _SETUP_GLOBAL_FILE.exists():
         return None
     try:
@@ -762,7 +768,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         parent_block: Dict[str, Any] = latest_block
         parent_source = "latest"
         if is_first_setup_for_scenario:
-            hook_block_hash = _read_hook_block_from_setup_global()
+            hook_block_hash = _read_hook_block_for_first_setup()
             if hook_block_hash:
                 hook_block = _rpc("eth_getBlockByHash", [hook_block_hash, False])
                 if isinstance(hook_block, dict):
@@ -771,7 +777,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
                 else:
                     _log(f"WARN HOOK_BLOCK {hook_block_hash} not found on node; using latest")
             else:
-                _log("WARN HOOK_BLOCK not found in setup-global-test.txt; using latest")
+                _log("WARN HOOK_BLOCK not found (funding anchor/setup-global fallback); using latest")
 
         parent_hash = parent_block.get("hash")
         if not isinstance(parent_hash, str) or not parent_hash:
