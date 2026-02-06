@@ -108,7 +108,6 @@ _LAST_TS: float = 0.0
 _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
 _BUF: List[Tuple[str, Any]] = []  # list of (txrlp_hex, original_id)
-_GROUP_EXTRA_META: Dict[Tuple[str, str, str], Tuple[str, str]] = {}  # group -> (testId, phase)
 _STOP: bool = False
 
 # Thread handle
@@ -419,15 +418,6 @@ def _derive_group_from_meta(meta: Optional[Dict[str, Any]]) -> Tuple[str, str, s
     test_name = _sanitize_filename_component(test_name)
     phase = _sanitize_filename_component((meta or {}).get("phase") or "unknown")
     return (file_base, test_name, phase)
-
-
-def _extra_data_from_meta(test_id: str, phase: str) -> str:
-    payload = f"{test_id}|{phase}".encode("utf-8", errors="ignore")
-    if len(payload) > 32:
-        digest = hashlib.sha256(payload).hexdigest()[:8].encode("ascii")
-        prefix_len = 32 - 1 - len(digest)
-        payload = payload[:prefix_len] + b"#" + digest
-    return "0x" + payload.hex()
 
 
 def _scenario_name(file_base: str, test_name: str) -> str:
@@ -788,11 +778,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             _log(f"flush failed: parent block missing hash for group={grp} source={parent_source}")
             return
 
-        meta_test_id, meta_phase = _GROUP_EXTRA_META.get(
-            grp or ("unknown", "unknown", "unknown"),
-            ("unknown", phase_lc or "unknown"),
-        )
-        extra_data = _extra_data_from_meta(meta_test_id, meta_phase)
+        extra_data = ""
 
         parent_ts_hex = parent_block.get("timestamp")
         try:
@@ -1211,9 +1197,6 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         grp = ("global-nophase", "global-nophase", "global-nophase")
         _log(f"intercept sendraw fallback→global-nophase id={item.get('id', 'noid')}")
 
-    meta_test_id = str((meta or {}).get("testId") or f"{grp[0]}::{grp[1]}")
-    meta_phase = str((meta or {}).get("phase") or grp[2] or "unknown")
-
     # Always log sendRawTransaction IDs with meta summary (to both mitm and merged logs)
     tx_index = (meta or {}).get("txIndex") if meta else None
     _log(
@@ -1228,7 +1211,6 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
             _PENDING = False
             _BUF = []
         _ACTIVE_GRP = grp
-        _GROUP_EXTRA_META[grp] = (meta_test_id, meta_phase)
         _BUF.append((raw, item.get("id")))
         _PENDING = True
         _LAST_TS = time.time()
