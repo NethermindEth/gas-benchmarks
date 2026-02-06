@@ -640,7 +640,12 @@ def preparation_getpayload(
         "withdrawals": withdrawals,
         "parentBeaconBlockRoot": parent_hash,
     }
-    payload = _engine_with_jwt(engine_url, jwt_hex_path, "testing_buildBlockV1", [parent_hash, payload_attributes, [], "0x"])
+    payload = _engine_with_jwt(
+        engine_url,
+        jwt_hex_path,
+        "testing_buildBlockV1",
+        [parent_hash, payload_attributes, [], "0x4e65746865726d696e642076312e33372e3061"],
+    )
     if not isinstance(payload, dict):
         raise RuntimeError("testing_buildBlockV1 returned non-dict result")
 
