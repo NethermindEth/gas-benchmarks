@@ -619,6 +619,18 @@ def preparation_getpayload(
     if not isinstance(parent_hash, str) or not parent_hash:
         raise RuntimeError("Latest block is missing hash")
 
+    parent_prev_randao = head_block.get("mixHash")
+    if not isinstance(parent_prev_randao, str) or not parent_prev_randao:
+        parent_prev_randao = head_block.get("prevRandao")
+    if not isinstance(parent_prev_randao, str) or not parent_prev_randao:
+        parent_prev_randao = ZERO32
+
+    parent_beacon_block_root_attr = head_block.get("parentBeaconBlockRoot")
+    if not isinstance(parent_beacon_block_root_attr, str) or not parent_beacon_block_root_attr:
+        parent_beacon_block_root_attr = head_block.get("parent_beacon_block_root")
+    if not isinstance(parent_beacon_block_root_attr, str) or not parent_beacon_block_root_attr:
+        parent_beacon_block_root_attr = ZERO32
+
     parent_ts_hex = head_block.get("timestamp")
     parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
     min_delta = (24 * 60 * 60 + 1) if timestamp_hack else 1
@@ -635,10 +647,10 @@ def preparation_getpayload(
 
     payload_attributes = {
         "timestamp": hex(new_ts),
-        "prevRandao": parent_hash,
+        "prevRandao": parent_prev_randao,
         "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
         "withdrawals": withdrawals,
-        "parentBeaconBlockRoot": parent_hash,
+        "parentBeaconBlockRoot": parent_beacon_block_root_attr,
     }
     payload = _engine_with_jwt(engine_url, jwt_hex_path, "testing_buildBlockV1", [parent_hash, payload_attributes, [], "0x"])
     if not isinstance(payload, dict):
