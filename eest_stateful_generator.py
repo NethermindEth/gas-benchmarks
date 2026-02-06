@@ -1123,8 +1123,8 @@ def main():
         mode_map = {
             "repricing": "repricing",
             "repricings": "repricing",
-            "benchmark": "benchmarks",
-            "benchmarks": "benchmarks",
+            "benchmark": "benchmark",
+            "benchmarks": "benchmark",
             "stateful": "stateful",
         }
         if mode_key not in mode_map:
