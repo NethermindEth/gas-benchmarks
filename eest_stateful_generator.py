@@ -1059,7 +1059,7 @@ def main():
         elif args.gas_benchmark_values:
             uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
         uv_cmd += [
-            "--tx-wait-timeout", "30",
+            "--tx-wait-timeout", "5",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             "--skip-cleanup",
             args.test_path,
