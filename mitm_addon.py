@@ -801,8 +801,10 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             parent_ts = int(time.time())
 
         if is_first_setup_for_scenario and parent_source == "hook":
+            # Make separator hash unique across scenarios by nudging timestamp.
+            separator_ts = parent_ts + min_delta + max(next_stage, 1)
             separator_attrs = {
-                "timestamp": hex(parent_ts + min_delta),
+                "timestamp": hex(separator_ts),
                 "prevRandao": parent_hash,
                 "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
                 "withdrawals": [],
