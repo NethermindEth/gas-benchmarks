@@ -35,14 +35,6 @@ CLEANUP = {
     "mitm": None,
 }
 
-def _parse_bool(value: str) -> bool:
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "y", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "n", "off"}:
-        return False
-    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
-
 def run(cmd, cwd=None, env=None, check=True):
     print("\n[RUN] " + " ".join(cmd))
     return subprocess.run(cmd, cwd=cwd, env=env, check=check)
@@ -374,18 +366,6 @@ def unmount_overlay(merged: Path):
     if hasattr(os, "geteuid") and os.geteuid() != 0 and shutil.which("sudo"):
         cmd = ["sudo"] + cmd
     subprocess.run(cmd, check=False)
-
-def describe_mount(path: Path) -> str:
-    try:
-        mount_path = path.resolve()
-        with open('/proc/mounts', 'r', encoding='utf-8') as mounts:
-            for line in mounts:
-                parts = line.split()
-                if len(parts) >= 4 and parts[1] == str(mount_path):
-                    return line.strip()
-    except Exception:
-        pass
-    return ''
 
 def download_snapshot(chain: str, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -722,12 +702,6 @@ def main():
         help="Number of engine_getPayload iterations when generating gas-bump payload (default: 301).",
     )
     parser.add_argument(
-        "--overlay-reorgs",
-        type=_parse_bool,
-        default=True,
-        help="Enable per-scenario overlay + container restarts (true/false, default true).",
-    )
-    parser.add_argument(
         "--overlay-root",
         default=".",
         help="Base directory for overlay mount folders (default: current directory).",
@@ -890,22 +864,7 @@ def main():
         primary_upper = primary_work = None
         CLEANUP["primary_merged"] = CLEANUP["primary_upper"] = CLEANUP["primary_work"] = None
 
-    overlay_reorgs_enabled = args.overlay_reorgs and use_overlay_base
-    if args.overlay_reorgs and not use_overlay_base:
-        print("[INFO] Overlay reorgs disabled because overlay filesystem is not in use.")
-
-    if overlay_reorgs_enabled:
-        scenario_merged = overlay_root / "overlay-scenario-merged"
-        scenario_upper = overlay_root / "overlay-scenario-upper"
-        scenario_work = overlay_root / "overlay-scenario-work"
-        CLEANUP["scenario_merged"], CLEANUP["scenario_upper"], CLEANUP["scenario_work"] = (
-            scenario_merged,
-            scenario_upper,
-            scenario_work,
-        )
-    else:
-        scenario_merged = scenario_upper = scenario_work = None
-        CLEANUP["scenario_merged"] = CLEANUP["scenario_upper"] = CLEANUP["scenario_work"] = None
+    CLEANUP["scenario_merged"] = CLEANUP["scenario_upper"] = CLEANUP["scenario_work"] = None
 
     if args.trace_json:
         Path("opcode-tracing").mkdir(parents=True, exist_ok=True)
@@ -958,22 +917,6 @@ def main():
         try: unmount_overlay(primary_merged)
         except Exception: pass
         sys.exit(1)
-
-    scenario_overlay_ready = False
-
-    def prepare_scenario_overlay() -> None:
-        nonlocal scenario_overlay_ready
-        if not overlay_reorgs_enabled:
-            return
-        if scenario_overlay_ready:
-            try: unmount_overlay(scenario_merged)
-            except Exception:
-                pass
-        shutil.rmtree(scenario_upper, ignore_errors=True)
-        shutil.rmtree(scenario_work, ignore_errors=True)
-        shutil.rmtree(scenario_merged, ignore_errors=True)
-        ensure_overlay_mount(lower=primary_merged, upper=scenario_upper, work=scenario_work, merged=scenario_merged)
-        scenario_overlay_ready = True
 
     chain_id = args.rpc_chain_id
     if chain_id is None:
@@ -1098,38 +1041,6 @@ def main():
             stage = payload.get("stage")
             block_hash = payload.get("blockHash")
             print(f"[STATE] Pause requested: scenario={scenario_name} stage={stage} token={token} block={block_hash}")
-
-            if not overlay_reorgs_enabled:
-                print("[INFO] Overlay reorgs disabled; skipping scenario overlay and node restart.")
-                try:
-                    resume_file.unlink(missing_ok=True)
-                except Exception:
-                    pass
-                _write_resume_signal(resume_file, token, scenario_name)
-                if not _wait_for_resume_consumed(resume_file, timeout=300.0):
-                    print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
-                else:
-                    print(f"[STATE] Resume acknowledged for scenario {scenario_name} token={token}")
-                processed_tokens.add(token)
-                return
-
-            try:
-                stop_and_remove_container(container_name)
-            except Exception:
-                pass
-            try:
-                prepare_scenario_overlay()
-                mount_line = describe_mount(scenario_merged)
-                if mount_line:
-                    print(f"[DEBUG] Scenario overlay mount: {mount_line}")
-            except Exception as exc:
-                print(f"[ERROR] Unable to prepare scenario overlay: {exc}")
-                raise
-            try:
-                restart_node(scenario_merged, show_logs=False)
-            except RuntimeError as exc:
-                print(f"[ERROR] Failed to restart node for scenario {scenario_name}: {exc}")
-                raise
             try:
                 resume_file.unlink(missing_ok=True)
             except Exception:
@@ -1188,11 +1099,6 @@ def main():
             except Exception:
                 pass
             stop_and_remove_container(container_name)
-            if overlay_reorgs_enabled and scenario_merged is not None:
-                try:
-                    unmount_overlay(scenario_merged)
-                except Exception:
-                    pass
             if use_overlay_base:
                 try:
                     unmount_overlay(primary_merged)
@@ -1201,8 +1107,6 @@ def main():
             cleanup_paths = []
             if use_overlay_base:
                 cleanup_paths.extend([primary_upper, primary_work, primary_merged])
-                if overlay_reorgs_enabled:
-                    cleanup_paths.extend([scenario_upper, scenario_work, scenario_merged])
             for path in cleanup_paths:
                 if path:
                     shutil.rmtree(path, ignore_errors=True)

@@ -871,6 +871,11 @@ def _monitor() -> None:
         time.sleep(0.01)
 
 
+def _has_pending_buffered_sendraw() -> bool:
+    with _GROUP_LOCK:
+        return _PENDING and bool(_BUF)
+
+
 # ---------------------------------------------------------------------------
 # mitmproxy addon hooks
 # ---------------------------------------------------------------------------
@@ -1201,16 +1206,15 @@ def request(flow: http.HTTPFlow) -> None:
         _log(f"REQ parse error after {duration:.4f}s")
         return
 
+    entries: List[Dict[str, Any]] = []
+    if isinstance(req_obj, dict):
+        entries = [req_obj]
+    elif isinstance(req_obj, list):
+        entries = [entry for entry in req_obj if isinstance(entry, dict)]
+
     pending = globals().get("_PENDING_OVERLAY")
     pending_confirmed = globals().get("_PENDING_OVERLAY_CONFIRMED")
     if pending and pending_confirmed:
-        entries: list[Any] = []
-        if isinstance(req_obj, dict):
-            entries = [req_obj]
-        elif isinstance(req_obj, list):
-            entries = [entry for entry in req_obj if isinstance(entry, dict)]
-        else:
-            entries = []
         trigger_method = None
         for entry in entries:
             method = entry.get("method") if isinstance(entry, dict) else None
@@ -1225,8 +1229,14 @@ def request(flow: http.HTTPFlow) -> None:
             _signal_cleanup_pause("__overlay_restore__", stage, block_hash)
             _wait_for_resume()
 
+    # Fast path: if tx lookup starts, flush pending buffered sendraws immediately.
+    has_get_tx_by_hash = any(entry.get("method") == "eth_getTransactionByHash" for entry in entries)
+    if has_get_tx_by_hash and _has_pending_buffered_sendraw():
+        _log("eth_getTransactionByHash observed with pending sendraw buffer -> forcing flush")
+        _produce_if_quiet(force=True)
+
     if isinstance(req_obj, list):
-        for it in req_obj:
+        for it in entries:
             if _is_sendraw(it):
                 _record_sendraw(it, flow.request.headers)
         return
