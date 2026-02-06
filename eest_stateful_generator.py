@@ -627,8 +627,8 @@ def preparation_getpayload(
     withdrawals: List[Dict[str, str]] = []
     if rpc_address and isinstance(rpc_address, str) and rpc_address.upper() != "EMPTY":
         withdrawals = [{
-            "index": "0x0",
-            "validatorIndex": "0x0",
+            "index": "0x2",
+            "validatorIndex": "0x1",
             "address": rpc_address,
             "amount": hex((1 << 64) - 1),
         }]
@@ -640,7 +640,7 @@ def preparation_getpayload(
         "withdrawals": withdrawals,
         "parentBeaconBlockRoot": parent_hash,
     }
-    payload = _engine_with_jwt(engine_url, jwt_hex_path, "testing_buildBlockV1", [parent_hash, payload_attributes, [], "0x"])
+    payload = _engine_with_jwt(engine_url, jwt_hex_path, "testing_buildBlockV1", [parent_hash, payload_attributes, [], ""])
     if not isinstance(payload, dict):
         raise RuntimeError("testing_buildBlockV1 returned non-dict result")
 
