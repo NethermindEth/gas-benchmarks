@@ -795,15 +795,9 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             "withdrawals": [],
             "parentBeaconBlockRoot": parent_hash,
         }
-        build_block_params = {
-            "parent_block_hash": parent_hash,
-            "payload_attributes": payload_attributes,
-            "transactions": txrlps,
-            "extra_data": "0x",
-        }
         _log(f"buildBlock parent source={parent_source} hash={parent_hash} phase={phase_lc} stage={next_stage}")
 
-        exec_payload_raw = _engine("testing_buildBlockV1", [build_block_params])
+        exec_payload_raw = _engine("testing_buildBlockV1", [parent_hash, payload_attributes, txrlps, "0x"])
         payload = exec_payload_raw if isinstance(exec_payload_raw, dict) else {}
         exec_payload = payload.get("executionPayload", payload)
         if not isinstance(exec_payload, dict):
