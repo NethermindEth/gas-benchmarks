@@ -30,6 +30,7 @@ RPC_DIRECT: str = _CFG["rpc_direct"]
 ENGINE_URL: str = _CFG["engine_url"]
 JWT_HEX_PATH: str = _CFG["jwt_hex_path"]
 FINALIZED_BLOCK: str = _CFG.get("finalized_block") or ""
+HOOK_BLOCK: str = _CFG.get("hook_block") or ""
 SKIP_CLEANUP: bool = bool(_CFG.get("skip_cleanup"))
 REUSE_GLOBALS: bool = bool(_CFG.get("reuse_globals"))
 FORK: str = str(_CFG.get("fork") or "Prague")
@@ -573,7 +574,12 @@ def _minified_json_line(obj: Any) -> str:
 
 
 def _read_hook_block_for_first_setup() -> Optional[str]:
-    # Preferred hook source: funding anchor passed by generator config.
+    # Preferred hook source: dedicated empty hook anchor.
+    hook_anchor = (HOOK_BLOCK or "").strip()
+    if hook_anchor:
+        return hook_anchor
+
+    # Fallback: funding anchor passed by generator config.
     funding_anchor = (FINALIZED_BLOCK or "").strip()
     if funding_anchor:
         return funding_anchor
@@ -777,7 +783,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
                 else:
                     _log(f"WARN HOOK_BLOCK {hook_block_hash} not found on node; using latest")
             else:
-                _log("WARN HOOK_BLOCK not found (funding anchor/setup-global fallback); using latest")
+                _log("WARN HOOK_BLOCK not found (hook/funding/setup-global fallback); using latest")
 
         parent_hash = parent_block.get("hash")
         if not isinstance(parent_hash, str) or not parent_hash:
