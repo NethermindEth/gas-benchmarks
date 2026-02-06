@@ -173,6 +173,7 @@ _PAUSE_SCENARIO: Optional[str] = None
 _CONTROL_THREAD: Optional[threading.Thread] = None
 _PENDING_OVERLAY: Optional[Tuple[str, int, Optional[str]]] = None  # (scenario, stage, block)
 _PENDING_OVERLAY_CONFIRMED: bool = False
+_SEPARATOR_READY_FOR_NEXT_SETUP: bool = False
 
 _OVERLAY_PRIMED: bool = False
 
@@ -304,6 +305,66 @@ def _emit_newpayload_event(exec_payload: Dict[str, Any], parent_hash: str) -> No
         _append_lines(_LOG_FILE_PATH, prefixed)
         if _FULL_LOG_ENABLED:
             _append_lines(_FULL_LOG_PATH, prefixed)
+
+
+def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
+    global _SEPARATOR_READY_FOR_NEXT_SETUP
+    hook_block_hash = _read_hook_block_for_first_setup()
+    if not hook_block_hash:
+        _log(f"WARN cannot insert empty separator ({reason}): missing hook block")
+        return
+    hook_block = _rpc("eth_getBlockByHash", [hook_block_hash, False])
+    if not isinstance(hook_block, dict):
+        _log(f"WARN cannot insert empty separator ({reason}): hook block {hook_block_hash} not found")
+        return
+
+    parent_hash = hook_block.get("hash")
+    if not isinstance(parent_hash, str) or not parent_hash:
+        _log(f"WARN cannot insert empty separator ({reason}): hook parent missing hash")
+        return
+
+    parent_ts_hex = hook_block.get("timestamp")
+    try:
+        parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
+    except Exception:
+        parent_ts = int(time.time())
+
+    separator_ts = _next_lifecycle_timestamp(parent_ts)
+    extra_data = "0x4e65746865726d696e642076312e33372e3061"
+    separator_attrs = {
+        "timestamp": hex(separator_ts),
+        "prevRandao": parent_hash,
+        "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
+        "withdrawals": [],
+        "parentBeaconBlockRoot": parent_hash,
+    }
+
+    _log(
+        f"inserting empty hook separator ({reason}) scenario={scenario} parent={parent_hash} "
+        f"timestamp={separator_attrs['timestamp']}"
+    )
+    sep_raw = _engine("testing_buildBlockV1", [parent_hash, separator_attrs, [], extra_data])
+    sep_payload = sep_raw if isinstance(sep_raw, dict) else {}
+    sep_exec = sep_payload.get("executionPayload", sep_payload)
+    if not isinstance(sep_exec, dict):
+        _log(f"WARN failed to insert empty separator ({reason}): non-dict payload")
+        return
+
+    sep_parent_hash = sep_exec.get("parentHash") or parent_hash
+    sep_blob_hashes = _extract_blob_versioned_hashes(sep_payload, sep_exec)
+    sep_exec_requests = _extract_execution_requests(sep_payload)
+    _engine(_NEWPAYLOAD_METHOD, [sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests])
+    _emit_newpayload_event(sep_exec, sep_parent_hash)
+    sep_hash = sep_exec.get("blockHash")
+    sep_dyn_final = _DYN_FINALIZED or FINALIZED_BLOCK or sep_hash
+    sep_fcs = {
+        "headBlockHash": sep_hash,
+        "safeBlockHash": sep_dyn_final,
+        "finalizedBlockHash": sep_dyn_final,
+    }
+    _engine("engine_forkchoiceUpdatedV3", [sep_fcs, None])
+    _SEPARATOR_READY_FOR_NEXT_SETUP = True
+    _log(f"inserted empty hook separator ({reason}) hash={sep_hash}")
 
 
 def _http_post_json(url: str, obj: Any, timeout: int = 90, headers: Optional[Dict[str, str]] = None) -> Any:
@@ -786,7 +847,11 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         parent_block: Dict[str, Any] = latest_block
         parent_source = "latest"
-        if is_first_setup_for_scenario:
+        use_preinserted_separator = is_first_setup_for_scenario and _SEPARATOR_READY_FOR_NEXT_SETUP
+        if use_preinserted_separator:
+            globals()["_SEPARATOR_READY_FOR_NEXT_SETUP"] = False
+            _log(f"using pre-inserted separator parent for scenario={scenario}")
+        elif is_first_setup_for_scenario:
             hook_block_hash = _read_hook_block_for_first_setup()
             if hook_block_hash:
                 hook_block = _rpc("eth_getBlockByHash", [hook_block_hash, False])
@@ -1473,5 +1538,12 @@ def response(flow: http.HTTPFlow) -> None:
 
         globals()["_PENDING_OVERLAY_CONFIRMED"] = True
         _log(f"cleanup confirmation observed for scenario {scenario}")
+        # Restore/reorg boundary immediately, then insert separator before next test starts.
+        globals()["_PENDING_OVERLAY"] = None
+        globals()["_PENDING_OVERLAY_CONFIRMED"] = False
+        _log(f"overlay restore pause triggered on cleanup confirmation for scenario {scenario}")
+        _signal_cleanup_pause("__overlay_restore__", pending_stage, pending_block)
+        _wait_for_resume()
+        _insert_empty_hook_separator("cleanup-confirmation", scenario)
         return
 
