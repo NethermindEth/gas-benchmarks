@@ -108,6 +108,7 @@ _LAST_TS: float = 0.0
 _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
 _BUF: List[Tuple[str, Any]] = []  # list of (txrlp_hex, original_id)
+_GROUP_EXTRA_META: Dict[Tuple[str, str, str], Tuple[str, str]] = {}  # group -> (testId, phase)
 _STOP: bool = False
 
 # Thread handle
@@ -418,6 +419,15 @@ def _derive_group_from_meta(meta: Optional[Dict[str, Any]]) -> Tuple[str, str, s
     test_name = _sanitize_filename_component(test_name)
     phase = _sanitize_filename_component((meta or {}).get("phase") or "unknown")
     return (file_base, test_name, phase)
+
+
+def _extra_data_from_meta(test_id: str, phase: str) -> str:
+    payload = f"{test_id}|{phase}".encode("utf-8", errors="ignore")
+    if len(payload) > 32:
+        digest = hashlib.sha256(payload).hexdigest()[:8].encode("ascii")
+        prefix_len = 32 - 1 - len(digest)
+        payload = payload[:prefix_len] + b"#" + digest
+    return "0x" + payload.hex()
 
 
 def _scenario_name(file_base: str, test_name: str) -> str:
@@ -778,6 +788,29 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             _log(f"flush failed: parent block missing hash for group={grp} source={parent_source}")
             return
 
+        zero32 = "0x" + ("00" * 32)
+        parent_prev_randao = parent_block.get("mixHash")
+        if not isinstance(parent_prev_randao, str) or not parent_prev_randao:
+            parent_prev_randao = parent_block.get("prevRandao")
+        if not isinstance(parent_prev_randao, str) or not parent_prev_randao:
+            parent_prev_randao = zero32
+
+        parent_beacon_block_root_attr = (
+            parent_block.get("parentBeaconBlockRoot")
+            if isinstance(parent_block, dict)
+            else None
+        )
+        if not isinstance(parent_beacon_block_root_attr, str) or not parent_beacon_block_root_attr:
+            parent_beacon_block_root_attr = parent_block.get("parent_beacon_block_root")
+        if not isinstance(parent_beacon_block_root_attr, str) or not parent_beacon_block_root_attr:
+            parent_beacon_block_root_attr = zero32
+
+        meta_test_id, meta_phase = _GROUP_EXTRA_META.get(
+            grp or ("unknown", "unknown", "unknown"),
+            ("unknown", phase_lc or "unknown"),
+        )
+        extra_data = _extra_data_from_meta(meta_test_id, meta_phase)
+
         parent_ts_hex = parent_block.get("timestamp")
         try:
             parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
@@ -790,14 +823,17 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         payload_attributes = {
             "timestamp": hex(new_ts),
-            "prevRandao": parent_hash,
+            "prevRandao": parent_prev_randao,
             "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
             "withdrawals": [],
-            "parentBeaconBlockRoot": parent_hash,
+            "parentBeaconBlockRoot": parent_beacon_block_root_attr,
         }
-        _log(f"buildBlock parent source={parent_source} hash={parent_hash} phase={phase_lc} stage={next_stage}")
+        _log(
+            f"buildBlock parent source={parent_source} hash={parent_hash} phase={phase_lc} stage={next_stage} "
+            f"extraData={extra_data}"
+        )
 
-        exec_payload_raw = _engine("testing_buildBlockV1", [parent_hash, payload_attributes, txrlps, "0x"])
+        exec_payload_raw = _engine("testing_buildBlockV1", [parent_hash, payload_attributes, txrlps, extra_data])
         payload = exec_payload_raw if isinstance(exec_payload_raw, dict) else {}
         exec_payload = payload.get("executionPayload", payload)
         if not isinstance(exec_payload, dict):
@@ -1192,6 +1228,9 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         grp = ("global-nophase", "global-nophase", "global-nophase")
         _log(f"intercept sendraw fallback→global-nophase id={item.get('id', 'noid')}")
 
+    meta_test_id = str((meta or {}).get("testId") or f"{grp[0]}::{grp[1]}")
+    meta_phase = str((meta or {}).get("phase") or grp[2] or "unknown")
+
     # Always log sendRawTransaction IDs with meta summary (to both mitm and merged logs)
     tx_index = (meta or {}).get("txIndex") if meta else None
     _log(
@@ -1206,6 +1245,7 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
             _PENDING = False
             _BUF = []
         _ACTIVE_GRP = grp
+        _GROUP_EXTRA_META[grp] = (meta_test_id, meta_phase)
         _BUF.append((raw, item.get("id")))
         _PENDING = True
         _LAST_TS = time.time()
