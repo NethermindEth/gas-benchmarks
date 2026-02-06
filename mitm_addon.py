@@ -1032,21 +1032,20 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         _log(f"produced block group={grp} stage={idx}")
         if ph == "cleanup":
             block_hash = exec_payload.get("blockHash")
-            globals()['_PENDING_OVERLAY'] = (scenario, idx, block_hash)
+            globals()['_PENDING_OVERLAY'] = None
             globals()['_PENDING_OVERLAY_CONFIRMED'] = False
-            _log(f"cleanup stage {idx} complete for {scenario}; awaiting confirmation")
+            _log(f"cleanup stage {idx} complete for {scenario}; triggering immediate restore")
+            _signal_cleanup_pause("__overlay_restore__", idx, block_hash)
+            _wait_for_resume()
+            _insert_empty_hook_separator("cleanup-stage", scenario)
         elif SKIP_CLEANUP and ph == "testing":
-            pending = globals().get('_PENDING_OVERLAY')
-            if pending:
-                pend_scenario, pend_stage, pend_block = pending
-                if pend_scenario != scenario:
-                    globals()['_PENDING_OVERLAY'] = None
-                    _log(f"overlay restore pause triggered before scenario {scenario}")
-                    _signal_cleanup_pause('__overlay_restore__', pend_stage, pend_block)
-                    _wait_for_resume()
-            globals()['_PENDING_OVERLAY'] = (scenario, idx, exec_payload.get("blockHash"))
+            block_hash = exec_payload.get("blockHash")
+            globals()['_PENDING_OVERLAY'] = None
             globals()['_PENDING_OVERLAY_CONFIRMED'] = False
-            _log(f"testing stage {idx} complete for {scenario}; overlay refresh deferred to next scenario")
+            _log(f"testing stage {idx} complete for {scenario}; triggering immediate restore (--skip-cleanup)")
+            _signal_cleanup_pause("__overlay_restore__", idx, block_hash)
+            _wait_for_resume()
+            _insert_empty_hook_separator("skip-cleanup-testing-stage", scenario)
     except Exception as e:  # pragma: no cover
         _log(f"produce error: {e}")
 
@@ -1538,12 +1537,5 @@ def response(flow: http.HTTPFlow) -> None:
 
         globals()["_PENDING_OVERLAY_CONFIRMED"] = True
         _log(f"cleanup confirmation observed for scenario {scenario}")
-        # Restore/reorg boundary immediately, then insert separator before next test starts.
-        globals()["_PENDING_OVERLAY"] = None
-        globals()["_PENDING_OVERLAY_CONFIRMED"] = False
-        _log(f"overlay restore pause triggered on cleanup confirmation for scenario {scenario}")
-        _signal_cleanup_pause("__overlay_restore__", pending_stage, pending_block)
-        _wait_for_resume()
-        _insert_empty_hook_separator("cleanup-confirmation", scenario)
         return
 
