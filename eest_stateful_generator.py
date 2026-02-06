@@ -650,7 +650,7 @@ def preparation_getpayload(
 
     parent_hash = exec_payload.get("parentHash") or parent_hash
     blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
-    parent_beacon_block_root = _extract_parent_beacon_block_root(payload, exec_payload) or payload_attributes["parentBeaconBlockRoot"]
+    parent_beacon_block_root = payload_attributes["parentBeaconBlockRoot"]
     execution_requests = _extract_execution_requests(payload)
 
     # Send NP

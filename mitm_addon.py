@@ -811,7 +811,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         parent_hash = exec_payload.get("parentHash") or parent_hash
         blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
-        parent_beacon_block_root = _extract_parent_beacon_block_root(payload, exec_payload) or payload_attributes["parentBeaconBlockRoot"]
+        parent_beacon_block_root = payload_attributes["parentBeaconBlockRoot"]
         execution_requests = _extract_execution_requests(payload)
         blob_gas_used = exec_payload.get("blobGasUsed")
         if blob_versioned_hashes == [] and blob_gas_used not in (None, 0, "0x0", "0x00"):
