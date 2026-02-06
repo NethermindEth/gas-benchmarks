@@ -677,6 +677,7 @@ def main():
     parser.add_argument("--rpc-seed-key", required=True)
     parser.add_argument("--rpc-address", required=True)
     parser.add_argument("--stubs-file", default=None, help="Path to address stubs JSON passed to execute remote")
+    parser.add_argument("--snapshot-dir", default="execution-data", help="Path to snapshot DB (default: execution-data)")
     parser.add_argument("--no-snapshot", action="store_true")
     parser.add_argument("--refresh-snapshot", action="store_true")
     parser.add_argument(
@@ -1058,8 +1059,7 @@ def main():
         elif args.gas_benchmark_values:
             uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
         uv_cmd += [
-            #"--eoa-fund-amount-default", "3100000000000000000",
-            "--tx-wait-timeout", "30",
+            "--tx-wait-timeout", "5",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
             "--skip-cleanup",
             args.test_path,
