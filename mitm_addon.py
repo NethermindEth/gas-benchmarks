@@ -110,6 +110,7 @@ _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
 _BUF: List[Tuple[str, Any]] = []  # list of (txrlp_hex, original_id)
 _STOP: bool = False
+_LIFECYCLE_TS: Optional[int] = None
 
 # Thread handle
 _MON_THR: Optional[threading.Thread] = None
@@ -573,6 +574,18 @@ def _minified_json_line(obj: Any) -> str:
     return json.dumps(obj, separators=(",", ":"))
 
 
+def _next_lifecycle_timestamp(parent_ts: int) -> int:
+    global _LIFECYCLE_TS
+    if _LIFECYCLE_TS is None:
+        _LIFECYCLE_TS = parent_ts + 1
+    else:
+        _LIFECYCLE_TS += 1
+    # Safety: always keep timestamp valid vs chosen parent.
+    if _LIFECYCLE_TS <= parent_ts:
+        _LIFECYCLE_TS = parent_ts + 1
+    return _LIFECYCLE_TS
+
+
 def _read_hook_block_for_first_setup() -> Optional[str]:
     # Preferred hook source: dedicated empty hook anchor.
     hook_anchor = (HOOK_BLOCK or "").strip()
@@ -792,8 +805,6 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         extra_data = "0x4e65746865726d696e642076312e33372e3061"
 
-        # Default behavior is parent+1; optional feature flag keeps the old +24h hack.
-        min_delta = (24 * 60 * 60 + 1) if _TESTING_BUILDBLOCK_TIMESTAMP_HACK else 1
         parent_ts_hex = parent_block.get("timestamp")
         try:
             parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
@@ -801,8 +812,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             parent_ts = int(time.time())
 
         if is_first_setup_for_scenario and parent_source == "hook":
-            # Make separator hash unique across scenarios by nudging timestamp.
-            separator_ts = parent_ts + min_delta + max(next_stage, 1)
+            separator_ts = _next_lifecycle_timestamp(parent_ts)
             separator_attrs = {
                 "timestamp": hex(separator_ts),
                 "prevRandao": parent_hash,
@@ -850,7 +860,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
         except Exception:
             parent_ts = int(time.time())
-        new_ts = parent_ts + min_delta
+        new_ts = _next_lifecycle_timestamp(parent_ts)
 
         payload_attributes = {
             "timestamp": hex(new_ts),
