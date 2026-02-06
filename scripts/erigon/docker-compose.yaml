@@ -58,6 +58,7 @@ services:
       - --fcu.timeout=0
       - --fcu.background.prune=false
       - --fcu.background.commit=false
+      - --sync.parallel-state-flushing=false
       - --experimental.always-generate-changesets
     logging:
       driver: json-file
