@@ -848,7 +848,7 @@ def main():
         "--eest-mode",
         "--eest_mode",
         dest="eest_mode",
-        default="repricing",
+        default="Benchmark",
         help="Mode passed to execute remote via -m (supports repricings/benchmarks/stateful).",
     )
     parser.add_argument(
