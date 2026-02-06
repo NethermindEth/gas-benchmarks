@@ -788,23 +788,6 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             _log(f"flush failed: parent block missing hash for group={grp} source={parent_source}")
             return
 
-        zero32 = "0x" + ("00" * 32)
-        parent_prev_randao = parent_block.get("mixHash")
-        if not isinstance(parent_prev_randao, str) or not parent_prev_randao:
-            parent_prev_randao = parent_block.get("prevRandao")
-        if not isinstance(parent_prev_randao, str) or not parent_prev_randao:
-            parent_prev_randao = zero32
-
-        parent_beacon_block_root_attr = (
-            parent_block.get("parentBeaconBlockRoot")
-            if isinstance(parent_block, dict)
-            else None
-        )
-        if not isinstance(parent_beacon_block_root_attr, str) or not parent_beacon_block_root_attr:
-            parent_beacon_block_root_attr = parent_block.get("parent_beacon_block_root")
-        if not isinstance(parent_beacon_block_root_attr, str) or not parent_beacon_block_root_attr:
-            parent_beacon_block_root_attr = zero32
-
         meta_test_id, meta_phase = _GROUP_EXTRA_META.get(
             grp or ("unknown", "unknown", "unknown"),
             ("unknown", phase_lc or "unknown"),
@@ -823,10 +806,10 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         payload_attributes = {
             "timestamp": hex(new_ts),
-            "prevRandao": parent_prev_randao,
+            "prevRandao": parent_hash,
             "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
             "withdrawals": [],
-            "parentBeaconBlockRoot": parent_beacon_block_root_attr,
+            "parentBeaconBlockRoot": parent_hash,
         }
         _log(
             f"buildBlock parent source={parent_source} hash={parent_hash} phase={phase_lc} stage={next_stage} "
