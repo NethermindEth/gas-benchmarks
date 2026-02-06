@@ -450,7 +450,7 @@ def start_nethermind_container(
         "--JsonRpc.UnsecureDevNoRpcAuthentication",
         "true",
         "--JsonRpc.EnabledModules",
-        "Eth,Net,Web3,Admin,Debug,Trace,TxPool",
+        "Eth,Net,Web3,Admin,Debug,Trace,TxPool,Testing",
         "--Blocks.TargetBlockGasLimit",
         "1000000000000",
         "--data-dir",
