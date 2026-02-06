@@ -792,14 +792,62 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         extra_data = "0x4e65746865726d696e642076312e33372e3061"
 
+        # Default behavior is parent+1; optional feature flag keeps the old +24h hack.
+        min_delta = (24 * 60 * 60 + 1) if _TESTING_BUILDBLOCK_TIMESTAMP_HACK else 1
         parent_ts_hex = parent_block.get("timestamp")
         try:
             parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
         except Exception:
             parent_ts = int(time.time())
 
-        # Default behavior is parent+1; optional feature flag keeps the old +24h hack.
-        min_delta = (24 * 60 * 60 + 1) if _TESTING_BUILDBLOCK_TIMESTAMP_HACK else 1
+        if is_first_setup_for_scenario and parent_source == "hook":
+            separator_attrs = {
+                "timestamp": hex(parent_ts + min_delta),
+                "prevRandao": parent_hash,
+                "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
+                "withdrawals": [],
+                "parentBeaconBlockRoot": parent_hash,
+            }
+            _log(f"inserting empty hook separator block before scenario={scenario} parent={parent_hash}")
+            sep_raw = _engine("testing_buildBlockV1", [parent_hash, separator_attrs, [], extra_data])
+            sep_payload = sep_raw if isinstance(sep_raw, dict) else {}
+            sep_exec = sep_payload.get("executionPayload", sep_payload)
+            if isinstance(sep_exec, dict):
+                sep_parent_hash = sep_exec.get("parentHash") or parent_hash
+                sep_blob_hashes = _extract_blob_versioned_hashes(sep_payload, sep_exec)
+                sep_exec_requests = _extract_execution_requests(sep_payload)
+                _engine(_NEWPAYLOAD_METHOD, [sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests])
+                _emit_newpayload_event(sep_exec, sep_parent_hash)
+                sep_hash = sep_exec.get("blockHash")
+                sep_dyn_final = _DYN_FINALIZED or FINALIZED_BLOCK or sep_hash
+                sep_fcs = {
+                    "headBlockHash": sep_hash,
+                    "safeBlockHash": sep_dyn_final,
+                    "finalizedBlockHash": sep_dyn_final,
+                }
+                _engine("engine_forkchoiceUpdatedV3", [sep_fcs, None])
+                sep_block = _rpc("eth_getBlockByHash", [sep_hash, False]) if isinstance(sep_hash, str) and sep_hash else None
+                if not isinstance(sep_block, dict):
+                    sep_block = _rpc("eth_getBlockByNumber", ["latest", False])
+                if isinstance(sep_block, dict):
+                    parent_block = sep_block
+                    parent_source = "hook-empty"
+                    _log(f"inserted empty hook separator block hash={sep_hash}")
+                else:
+                    _log("WARN inserted separator block but failed to reload latest parent; proceeding")
+            else:
+                _log(f"WARN failed to insert hook separator for scenario={scenario}: non-dict payload")
+
+        parent_hash = parent_block.get("hash")
+        if not isinstance(parent_hash, str) or not parent_hash:
+            _log(f"flush failed: effective parent block missing hash for group={grp} source={parent_source}")
+            return
+
+        parent_ts_hex = parent_block.get("timestamp")
+        try:
+            parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
+        except Exception:
+            parent_ts = int(time.time())
         new_ts = parent_ts + min_delta
 
         payload_attributes = {
