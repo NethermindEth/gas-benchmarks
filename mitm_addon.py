@@ -788,7 +788,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
 
         # Default behavior is parent+1; optional feature flag keeps the old +24h hack.
         min_delta = (24 * 60 * 60 + 1) if _TESTING_BUILDBLOCK_TIMESTAMP_HACK else 1
-        new_ts = max(int(time.time()), parent_ts + min_delta)
+        new_ts = parent_ts + min_delta
 
         payload_attributes = {
             "timestamp": hex(new_ts),

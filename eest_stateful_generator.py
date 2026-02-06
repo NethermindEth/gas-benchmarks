@@ -622,7 +622,7 @@ def preparation_getpayload(
     parent_ts_hex = head_block.get("timestamp")
     parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
     min_delta = (24 * 60 * 60 + 1) if timestamp_hack else 1
-    new_ts = max(int(time.time()), parent_ts + min_delta)
+    new_ts = parent_ts + min_delta
 
     withdrawals: List[Dict[str, str]] = []
     if rpc_address and isinstance(rpc_address, str) and rpc_address.upper() != "EMPTY":
