@@ -46,20 +46,10 @@ def _cfg_bool(value: Any, default: bool = False) -> bool:
     return default
 
 EEST_STATEFUL_TESTING: bool = _cfg_bool(_CFG.get("eest_stateful_testing"), False)
-
-
-def _getpayload_method_for_fork(fork: str) -> str:
-    fork_name = (fork or "").strip().lower()
-    if fork_name in {"osaka", "fusaka"}:
-        return "engine_getPayloadV5"
-    return "engine_getPayloadV4"
-
-
-_GETPAYLOAD_METHOD = _getpayload_method_for_fork(FORK)
+_TESTING_BUILDBLOCK_TIMESTAMP_HACK: bool = _cfg_bool(_CFG.get("testing_buildblock_timestamp_hack"), False)
 
 
 def _newpayload_method_for_fork(fork: str) -> str:
-    fork_name = (fork or "").strip().lower()
     return "engine_newPayloadV4"
 
 
@@ -582,6 +572,34 @@ def _minified_json_line(obj: Any) -> str:
     return json.dumps(obj, separators=(",", ":"))
 
 
+def _read_hook_block_from_setup_global() -> Optional[str]:
+    if not _SETUP_GLOBAL_FILE.exists():
+        return None
+    try:
+        last_block_hash: Optional[str] = None
+        lines = _SETUP_GLOBAL_FILE.read_text(encoding="utf-8").splitlines()
+        for raw in lines:
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            method = obj.get("method")
+            if not isinstance(method, str) or not method.startswith("engine_newPayload"):
+                continue
+            params = obj.get("params") or []
+            if params and isinstance(params[0], dict):
+                block_hash = params[0].get("blockHash")
+                if isinstance(block_hash, str) and block_hash:
+                    last_block_hash = block_hash
+        return last_block_hash
+    except Exception as e:
+        _log(f"hook block read failed from {_SETUP_GLOBAL_FILE}: {e}")
+        return None
+
+
 def _append_line(path: pathlib.Path, line: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
@@ -728,28 +746,80 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             f"last={preview_last} reorg=false"
         )
 
-        params: List[Any] = [txrlps, "EMPTY"]
-        payload: Dict[str, Any] = _engine(_GETPAYLOAD_METHOD, params)
-        exec_payload: Dict[str, Any] = payload.get("executionPayload") if isinstance(payload, dict) else {}
-        if not exec_payload and isinstance(payload, dict) and isinstance(payload.get("parentHash"), str):
-            exec_payload = payload
+        next_stage = _STAGE.get(grp, 0) + 1
+        phase_lc = (phase or "").lower()
+        is_first_setup_for_scenario = (
+            phase_lc == "setup"
+            and next_stage == 1
+            and file_base not in {"global-setup", "global-nophase"}
+        )
+
+        latest_block = _rpc("eth_getBlockByNumber", ["latest", False])
+        if not isinstance(latest_block, dict):
+            _log(f"flush failed: could not fetch latest block for group={grp}")
+            return
+
+        parent_block: Dict[str, Any] = latest_block
+        parent_source = "latest"
+        if is_first_setup_for_scenario:
+            hook_block_hash = _read_hook_block_from_setup_global()
+            if hook_block_hash:
+                hook_block = _rpc("eth_getBlockByHash", [hook_block_hash, False])
+                if isinstance(hook_block, dict):
+                    parent_block = hook_block
+                    parent_source = "hook"
+                else:
+                    _log(f"WARN HOOK_BLOCK {hook_block_hash} not found on node; using latest")
+            else:
+                _log("WARN HOOK_BLOCK not found in setup-global-test.txt; using latest")
+
+        parent_hash = parent_block.get("hash")
+        if not isinstance(parent_hash, str) or not parent_hash:
+            _log(f"flush failed: parent block missing hash for group={grp} source={parent_source}")
+            return
+
+        parent_ts_hex = parent_block.get("timestamp")
+        try:
+            parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
+        except Exception:
+            parent_ts = int(time.time())
+
+        # Default behavior is parent+1; optional feature flag keeps the old +24h hack.
+        min_delta = (24 * 60 * 60 + 1) if _TESTING_BUILDBLOCK_TIMESTAMP_HACK else 1
+        new_ts = max(int(time.time()), parent_ts + min_delta)
+
+        payload_attributes = {
+            "timestamp": hex(new_ts),
+            "prevRandao": parent_hash,
+            "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
+            "withdrawals": [],
+            "parentBeaconBlockRoot": parent_hash,
+        }
+        build_block_params = {
+            "parent_block_hash": parent_hash,
+            "payload_attributes": payload_attributes,
+            "transactions": txrlps,
+            "extra_data": "0x",
+        }
+        _log(f"buildBlock parent source={parent_source} hash={parent_hash} phase={phase_lc} stage={next_stage}")
+
+        exec_payload_raw = _engine("testing_buildBlockV1", [build_block_params])
+        payload = exec_payload_raw if isinstance(exec_payload_raw, dict) else {}
+        exec_payload = payload.get("executionPayload", payload)
         if not isinstance(exec_payload, dict):
-            exec_payload = {}
-        parent_hash: str = exec_payload.get("parentHash") or "0x" + ("00" * 32)
+            _log(f"flush failed: testing_buildBlockV1 returned non-dict payload for group={grp}")
+            return
+
+        parent_hash = exec_payload.get("parentHash") or parent_hash
         blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
-        parent_beacon_block_root = _extract_parent_beacon_block_root(payload, exec_payload)
-        if not parent_beacon_block_root:
-            parent_beacon_block_root = parent_hash
-            _log("WARN missing parentBeaconBlockRoot; falling back to parentHash")
+        parent_beacon_block_root = _extract_parent_beacon_block_root(payload, exec_payload) or payload_attributes["parentBeaconBlockRoot"]
         execution_requests = _extract_execution_requests(payload)
         blob_gas_used = exec_payload.get("blobGasUsed")
         if blob_versioned_hashes == [] and blob_gas_used not in (None, 0, "0x0", "0x00"):
             _log("WARN blobGasUsed present but no blobVersionedHashes found")
 
-        if grp not in _STAGE:
-            _STAGE[grp] = 0
-        _STAGE[grp] += 1
-        idx = _STAGE[grp]
+        _STAGE[grp] = next_stage
+        idx = next_stage
 
         np_body = {
             "jsonrpc": "2.0",
@@ -955,6 +1025,10 @@ def _wait_for_resume() -> None:
 def load(loader) -> None:
     global _MON_THR, _CONTROL_THREAD
     _apply_mitm_quiet_options()
+    _log(
+        "timestamp mode for testing_buildBlockV1: "
+        + ("parent+24h+1 (hack enabled)" if _TESTING_BUILDBLOCK_TIMESTAMP_HACK else "parent+1 (default)")
+    )
     _ensure_dirs_and_cleanup_old()
     globals()['_OVERLAY_PRIMED'] = False
     globals()['_PENDING_OVERLAY'] = None

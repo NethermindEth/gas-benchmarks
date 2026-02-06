@@ -11,7 +11,7 @@ import sys
 import textwrap
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import atexit
 import re
 
@@ -288,7 +288,6 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
     print("[INFO] Regenerating gas-bump and funding payloads.")
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
-    getpayload_method = _getpayload_method_for_fork(args.fork)
     try:
         max_count = max(args.gas_bump_count, 1)
         last_log = time.monotonic()
@@ -302,7 +301,7 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
                 jwt_path,
                 "EMPTY",
                 save_path=gas_bump_file,
-                getpayload_method=getpayload_method,
+                timestamp_hack=args.testing_buildblock_timestamp_hack,
             )
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
@@ -313,7 +312,7 @@ def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, fu
             jwt_path,
             args.rpc_address,
             save_path=funding_file,
-            getpayload_method=getpayload_method,
+            timestamp_hack=args.testing_buildblock_timestamp_hack,
         )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
@@ -532,11 +531,66 @@ def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: l
 
 # ----------------- changed: append NP and FCU to a single .txt file -----------------
 
-def _getpayload_method_for_fork(fork: str) -> str:
-    fork_name = (fork or "").strip().lower()
-    if fork_name == "osaka":
-        return "engine_getPayloadV5"
-    return "engine_getPayloadV4"
+def _hex_to_bytes(value: Any) -> Optional[bytes]:
+    if not isinstance(value, str):
+        return None
+    v = value[2:] if value.startswith("0x") else value
+    if len(v) % 2 == 1:
+        v = "0" + v
+    try:
+        return bytes.fromhex(v)
+    except Exception:
+        return None
+
+
+def _kzg_commitment_to_versioned_hash(commitment_hex: Any) -> Optional[str]:
+    raw = _hex_to_bytes(commitment_hex)
+    if raw is None:
+        return None
+    digest = hashlib.sha256(raw).digest()
+    versioned = b"\x01" + digest[1:]
+    return "0x" + versioned.hex()
+
+
+def _extract_blob_versioned_hashes(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> List[str]:
+    for key in ("blobVersionedHashes", "blob_versioned_hashes", "versionedHashes", "versioned_hashes"):
+        hashes = payload.get(key)
+        if isinstance(hashes, list) and hashes:
+            return [h for h in hashes if isinstance(h, str)]
+
+    bundle = payload.get("blobsBundle") or payload.get("blobs_bundle") or {}
+    commitments = None
+    if isinstance(bundle, dict):
+        commitments = bundle.get("commitments")
+    if isinstance(commitments, list) and commitments:
+        computed: List[str] = []
+        for c in commitments:
+            vh = _kzg_commitment_to_versioned_hash(c)
+            if vh:
+                computed.append(vh)
+        if computed:
+            return computed
+    return []
+
+
+def _extract_execution_requests(payload: Dict[str, Any]) -> List[Any]:
+    for key in ("executionRequests", "execution_requests"):
+        reqs = payload.get(key)
+        if isinstance(reqs, list):
+            return reqs
+    return []
+
+
+def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> Optional[str]:
+    for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
+        val = exec_payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return None
 
 
 def preparation_getpayload(
@@ -545,23 +599,71 @@ def preparation_getpayload(
     rpc_address: str,
     save_path: Path | None = None,
     *,
-    getpayload_method: str = "engine_getPayloadV4",
+    timestamp_hack: bool = False,
 ):
     """
-    Build a payload on the engine (engine_getPayloadV4/V5), POST engine_newPayloadV4,
+    Build a payload on the engine via testing_buildBlockV1, POST engine_newPayloadV4,
     then engine_forkchoiceUpdatedV3.
     If save_path is provided, append TWO minified JSON-RPC lines to that file:
       1) the engine_newPayloadV4 request body
       2) the engine_forkchoiceUpdatedV3 request body
     """
     ZERO32 = "0x" + ("00" * 32)
-    txrlp_empty = None
-    payload = _engine_with_jwt(engine_url, jwt_hex_path, getpayload_method, [txrlp_empty, rpc_address])
-    exec_payload = payload.get("executionPayload")
-    parent_hash = exec_payload.get("parentHash") or ZERO32
+    head_block = rpc_call("http://127.0.0.1:8545", "eth_getBlockByNumber", ["latest", False])
+    if not isinstance(head_block, dict):
+        raise RuntimeError("Unable to fetch latest block for testing_buildBlockV1")
+
+    parent_hash = head_block.get("hash")
+    if not isinstance(parent_hash, str) or not parent_hash:
+        raise RuntimeError("Latest block is missing hash")
+
+    parent_ts_hex = head_block.get("timestamp")
+    parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
+    min_delta = (24 * 60 * 60 + 1) if timestamp_hack else 1
+    new_ts = max(int(time.time()), parent_ts + min_delta)
+
+    withdrawals: List[Dict[str, str]] = []
+    if rpc_address and isinstance(rpc_address, str) and rpc_address.upper() != "EMPTY":
+        withdrawals = [{
+            "index": "0x0",
+            "validatorIndex": "0x0",
+            "address": rpc_address,
+            "amount": hex((1 << 64) - 1),
+        }]
+
+    payload_attributes = {
+        "timestamp": hex(new_ts),
+        "prevRandao": parent_hash,
+        "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
+        "withdrawals": withdrawals,
+        "parentBeaconBlockRoot": parent_hash,
+    }
+    build_block_params = {
+        "parent_block_hash": parent_hash,
+        "payload_attributes": payload_attributes,
+        "transactions": [],
+        "extra_data": "0x",
+    }
+    payload = _engine_with_jwt(engine_url, jwt_hex_path, "testing_buildBlockV1", [build_block_params])
+    if not isinstance(payload, dict):
+        raise RuntimeError("testing_buildBlockV1 returned non-dict result")
+
+    exec_payload = payload.get("executionPayload", payload)
+    if not isinstance(exec_payload, dict):
+        raise RuntimeError("testing_buildBlockV1 result missing execution payload")
+
+    parent_hash = exec_payload.get("parentHash") or parent_hash
+    blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
+    parent_beacon_block_root = _extract_parent_beacon_block_root(payload, exec_payload) or payload_attributes["parentBeaconBlockRoot"]
+    execution_requests = _extract_execution_requests(payload)
 
     # Send NP
-    _ = _engine_with_jwt(engine_url, jwt_hex_path, "engine_newPayloadV4", [exec_payload, [], parent_hash, []])
+    _ = _engine_with_jwt(
+        engine_url,
+        jwt_hex_path,
+        "engine_newPayloadV4",
+        [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+    )
     block_hash = exec_payload.get("blockHash")
 
     # Build FCU params (safe/finalized=head)
@@ -582,7 +684,12 @@ def preparation_getpayload(
 
     # Append NP + FCU requests as lines if requested
     if save_path is not None:
-        np_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_newPayloadV4","params":[exec_payload, [], parent_hash, []]}
+        np_body = {
+            "jsonrpc": "2.0",
+            "id": int(time.time()),
+            "method": "engine_newPayloadV4",
+            "params": [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+        }
         fcu_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_forkchoiceUpdatedV3","params":[fcs, None]}
         _append_line(save_path, _minified_json_line(np_body))
         _append_line(save_path, _minified_json_line(fcu_body))
@@ -699,7 +806,12 @@ def main():
         "--gas-bump-count",
         type=int,
         default=301,
-        help="Number of engine_getPayload iterations when generating gas-bump payload (default: 301).",
+        help="Number of testing_buildBlockV1 iterations when generating gas-bump payload (default: 301).",
+    )
+    parser.add_argument(
+        "--testing-buildblock-timestamp-hack",
+        action="store_true",
+        help="Use parent timestamp +24h+1 when building blocks via testing_buildBlockV1 (default: parent+1).",
     )
     parser.add_argument(
         "--overlay-root",
@@ -961,6 +1073,7 @@ def main():
         "merged_log_path": str(Path("mitm_nethermind.log").resolve()),
         "nethermind_container": container_name,
         "light_logs": True,
+        "testing_buildblock_timestamp_hack": args.testing_buildblock_timestamp_hack,
     }
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
