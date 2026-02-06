@@ -640,7 +640,7 @@ def preparation_getpayload(
         "withdrawals": withdrawals,
         "parentBeaconBlockRoot": parent_hash,
     }
-    payload = _engine_with_jwt(engine_url, jwt_hex_path, "testing_buildBlockV1", [parent_hash, payload_attributes, [], "Benchmark"])
+    payload = _engine_with_jwt(engine_url, jwt_hex_path, "testing_buildBlockV1", [parent_hash, payload_attributes, [], "0x"])
     if not isinstance(payload, dict):
         raise RuntimeError("testing_buildBlockV1 returned non-dict result")
 
@@ -848,7 +848,7 @@ def main():
         "--eest-mode",
         "--eest_mode",
         dest="eest_mode",
-        default="repricing",
+        default="Benchmark",
         help="Mode passed to execute remote via -m (supports repricings/benchmarks/stateful).",
     )
     parser.add_argument(

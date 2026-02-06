@@ -778,7 +778,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             _log(f"flush failed: parent block missing hash for group={grp} source={parent_source}")
             return
 
-        extra_data = "Benchmark"
+        extra_data = "0x"
 
         parent_ts_hex = parent_block.get("timestamp")
         try:
