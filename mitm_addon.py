@@ -174,6 +174,7 @@ _CONTROL_THREAD: Optional[threading.Thread] = None
 _PENDING_OVERLAY: Optional[Tuple[str, int, Optional[str]]] = None  # (scenario, stage, block)
 _PENDING_OVERLAY_CONFIRMED: bool = False
 _SEPARATOR_READY_FOR_NEXT_SETUP: bool = False
+_PENDING_SEPARATOR_PAIR: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None
 
 _OVERLAY_PRIMED: bool = False
 
@@ -308,7 +309,7 @@ def _emit_newpayload_event(exec_payload: Dict[str, Any], parent_hash: str) -> No
 
 
 def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
-    global _SEPARATOR_READY_FOR_NEXT_SETUP
+    global _SEPARATOR_READY_FOR_NEXT_SETUP, _PENDING_SEPARATOR_PAIR
     hook_block_hash = _read_hook_block_for_first_setup()
     if not hook_block_hash:
         _log(f"WARN cannot insert empty separator ({reason}): missing hook block")
@@ -363,6 +364,19 @@ def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
         "finalizedBlockHash": sep_dyn_final,
     }
     _engine("engine_forkchoiceUpdatedV3", [sep_fcs, None])
+    np_body = {
+        "jsonrpc": "2.0",
+        "id": int(time.time()),
+        "method": _NEWPAYLOAD_METHOD,
+        "params": [sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests],
+    }
+    fcu_body = {
+        "jsonrpc": "2.0",
+        "id": int(time.time()),
+        "method": "engine_forkchoiceUpdatedV3",
+        "params": [sep_fcs, None],
+    }
+    _PENDING_SEPARATOR_PAIR = (np_body, fcu_body)
     _SEPARATOR_READY_FOR_NEXT_SETUP = True
     _log(f"inserted empty hook separator ({reason}) hash={sep_hash}")
 
@@ -876,6 +890,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
         except Exception:
             parent_ts = int(time.time())
 
+        inline_separator_pair: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None
         if is_first_setup_for_scenario and parent_source == "hook":
             separator_ts = _next_lifecycle_timestamp(parent_ts)
             separator_attrs = {
@@ -903,6 +918,20 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
                     "finalizedBlockHash": sep_dyn_final,
                 }
                 _engine("engine_forkchoiceUpdatedV3", [sep_fcs, None])
+                inline_separator_pair = (
+                    {
+                        "jsonrpc": "2.0",
+                        "id": int(time.time()),
+                        "method": _NEWPAYLOAD_METHOD,
+                        "params": [sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests],
+                    },
+                    {
+                        "jsonrpc": "2.0",
+                        "id": int(time.time()),
+                        "method": "engine_forkchoiceUpdatedV3",
+                        "params": [sep_fcs, None],
+                    },
+                )
                 sep_block = _rpc("eth_getBlockByHash", [sep_hash, False]) if isinstance(sep_hash, str) and sep_hash else None
                 if not isinstance(sep_block, dict):
                     sep_block = _rpc("eth_getBlockByNumber", ["latest", False])
@@ -1028,6 +1057,18 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             _log(f"unknown phase '{phase}' -> treating as 'setup' for dump")
             ph = "setup"
 
+        if ph == "setup" and idx == 1:
+            pending_separator_pair = globals().get("_PENDING_SEPARATOR_PAIR")
+            if isinstance(pending_separator_pair, tuple) and len(pending_separator_pair) == 2:
+                sep_np_body, sep_fcu_body = pending_separator_pair
+                _dump_pair_to_phase("setup", scenario, sep_np_body, sep_fcu_body)
+                globals()["_PENDING_SEPARATOR_PAIR"] = None
+                _log(f"setup prepended pre-inserted hook separator for scenario={scenario}")
+            elif inline_separator_pair is not None:
+                sep_np_body, sep_fcu_body = inline_separator_pair
+                _dump_pair_to_phase("setup", scenario, sep_np_body, sep_fcu_body)
+                _log(f"setup prepended inline hook separator for scenario={scenario}")
+
         _dump_pair_to_phase(ph, scenario, np_body, fcu_body)
         _log(f"produced block group={grp} stage={idx}")
         if ph == "cleanup":
@@ -1040,12 +1081,12 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             _insert_empty_hook_separator("cleanup-stage", scenario)
         elif SKIP_CLEANUP and ph == "testing":
             block_hash = exec_payload.get("blockHash")
-            globals()['_PENDING_OVERLAY'] = None
+            globals()['_PENDING_OVERLAY'] = (scenario, idx, block_hash)
             globals()['_PENDING_OVERLAY_CONFIRMED'] = False
-            _log(f"testing stage {idx} complete for {scenario}; triggering immediate restore (--skip-cleanup)")
-            _signal_cleanup_pause("__overlay_restore__", idx, block_hash)
-            _wait_for_resume()
-            _insert_empty_hook_separator("skip-cleanup-testing-stage", scenario)
+            _log(
+                f"testing stage {idx} complete for {scenario}; restore deferred until "
+                "eth_getTransactionByHash confirms inclusion (--skip-cleanup)"
+            )
     except Exception as e:  # pragma: no cover
         _log(f"produce error: {e}")
 
@@ -1437,6 +1478,7 @@ def request(flow: http.HTTPFlow) -> None:
             _log(f"overlay restore pause triggered before method {trigger_method} for scenario {scenario}")
             _signal_cleanup_pause("__overlay_restore__", stage, block_hash)
             _wait_for_resume()
+            _insert_empty_hook_separator("confirmed-restore-before-next-request", scenario)
 
     # Fast path: if tx lookup starts, flush pending buffered sendraws immediately.
     has_get_tx_by_hash = any(entry.get("method") == "eth_getTransactionByHash" for entry in entries)
