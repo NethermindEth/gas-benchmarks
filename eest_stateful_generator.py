@@ -289,12 +289,10 @@ def _generate_preparation_payloads(
     args,
     gas_bump_file: Path,
     funding_file: Path,
-    hook_file: Path,
-) -> tuple[str, str]:
-    print("[INFO] Regenerating gas-bump, funding, and hook payloads.")
+) -> str:
+    print("[INFO] Regenerating gas-bump and funding payloads.")
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
-    _truncate_file(hook_file)
     try:
         max_count = max(args.gas_bump_count, 1)
         last_log = time.monotonic()
@@ -323,19 +321,7 @@ def _generate_preparation_payloads(
         )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
-    hook_hash = ""
-    try:
-        # Deterministic empty hook used as a per-scenario reorg parent.
-        hook_hash = preparation_getpayload(
-            "http://127.0.0.1:8551",
-            jwt_path,
-            "EMPTY",
-            save_path=hook_file,
-            timestamp_hack=args.testing_buildblock_timestamp_hack,
-        )
-    except Exception as exc:
-        print(f"[WARN] Hook prep failed: {exc}")
-    return finalized or "", hook_hash or ""
+    return finalized or ""
 
 def _latest_block_hash_from_payload_file(path: Path) -> Optional[str]:
     try:
@@ -893,10 +879,16 @@ def main():
         scenario_order_file.unlink()
     gas_bump_file = payloads_dir / "gas-bump.txt"
     funding_file  = payloads_dir / "funding.txt"
-    hook_file = payloads_dir / "hook-empty.txt"
+    legacy_hook_file = payloads_dir / "hook-empty.txt"
     setup_global_file = payloads_dir / "setup-global-test.txt"
-    reuse_preparation = gas_bump_file.exists() and funding_file.exists() and hook_file.exists()
+    reuse_preparation = gas_bump_file.exists() and funding_file.exists()
     reuse_globals = setup_global_file.exists()
+    if legacy_hook_file.exists():
+        try:
+            legacy_hook_file.unlink()
+            print(f"[INFO] Removed legacy hook file: {legacy_hook_file}")
+        except Exception:
+            pass
 
 
     for subdir in ("setup", "testing", "cleanup"):
@@ -1064,28 +1056,20 @@ def main():
     ensure_pip_pkg("mitmproxy")
 
     finalized_hash = ""
-    hook_hash = ""
     rpc_url = "http://127.0.0.1:8545"
     if reuse_preparation:
-        print("[INFO] Reusing existing gas-bump, funding, and hook payloads.")
+        print("[INFO] Reusing existing gas-bump and funding payloads.")
         finalized_hash = _latest_block_hash_from_payload_file(funding_file) or ""
-        hook_hash = _latest_block_hash_from_payload_file(hook_file) or ""
         if not finalized_hash or not _block_exists(rpc_url, finalized_hash):
             print("[WARN] Reused funding payload is missing finalized block; regenerating preparations.")
             reuse_preparation = False
-        if reuse_preparation and (not hook_hash or not _block_exists(rpc_url, hook_hash)):
-            print("[WARN] Reused hook payload is missing hook block; regenerating preparations.")
-            reuse_preparation = False
 
     if not reuse_preparation:
-        finalized_hash, hook_hash = _generate_preparation_payloads(jwt_path, args, gas_bump_file, funding_file, hook_file)
+        finalized_hash = _generate_preparation_payloads(jwt_path, args, gas_bump_file, funding_file)
 
     if finalized_hash and not _block_exists(rpc_url, finalized_hash):
         print(f"[WARN] Finalized block {finalized_hash} not found; clearing anchor.")
         finalized_hash = ""
-    if hook_hash and not _block_exists(rpc_url, hook_hash):
-        print(f"[WARN] Hook block {hook_hash} not found; clearing hook anchor.")
-        hook_hash = ""
 
     mitm_config = {
         "rpc_direct": "http://127.0.0.1:8545",
@@ -1095,7 +1079,6 @@ def main():
         "skip_cleanup": True,
         "eest_stateful_testing": args.eest_stateful_testing,
         "finalized_block": finalized_hash or "",
-        "hook_block": hook_hash or "",
         "payload_dir": str(payloads_dir),
         "reuse_globals": reuse_globals,
         "mitm_log_path": str(Path("mitm.log").resolve()),
