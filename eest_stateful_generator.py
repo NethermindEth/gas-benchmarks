@@ -1165,9 +1165,6 @@ def main():
                 print(f"[WARN] Ignoring pause payload without token: {payload}")
                 return
             scenario_name = payload.get("scenario") or "unknown"
-            stage = payload.get("stage")
-            block_hash = payload.get("blockHash")
-            print(f"[STATE] Pause requested: scenario={scenario_name} stage={stage} token={token} block={block_hash}")
             try:
                 resume_file.unlink(missing_ok=True)
             except Exception:
@@ -1175,8 +1172,6 @@ def main():
             _write_resume_signal(resume_file, token, scenario_name)
             if not _wait_for_resume_consumed(resume_file, timeout=300.0):
                 print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
-            else:
-                print(f"[STATE] Resume acknowledged for scenario {scenario_name} token={token}")
             processed_tokens.add(token)
 
         try:
