@@ -108,7 +108,7 @@ _ACTIVE_GRP: Optional[Tuple[str, str, str]] = None  # (file_base, test_name, pha
 _LAST_TS: float = 0.0
 _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
-_BUF: List[Tuple[str, Any]] = []  # list of (txrlp_hex, original_id)
+_BUF: List[Tuple[str, Any, Optional[str]]] = []  # list of (txrlp_hex, original_id, test_id)
 _STOP: bool = False
 _LIFECYCLE_TS: Optional[int] = None
 
@@ -497,6 +497,13 @@ def _derive_group_from_meta(meta: Optional[Dict[str, Any]]) -> Tuple[str, str, s
     return (file_base, test_name, phase)
 
 
+def _extra_data_from_test_id(test_id: Optional[str]) -> str:
+    if not isinstance(test_id, str) or not test_id:
+        return "0x"
+    digest = hashlib.sha256(test_id.encode("utf-8")).digest()
+    return "0x" + digest.hex()
+
+
 def _scenario_name(file_base: str, test_name: str) -> str:
     fb = _sanitize_filename_component(file_base)
     tn = _sanitize_filename_component(test_name)
@@ -827,7 +834,7 @@ def _cleanup_empty_txt_files() -> None:
 # Flushing / Production
 # ---------------------------------------------------------------------------
 
-def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
+def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_test_id: Optional[str] = None) -> None:
     if not txrlps:
         _log(f"flush skipped: empty buffer for group={grp}")
         return
@@ -882,7 +889,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str]) -> None:
             _log(f"flush failed: parent block missing hash for group={grp} source={parent_source}")
             return
 
-        extra_data = "0x4e65746865726d696e642076312e33372e3061"
+        extra_data = _extra_data_from_test_id(last_test_id)
 
         parent_ts_hex = parent_block.get("timestamp")
         try:
@@ -1108,7 +1115,8 @@ def _produce_if_quiet(force: bool = False) -> None:
         _BUF = []
     _log(f"flushing group={grp} size={len(buf_copy)} reason={'force' if force else 'quiet'}")
     if buf_copy:
-        _flush_group(grp, [x[0] for x in buf_copy])
+        last_test_id = buf_copy[-1][2]
+        _flush_group(grp, [x[0] for x in buf_copy], last_test_id=last_test_id)
 
 
 def _monitor() -> None:
@@ -1381,14 +1389,15 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         to_merged=True,
     )
 
-    force_prev: Optional[Tuple[Tuple[str, str, str], List[Tuple[str, Any]]]] = None
+    current_test_id = meta.get("testId") if isinstance(meta, dict) and isinstance(meta.get("testId"), str) else None
+    force_prev: Optional[Tuple[Tuple[str, str, str], List[Tuple[str, Any, Optional[str]]]]] = None
     with _GROUP_LOCK:
         if _ACTIVE_GRP and grp != _ACTIVE_GRP and _PENDING:
             force_prev = (_ACTIVE_GRP, list(_BUF))
             _PENDING = False
             _BUF = []
         _ACTIVE_GRP = grp
-        _BUF.append((raw, item.get("id")))
+        _BUF.append((raw, item.get("id"), current_test_id))
         _PENDING = True
         _LAST_TS = time.time()
     _log(f"buffered tx: group={grp} buf_size={len(_BUF)}")
@@ -1396,7 +1405,8 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
     if force_prev:
         prev_grp, prev_buf = force_prev
         _log(f"group switch → force flush prev={prev_grp} size={len(prev_buf)}")
-        _flush_group(prev_grp, [x[0] for x in prev_buf])
+        prev_last_test_id = prev_buf[-1][2] if prev_buf else None
+        _flush_group(prev_grp, [x[0] for x in prev_buf], last_test_id=prev_last_test_id)
 
 
 # ---- mitmproxy HTTP hooks --------------------------------------------------
