@@ -467,7 +467,7 @@ def start_nethermind_container(
         "--Network.MaxActivePeers",
         "0",
         "--TxPool.Size",
-        "10000",
+        "0",
         "--TxPool.MaxTxSize",
         "null",
         "--Merge.TerminalTotalDifficulty",
