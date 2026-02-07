@@ -1092,6 +1092,7 @@ def main():
         "engine_url": "http://127.0.0.1:8551",
         "jwt_hex_path": str(jwt_path),
         "fork": args.fork,
+        "skip_cleanup": True,
         "eest_stateful_testing": args.eest_stateful_testing,
         "finalized_block": finalized_hash or "",
         "hook_block": hook_hash or "",
