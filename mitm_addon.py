@@ -500,8 +500,56 @@ def _derive_group_from_meta(meta: Optional[Dict[str, Any]]) -> Tuple[str, str, s
 def _extra_data_from_test_id(test_id: Optional[str]) -> str:
     if not isinstance(test_id, str) or not test_id:
         return "0x"
-    digest = hashlib.sha256(test_id.encode("utf-8")).digest()
-    return "0x" + digest.hex()
+    full_hash_hex = hashlib.sha256(test_id.encode("utf-8")).hexdigest()
+    # extraData is capped at 32 bytes; encode a readable 32-char hash prefix as ASCII bytes.
+    ascii_prefix = full_hash_hex[:32].encode("ascii")
+    return "0x" + ascii_prefix.hex()
+
+
+def _keccak256(data: bytes) -> bytes:
+    try:
+        from eth_hash.auto import keccak as _eth_keccak  # type: ignore
+        return _eth_keccak(data)
+    except Exception:
+        pass
+    try:
+        import sha3  # type: ignore
+        k = sha3.keccak_256()
+        k.update(data)
+        return k.digest()
+    except Exception:
+        pass
+    try:
+        from Crypto.Hash import keccak as _crypto_keccak  # type: ignore
+        k = _crypto_keccak.new(digest_bits=256)
+        k.update(data)
+        return k.digest()
+    except Exception:
+        pass
+    raise RuntimeError("No Keccak-256 implementation available for tx hash calculation")
+
+
+def _tx_hash_from_raw(raw_tx: str) -> str:
+    raw_bytes = _hex_to_bytes(raw_tx)
+    if raw_bytes is None:
+        raise ValueError("Invalid raw tx hex")
+    return "0x" + _keccak256(raw_bytes).hex()
+
+
+def _sendraw_success_response(req_obj: Dict[str, Any], tx_hash: str) -> Dict[str, Any]:
+    return {
+        "jsonrpc": req_obj.get("jsonrpc", "2.0"),
+        "id": req_obj.get("id"),
+        "result": tx_hash,
+    }
+
+
+def _sendraw_error_response(req_obj: Dict[str, Any], message: str) -> Dict[str, Any]:
+    return {
+        "jsonrpc": req_obj.get("jsonrpc", "2.0"),
+        "id": req_obj.get("id"),
+        "error": {"code": -32602, "message": message},
+    }
 
 
 def _scenario_name(file_base: str, test_name: str) -> str:
@@ -1497,13 +1545,75 @@ def request(flow: http.HTTPFlow) -> None:
         _produce_if_quiet(force=True)
 
     if isinstance(req_obj, list):
+        if not entries:
+            return
+        has_sendraw = any(_is_sendraw(it) for it in entries)
+        if not has_sendraw:
+            return
+
+        local_results: List[Dict[str, Any]] = []
+        forward_entries: List[Dict[str, Any]] = []
         for it in entries:
             if _is_sendraw(it):
-                _record_sendraw(it, flow.request.headers)
+                params = it.get("params") or []
+                raw = params[0] if params and isinstance(params[0], str) else None
+                if not raw:
+                    local_results.append(_sendraw_error_response(it, "Invalid params: missing raw transaction"))
+                    continue
+                try:
+                    tx_hash = _tx_hash_from_raw(raw)
+                    _record_sendraw(it, flow.request.headers)
+                    local_results.append(_sendraw_success_response(it, tx_hash))
+                except Exception as e:
+                    local_results.append(_sendraw_error_response(it, f"Failed to hash raw transaction: {e}"))
+            else:
+                forward_entries.append(it)
+
+        upstream_results: List[Dict[str, Any]] = []
+        if forward_entries:
+            try:
+                upstream_obj = _http_post_json(
+                    RPC_DIRECT,
+                    forward_entries,
+                    timeout=30,
+                    headers={"Content-Type": "application/json"},
+                )
+                if isinstance(upstream_obj, list):
+                    upstream_results = [x for x in upstream_obj if isinstance(x, dict)]
+                elif isinstance(upstream_obj, dict):
+                    upstream_results = [upstream_obj]
+            except Exception as e:
+                _log(f"WARN mixed batch forward failed: {e}")
+                for it in forward_entries:
+                    upstream_results.append(_sendraw_error_response(it, f"Upstream forwarding failed: {e}"))
+
+        merged: List[Dict[str, Any]] = []
+        merged.extend(upstream_results)
+        merged.extend(local_results)
+        flow.response = http.Response.make(
+            200,
+            json.dumps(merged),
+            {"Content-Type": "application/json"},
+        )
         return
 
     if isinstance(req_obj, dict) and _is_sendraw(req_obj):
-        _record_sendraw(req_obj, flow.request.headers)
+        params = req_obj.get("params") or []
+        raw = params[0] if params and isinstance(params[0], str) else None
+        if not raw:
+            body = _sendraw_error_response(req_obj, "Invalid params: missing raw transaction")
+        else:
+            try:
+                tx_hash = _tx_hash_from_raw(raw)
+                _record_sendraw(req_obj, flow.request.headers)
+                body = _sendraw_success_response(req_obj, tx_hash)
+            except Exception as e:
+                body = _sendraw_error_response(req_obj, f"Failed to hash raw transaction: {e}")
+        flow.response = http.Response.make(
+            200,
+            json.dumps(body),
+            {"Content-Type": "application/json"},
+        )
         return
 
 
