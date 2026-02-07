@@ -108,7 +108,7 @@ _ACTIVE_GRP: Optional[Tuple[str, str, str]] = None  # (file_base, test_name, pha
 _LAST_TS: float = 0.0
 _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
-_BUF: List[Tuple[str, Any, Optional[str]]] = []  # list of (txrlp_hex, original_id, test_id)
+_BUF: List[Tuple[str, Any, Optional[str]]] = []  # list of (txrlp_hex, original_id, extra_data_label)
 _STOP: bool = False
 _LIFECYCLE_TS: Optional[int] = None
 
@@ -497,13 +497,26 @@ def _derive_group_from_meta(meta: Optional[Dict[str, Any]]) -> Tuple[str, str, s
     return (file_base, test_name, phase)
 
 
-def _extra_data_from_test_id(test_id: Optional[str]) -> str:
+def _extra_data_label_from_meta(meta: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(meta, dict):
+        return None
+    test_id = meta.get("testId")
     if not isinstance(test_id, str) or not test_id:
-        return "0x"
-    full_hash_hex = hashlib.sha256(test_id.encode("utf-8")).hexdigest()
-    # extraData is capped at 32 bytes; encode a readable 32-char hash prefix as ASCII bytes.
-    ascii_prefix = full_hash_hex[:32].encode("ascii")
-    return "0x" + ascii_prefix.hex()
+        return None
+    phase = meta.get("phase")
+    if isinstance(phase, str) and phase:
+        return f"{phase}:{test_id}"
+    return test_id
+
+
+def _extra_data_from_label(label: Optional[str]) -> str:
+    # Keep extraData human-readable in client logs; header remains consensus-hashed as usual.
+    if not isinstance(label, str) or not label:
+        label = "Nethermind v1.37.0a"
+    # Ensure printable, stable ASCII before truncating to the 32-byte header limit.
+    ascii_text = "".join(ch if 32 <= ord(ch) <= 126 else "_" for ch in label)
+    data = ascii_text.encode("ascii", errors="ignore")[:32]
+    return "0x" + data.hex()
 
 
 def _keccak256(data: bytes) -> bytes:
@@ -882,7 +895,7 @@ def _cleanup_empty_txt_files() -> None:
 # Flushing / Production
 # ---------------------------------------------------------------------------
 
-def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_test_id: Optional[str] = None) -> None:
+def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra_data_label: Optional[str] = None) -> None:
     if not txrlps:
         _log(f"flush skipped: empty buffer for group={grp}")
         return
@@ -937,7 +950,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_test_
             _log(f"flush failed: parent block missing hash for group={grp} source={parent_source}")
             return
 
-        extra_data = _extra_data_from_test_id(last_test_id)
+        extra_data = _extra_data_from_label(last_extra_data_label)
 
         parent_ts_hex = parent_block.get("timestamp")
         try:
@@ -1163,8 +1176,8 @@ def _produce_if_quiet(force: bool = False) -> None:
         _BUF = []
     _log(f"flushing group={grp} size={len(buf_copy)} reason={'force' if force else 'quiet'}")
     if buf_copy:
-        last_test_id = buf_copy[-1][2]
-        _flush_group(grp, [x[0] for x in buf_copy], last_test_id=last_test_id)
+        last_extra_data_label = buf_copy[-1][2]
+        _flush_group(grp, [x[0] for x in buf_copy], last_extra_data_label=last_extra_data_label)
 
 
 def _monitor() -> None:
@@ -1437,7 +1450,7 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         to_merged=True,
     )
 
-    current_test_id = meta.get("testId") if isinstance(meta, dict) and isinstance(meta.get("testId"), str) else None
+    current_extra_data_label = _extra_data_label_from_meta(meta)
     force_prev: Optional[Tuple[Tuple[str, str, str], List[Tuple[str, Any, Optional[str]]]]] = None
     with _GROUP_LOCK:
         if _ACTIVE_GRP and grp != _ACTIVE_GRP and _PENDING:
@@ -1445,7 +1458,7 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
             _PENDING = False
             _BUF = []
         _ACTIVE_GRP = grp
-        _BUF.append((raw, item.get("id"), current_test_id))
+        _BUF.append((raw, item.get("id"), current_extra_data_label))
         _PENDING = True
         _LAST_TS = time.time()
     _log(f"buffered tx: group={grp} buf_size={len(_BUF)}")
@@ -1453,8 +1466,8 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
     if force_prev:
         prev_grp, prev_buf = force_prev
         _log(f"group switch → force flush prev={prev_grp} size={len(prev_buf)}")
-        prev_last_test_id = prev_buf[-1][2] if prev_buf else None
-        _flush_group(prev_grp, [x[0] for x in prev_buf], last_test_id=prev_last_test_id)
+        prev_last_extra_data_label = prev_buf[-1][2] if prev_buf else None
+        _flush_group(prev_grp, [x[0] for x in prev_buf], last_extra_data_label=prev_last_extra_data_label)
 
 
 # ---- mitmproxy HTTP hooks --------------------------------------------------
