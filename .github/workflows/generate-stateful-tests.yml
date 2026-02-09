@@ -4,11 +4,6 @@ on:
   push:
     branches:
       - repricing
-    paths:
-      - .github/workflows/generate-stateful-tests.yml
-      - eest_stateful_generator.py
-      - make_warmup_tests.py
-      - fill_tests_metadata_db.py
   workflow_dispatch:
     inputs:
       nethermind_image:
