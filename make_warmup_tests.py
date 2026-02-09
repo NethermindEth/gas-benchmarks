@@ -5,6 +5,7 @@ from pathlib import Path
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
 IMAGES = '{"nethermind":"default","geth":"ethereum/client-go:latest","reth":"default","erigon":"default","besu":"default"}'
 KUTE_BINARY = Path("./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute")
+WARMUP_GETH_LOG = Path("warmup_geth.log")
 
 _ACTIVE_CLEANUP = {
     "client": "geth",
@@ -95,8 +96,16 @@ def _ensure_kute_binary() -> None:
         raise RuntimeError(f"Kute binary still not found after prepare_tools: {KUTE_BINARY}")
 
 
-def collect_mismatches(container: str = "gas-execution-client") -> dict:
+def collect_mismatches(container: str = "gas-execution-client", log_path: Path = None, scope: str = "") -> dict:
     logs = subprocess.check_output(["docker", "logs", container], stderr=subprocess.STDOUT, text=True)
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as f:
+            label = scope or "global"
+            f.write(f"\n===== {label} | {container} =====\n")
+            f.write(logs)
+            if not logs.endswith("\n"):
+                f.write("\n")
     pat = re.compile(r"blockhash mismatch, want ([0-9a-f]{64}), got ([0-9a-f]{64})")
     m = {}
     for line in logs.splitlines():
@@ -385,6 +394,7 @@ def main():
     pattern = args.pattern
 
     counters = {"total": 0, "bumped": 0, "dropped": 0}
+    WARMUP_GETH_LOG.write_text("", encoding="utf-8")
     use_overlay = bool(args.snapshotRoot)
     snapshot_root = Path(args.snapshotRoot).expanduser() if use_overlay else None
     overlay_root = Path(args.overlayRoot).expanduser()
@@ -480,7 +490,11 @@ def main():
                 check=True,
             )
 
-            mapping = collect_mismatches("gas-execution-client")
+            mapping = collect_mismatches(
+                "gas-execution-client",
+                log_path=WARMUP_GETH_LOG,
+                scope=relative_subdir,
+            )
             if not mapping:
                 print(f"[warn] No blockhash mismatches found in {relative_subdir}; skipping fix.")
                 continue

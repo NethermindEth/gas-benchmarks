@@ -218,6 +218,26 @@ jobs:
             --overlayRoot "$OVERLAY_ROOT" \
             --network "$CFG_CHAIN"
 
+      - name: Print warmup geth log
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -f warmup_geth.log ]; then
+            echo "=== warmup_geth.log (tail -n 400) ==="
+            tail -n 400 warmup_geth.log
+          else
+            echo "warmup_geth.log not found"
+          fi
+
+      - name: Upload warmup geth log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warmup-geth-log-${{ github.run_id }}
+          path: warmup_geth.log
+          if-no-files-found: warn
+
       - name: Upload traces metadata to DB
         shell: bash
         env:
@@ -291,6 +311,7 @@ jobs:
             mitm_full.log
             mitm_nethermind.log
             nethermind.log
+            warmup_geth.log
 
       - name: Purge all running Docker containers on runner
         if: always()
