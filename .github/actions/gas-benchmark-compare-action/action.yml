@@ -198,6 +198,13 @@ runs:
             echo "Saved reports to reports_a_run${run_num}/"
             ls -la "reports_a_run${run_num}/"
           fi
+
+          # Save results for this iteration
+          mkdir -p "results_a_run${run_num}"
+          if [ -d results ]; then
+            cp -r results/* "results_a_run${run_num}/"
+            echo "Saved results to results_a_run${run_num}/"
+          fi
         done
 
     - name: Average reports for Run A
@@ -282,6 +289,13 @@ runs:
             cp -r reports/* "reports_b_run${run_num}/"
             echo "Saved reports to reports_b_run${run_num}/"
             ls -la "reports_b_run${run_num}/"
+          fi
+
+          # Save results for this iteration
+          mkdir -p "results_b_run${run_num}"
+          if [ -d results ]; then
+            cp -r results/* "results_b_run${run_num}/"
+            echo "Saved results to results_b_run${run_num}/"
           fi
         done
 
@@ -379,8 +393,8 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
       run: |
-        # Include individual run reports if they exist
-        zip -r comparison_reports.zip reports_a reports_b reports_comparison reports_a_run* reports_b_run* 2>/dev/null || \
+        # Include individual run reports and results if they exist
+        zip -r comparison_reports.zip reports_a reports_b reports_comparison reports_a_run* reports_b_run* results_a_run* results_b_run* 2>/dev/null || \
         zip -r comparison_reports.zip reports_a reports_b reports_comparison
 
     - name: Upload comparison artifacts
@@ -388,9 +402,9 @@ runs:
       with:
         name: gas-benchmarks-comparison-outputs
         path: |
-          reports_a
-          reports_b
           reports_a_run*
           reports_b_run*
+          results_a_run*
+          results_b_run*
           reports_comparison
           comparison_reports.zip
