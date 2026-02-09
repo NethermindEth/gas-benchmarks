@@ -30,7 +30,7 @@ on:
       payload_dir:
         description: "Output directory for generated tests"
         required: true
-        default: "repricings_stateful/bloatnet"
+        default: "test-shifts"
       test_path:
         description: "EEST test path passed to eest_stateful_generator.py"
         required: true
@@ -83,7 +83,7 @@ jobs:
       CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:testing-rpc' }}
       CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
       CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
-      CFG_PAYLOAD_DIR: ${{ github.event.inputs.payload_dir || 'repricings_stateful/bloatnet' }}
+      CFG_PAYLOAD_DIR: ${{ github.event.inputs.payload_dir || 'test-shifts' }}
       CFG_TEST_PATH: ${{ github.event.inputs.test_path || 'tests/benchmark/stateful/' }}
       CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/LouisTsai-Csie/execution-specs' }}
       CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'fix-sstore-invariant' }}
