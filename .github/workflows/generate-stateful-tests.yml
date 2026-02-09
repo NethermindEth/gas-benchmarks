@@ -42,6 +42,10 @@ on:
         description: "Comma-separated benchmark values"
         required: true
         default: "30,60,90,120,150,180,210,240,270,300"
+      gas_bump_count:
+        description: "Gas bump count (-1 = chain default: 0 for perf-devnet-2, 1000 for mainnet)"
+        required: true
+        default: "-1"
       eest_mode:
         description: "EEST mode"
         required: true
@@ -83,6 +87,7 @@ jobs:
       CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/ethereum/execution-specs' }}
       CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'forks/amsterdam' }}
       CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
+      CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
       CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
       CFG_STUBS_FILE: ${{ github.event.inputs.stubs_file || 'stubs.json' }}
       CFG_RPC_ADDRESS: ${{ github.event.inputs.rpc_address || '0x86cF016FB873D50a7B8F31EB154c9234DD31b058' }}
@@ -128,6 +133,14 @@ jobs:
 
           PAYLOAD_DIR="$CFG_PAYLOAD_DIR"
           WARMUP_DIR="${PAYLOAD_DIR}_warmup"
+          GAS_BUMP_COUNT="$CFG_GAS_BUMP_COUNT"
+          if [[ "$GAS_BUMP_COUNT" == "-1" ]]; then
+            if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
+              GAS_BUMP_COUNT="0"
+            else
+              GAS_BUMP_COUNT="1000"
+            fi
+          fi
 
           TABLE_BASE=$(echo "$PAYLOAD_DIR" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
           if [[ -z "$TABLE_BASE" ]]; then
@@ -142,6 +155,7 @@ jobs:
           echo "SNAPSHOT_DIR_GETH=$SNAPSHOT_DIR_GETH" >> "$GITHUB_ENV"
           echo "PAYLOAD_DIR=$PAYLOAD_DIR" >> "$GITHUB_ENV"
           echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
+          echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
           echo "DB_TABLE=$DB_TABLE" >> "$GITHUB_ENV"
 
       - name: Clean stale outputs from previous runs on runner
@@ -168,7 +182,7 @@ jobs:
             --eest-repo "$CFG_EEST_REPO" \
             --eest-branch "$CFG_EEST_BRANCH" \
             --eest-clean-clone \
-            --gas-bump-count 0 \
+            --gas-bump-count "$GAS_BUMP_COUNT" \
             --eest_mode "$CFG_EEST_MODE" \
             --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
             --stubs-file "$CFG_STUBS_FILE" \

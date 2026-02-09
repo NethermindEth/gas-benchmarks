@@ -1,4 +1,4 @@
-﻿name: Run Parallel Benchmarks in multiple clients
+name: Run Parallel Benchmarks (Manual)
 
 on:
   workflow_dispatch:
@@ -264,3 +264,4 @@ jobs:
             --db-password "${{ env.DB_PASSWORD }}" \
             --log-level DEBUG \
             --reports-dir 'extracted-results/reports/'
+
