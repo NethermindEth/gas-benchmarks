@@ -254,3 +254,11 @@ jobs:
             mitm_full.log
             mitm_nethermind.log
             nethermind.log
+
+      - name: Purge all running Docker containers on runner
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          docker ps -q | xargs -r docker rm -f
+          docker system prune -af --volumes || true
