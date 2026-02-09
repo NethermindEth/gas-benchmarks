@@ -259,6 +259,26 @@ jobs:
           git commit -m "chore: generate stateful tests for ${PAYLOAD_DIR}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
+      - name: Print nethermind.log
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -f nethermind.log ]; then
+            echo "=== nethermind.log (tail -n 400) ==="
+            tail -n 400 nethermind.log
+          else
+            echo "nethermind.log not found"
+          fi
+
+      - name: Upload nethermind.log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethermind-log-${{ github.run_id }}
+          path: nethermind.log
+          if-no-files-found: warn
+
       - name: Upload generated artifacts
         if: always()
         uses: actions/upload-artifact@v4
