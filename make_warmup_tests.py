@@ -1,9 +1,57 @@
 #!/usr/bin/env python
-import argparse, json, os, shutil, subprocess, re, sys, time
+import argparse, atexit, json, os, shutil, signal, subprocess, re, sys, time
 from pathlib import Path
 
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
 IMAGES = '{"nethermind":"default","geth":"ethereum/client-go:latest","reth":"default","erigon":"default","besu":"default"}'
+
+_ACTIVE_CLEANUP = {
+    "client": "geth",
+    "data_dir": None,
+    "overlay": None,
+}
+
+
+def _set_active_cleanup(data_dir: Path = None, overlay: dict = None) -> None:
+    _ACTIVE_CLEANUP["data_dir"] = data_dir
+    _ACTIVE_CLEANUP["overlay"] = overlay
+
+
+def _clear_active_cleanup() -> None:
+    _ACTIVE_CLEANUP["data_dir"] = None
+    _ACTIVE_CLEANUP["overlay"] = None
+
+
+def _run_active_cleanup() -> None:
+    data_dir = _ACTIVE_CLEANUP.get("data_dir")
+    overlay = _ACTIVE_CLEANUP.get("overlay")
+    if data_dir is None and overlay is None:
+        return
+    try:
+        teardown(str(_ACTIVE_CLEANUP.get("client") or "geth"), data_dir=data_dir, overlay=overlay)
+    except Exception as e:
+        print(f"[warn] active cleanup failed: {e}")
+    finally:
+        _clear_active_cleanup()
+
+
+def _sig_handler(signum, _frame) -> None:
+    print(f"[info] Caught signal {signum}; running cleanup")
+    _run_active_cleanup()
+    raise SystemExit(128 + signum)
+
+
+atexit.register(_run_active_cleanup)
+for _sig in (signal.SIGINT, signal.SIGTERM):
+    try:
+        signal.signal(_sig, _sig_handler)
+    except Exception:
+        pass
+if hasattr(signal, "SIGHUP"):
+    try:
+        signal.signal(signal.SIGHUP, _sig_handler)
+    except Exception:
+        pass
 
 
 def process_line(line: str, counters: dict, bump: bool) -> str:
@@ -210,7 +258,9 @@ def teardown(cl_name: str, data_dir: Path = None, overlay: dict = None):
     if not script_dir.is_dir():
         print(f"[!] No such directory {script_dir}, skipping teardown")
         return
-    subprocess.run(["docker", "compose", "down"], cwd=script_dir, check=True)
+    down = subprocess.run(["docker", "compose", "down"], cwd=script_dir, check=False)
+    if down.returncode != 0:
+        print(f"[warn] docker compose down returned {down.returncode} in {script_dir}")
     if overlay:
         _cleanup_overlay(overlay)
         return
@@ -365,6 +415,7 @@ def main():
             else:
                 data_dir = Path("scripts/geth/execution-data").resolve()
                 data_dir.mkdir(parents=True, exist_ok=True)
+            _set_active_cleanup(data_dir=data_dir, overlay=overlay)
 
             setup_node_cmd = [
                 sys.executable,
@@ -408,6 +459,7 @@ def main():
             print(f"[info] Replaced blockHash in {fixed} file(s) for {relative_subdir}.")
         finally:
             teardown("geth", data_dir=data_dir, overlay=overlay)
+            _clear_active_cleanup()
 
     # Flatten all generated warmup files into a single top-level directory
     # (e.g., warmup-repricing/*.txt), keeping the latest copy on name collision.
