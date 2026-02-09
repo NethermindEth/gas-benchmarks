@@ -840,6 +840,11 @@ def main():
         help="Skip fetching/pulling execution-specs when the repo already exists.",
     )
     parser.add_argument(
+        "--eest-clean-clone",
+        action="store_true",
+        help="Remove existing execution-specs checkout and clone fresh before running.",
+    )
+    parser.add_argument(
         "--parameter_filter",
         default="",
         help="Pass-through filter string forwarded to execute remote as -k \"...\".",
@@ -906,6 +911,9 @@ def main():
 
     repo_dir = Path("execution-specs")
     repo_url = args.eest_repo
+    if args.eest_clean_clone and repo_dir.exists():
+        print(f"[INFO] --eest-clean-clone enabled; removing existing {repo_dir}")
+        shutil.rmtree(repo_dir)
     if repo_dir.exists():
         if not args.eest_no_pull:
             run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
