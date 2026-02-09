@@ -70,7 +70,7 @@ permissions:
 
 jobs:
   generate:
-    runs-on: [self-hosted, stateful-generator]
+    runs-on: stateful-generator
     timeout-minutes: 360
 
     env:
