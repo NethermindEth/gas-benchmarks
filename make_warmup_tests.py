@@ -79,6 +79,11 @@ def process_line(line: str, counters: dict, bump: bool) -> str:
 def _is_hex32(value: str) -> bool:
     if not isinstance(value, str) or not value.startswith("0x") or len(value) != 66:
         return False
+    try:
+        int(value[2:], 16)
+        return True
+    except ValueError:
+        return False
 
 
 def _ensure_kute_binary() -> None:
@@ -88,11 +93,6 @@ def _ensure_kute_binary() -> None:
     subprocess.run(["make", "prepare_tools"], check=True)
     if not KUTE_BINARY.exists():
         raise RuntimeError(f"Kute binary still not found after prepare_tools: {KUTE_BINARY}")
-    try:
-        int(value[2:], 16)
-        return True
-    except ValueError:
-        return False
 
 
 def collect_mismatches(container: str = "gas-execution-client") -> dict:
