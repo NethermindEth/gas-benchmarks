@@ -43,7 +43,7 @@ on:
         required: true
         default: "30,60,90,120,150,180,210,240,270,300"
       gas_bump_count:
-        description: "Gas bump count (-1 = chain default: 0 for perf-devnet-2, 1000 for mainnet)"
+        description: "Gas bump count (-1 = chain default: 0 for perf-devnet-2, 2000 for mainnet)"
         required: true
         default: "-1"
       eest_mode:
@@ -138,7 +138,7 @@ jobs:
             if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
               GAS_BUMP_COUNT="0"
             else
-              GAS_BUMP_COUNT="1000"
+              GAS_BUMP_COUNT="2000"
             fi
           fi
 
