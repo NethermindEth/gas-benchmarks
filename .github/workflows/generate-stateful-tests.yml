@@ -84,11 +84,11 @@ jobs:
       CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
       CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
       CFG_PAYLOAD_DIR: ${{ github.event.inputs.payload_dir || 'test-shifts' }}
-      CFG_TEST_PATH: ${{ github.event.inputs.test_path || 'tests/benchmark/stateful/' }}
+      CFG_TEST_PATH: ${{ github.event.inputs.test_path || 'tests/benchmark/compute/instruction/test_bitwise::test_shifts' }}
       CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/LouisTsai-Csie/execution-specs' }}
       CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'fix-sstore-invariant' }}
       CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
-      CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'stateful' }}
+      CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
       CFG_STUBS_FILE: ${{ github.event.inputs.stubs_file || 'stubs.json' }}
       CFG_RPC_ADDRESS: ${{ github.event.inputs.rpc_address || '0x86cF016FB873D50a7B8F31EB154c9234DD31b058' }}
 
