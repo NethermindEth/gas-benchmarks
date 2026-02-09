@@ -265,10 +265,13 @@ jobs:
 
       - name: Commit generated tests and warmups to triggering branch
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git add "$PAYLOAD_DIR" "$WARMUP_DIR"
 
           if git diff --cached --quiet; then
@@ -277,7 +280,19 @@ jobs:
           fi
 
           git commit -m "chore: generate stateful tests for ${PAYLOAD_DIR}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Push succeeded on attempt ${attempt}"
+              exit 0
+            fi
+            if [ "${attempt}" -eq 5 ]; then
+              echo "Push failed after ${attempt} attempts"
+              exit 1
+            fi
+            sleep_seconds=$((attempt * 10))
+            echo "Push failed (attempt ${attempt}), retrying in ${sleep_seconds}s..."
+            sleep "${sleep_seconds}"
+          done
 
       - name: Print nethermind.log
         if: always()
