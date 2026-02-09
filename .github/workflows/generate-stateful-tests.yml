@@ -76,10 +76,10 @@ jobs:
     env:
       OVERLAY_ROOT: /mnt/sda/overlay-workspace
       TRACES_JSON: traces.json
-      DB_HOST: perfnet.core.nethermind.dev
-      DB_PORT: "5432"
-      DB_USER: nethermind
-      DB_NAME: monitoring
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_NAME: ${{ secrets.PERFNET_0_DB_NAME }}
       CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:testing-rpc' }}
       CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
       CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
@@ -198,7 +198,7 @@ jobs:
       - name: Upload traces metadata to DB
         shell: bash
         env:
-          DB_PASSWORD: ${{ secrets.METADATA_DB_PASSWORD }}
+          DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
         run: |
           set -euo pipefail
           if [ ! -f "$TRACES_JSON" ]; then
