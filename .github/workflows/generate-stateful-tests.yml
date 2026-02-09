@@ -205,11 +205,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          GENESIS_ARGS=()
+          if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
+            GENESIS_ARGS=(-g "scripts/genesisfiles/geth/bloatnet.json")
+          fi
           python3 make_warmup_tests.py \
             -s "$PAYLOAD_DIR" \
             -d "$WARMUP_DIR" \
-            -g "scripts/genesisfiles/geth/bloatnet.json" \
             -p "*.txt" \
+            "${GENESIS_ARGS[@]}" \
             --snapshotRoot "$SNAPSHOT_DIR_GETH" \
             --overlayRoot "$OVERLAY_ROOT" \
             --network "$CFG_CHAIN"
