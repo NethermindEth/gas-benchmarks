@@ -319,6 +319,7 @@ def main():
 
     # Optionally override GENESIS_ROOT from --genesisPath when a valid top-level stateRoot exists.
     print("[debug] Starting warmup test generation")
+    genesis_state_root_applied = False
     if args.genesisPath:
         try:
             with open(args.genesisPath, 'r') as gf:
@@ -329,6 +330,7 @@ def main():
                 print(f"[debug] Overriding GENESIS_ROOT:\n  before: {GENESIS_ROOT}")
                 GENESIS_ROOT = state_root
                 print(f"  after: {GENESIS_ROOT}")
+                genesis_state_root_applied = True
             else:
                 print(
                     f"[warn] Genesis file '{args.genesisPath}' has no valid top-level stateRoot; "
@@ -337,6 +339,12 @@ def main():
         except Exception as e:
             print(f"❌ Error reading genesis file '{args.genesisPath}': {e}")
             sys.exit(1)
+    print(
+        f"[info] Genesis patch status: "
+        f"genesis_path={'set' if args.genesisPath else 'not-set'}, "
+        f"state_root_from_genesis={'yes' if genesis_state_root_applied else 'no'}, "
+        f"active_state_root={GENESIS_ROOT}"
+    )
 
     test_sources = []
 
