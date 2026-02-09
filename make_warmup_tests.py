@@ -75,6 +75,16 @@ def process_line(line: str, counters: dict, bump: bool) -> str:
     return json.dumps(obj) + "\n"
 
 
+def _is_hex32(value: str) -> bool:
+    if not isinstance(value, str) or not value.startswith("0x") or len(value) != 66:
+        return False
+    try:
+        int(value[2:], 16)
+        return True
+    except ValueError:
+        return False
+
+
 def collect_mismatches(container: str = "gas-execution-client") -> dict:
     logs = subprocess.check_output(["docker", "logs", container], stderr=subprocess.STDOUT, text=True)
     pat = re.compile(r"blockhash mismatch, want ([0-9a-f]{64}), got ([0-9a-f]{64})")
@@ -277,7 +287,7 @@ def main():
     p.add_argument("-s", "--source", nargs="+", help="Source root(s)")
     p.add_argument(
         "-g", "--genesisPath",
-        help="Path to a genesis JSON file; used to override default GENESIS_ROOT and passed to setup_node.py"
+        help="Path to a genesis JSON file; if it has top-level stateRoot it overrides fallback GENESIS_ROOT, and is passed to setup_node.py"
     )
     p.add_argument(
         "-j", "--sourceJson",
@@ -307,19 +317,23 @@ def main():
     )
     args = p.parse_args()
 
-    # Override GENESIS_ROOT from --genesisPath
+    # Optionally override GENESIS_ROOT from --genesisPath when a valid top-level stateRoot exists.
     print("[debug] Starting warmup test generation")
     if args.genesisPath:
         try:
             with open(args.genesisPath, 'r') as gf:
                 gen_data = json.load(gf)
-            if 'stateRoot' not in gen_data:
-                print(f"❌ Genesis file '{args.genesisPath}' missing 'stateRoot' field.")
-                sys.exit(1)
             global GENESIS_ROOT
-            print(f"[debug] Overriding GENESIS_ROOT:\n  before: {GENESIS_ROOT}")
-            GENESIS_ROOT = gen_data['stateRoot']
-            print(f"  after: {GENESIS_ROOT}")
+            state_root = gen_data.get("stateRoot")
+            if isinstance(state_root, str) and _is_hex32(state_root):
+                print(f"[debug] Overriding GENESIS_ROOT:\n  before: {GENESIS_ROOT}")
+                GENESIS_ROOT = state_root
+                print(f"  after: {GENESIS_ROOT}")
+            else:
+                print(
+                    f"[warn] Genesis file '{args.genesisPath}' has no valid top-level stateRoot; "
+                    f"keeping fallback value {GENESIS_ROOT}"
+                )
         except Exception as e:
             print(f"❌ Error reading genesis file '{args.genesisPath}': {e}")
             sys.exit(1)
