@@ -3,10 +3,6 @@ name: Generate Stateful Tests
 on:
   workflow_dispatch:
     inputs:
-      repo_ref:
-        description: "Branch/tag/SHA to checkout"
-        required: true
-        default: "repricing"
       nethermind_image:
         description: "Nethermind Docker image"
         required: true
@@ -27,18 +23,6 @@ on:
         description: "Output directory for generated tests"
         required: true
         default: "repricings_stateful/bloatnet"
-      warmup_dir:
-        description: "Output directory for warmup tests"
-        required: true
-        default: "warmup-repricing-stateful-bloatnet"
-      warmup_source:
-        description: "Warmup source directory (empty = payload_dir)"
-        required: false
-        default: ""
-      warmup_pattern:
-        description: "Warmup source file pattern"
-        required: true
-        default: "*.txt"
       test_path:
         description: "EEST test path passed to eest_stateful_generator.py"
         required: true
@@ -72,46 +56,29 @@ on:
         description: "RPC funding address"
         required: true
         default: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
-      overlay_root:
-        description: "Overlay workspace path on runner"
-        required: true
-        default: "/mnt/sda/overlay-workspace"
-      traces_json:
-        description: "Trace json output path"
-        required: true
-        default: "traces.json"
-      db_host:
-        description: "Metadata DB host"
-        required: true
-        default: "perfnet.core.nethermind.dev"
-      db_port:
-        description: "Metadata DB port"
-        required: true
-        default: "5432"
-      db_user:
-        description: "Metadata DB user"
-        required: true
-        default: "nethermind"
-      db_name:
-        description: "Metadata DB name"
-        required: true
-        default: "monitoring"
-      db_table:
-        description: "Metadata DB table name"
-        required: true
-        default: "gas_limit_benchmarks_test_metadata_compute_osaka_bloatnet"
+
+permissions:
+  contents: write
 
 jobs:
   generate:
     runs-on: self-hosted
     timeout-minutes: 360
 
+    env:
+      OVERLAY_ROOT: /mnt/sda/overlay-workspace
+      TRACES_JSON: traces.json
+      DB_HOST: perfnet.core.nethermind.dev
+      DB_PORT: "5432"
+      DB_USER: nethermind
+      DB_NAME: monitoring
+
     steps:
-      - name: Checkout gas-benchmarks repository
+      - name: Checkout gas-benchmarks repository from triggering branch
         uses: actions/checkout@v4
         with:
           repository: NethermindEth/gas-benchmarks
-          ref: ${{ inputs.repo_ref }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
           lfs: true
 
@@ -125,10 +92,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Resolve snapshot paths from chain
+      - name: Resolve runtime paths and table naming
         shell: bash
         run: |
           set -euo pipefail
+
           case "${{ inputs.chain }}" in
             mainnet)
               SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
@@ -143,8 +111,31 @@ jobs:
               exit 1
               ;;
           esac
+
+          PAYLOAD_DIR="${{ inputs.payload_dir }}"
+          WARMUP_DIR="${PAYLOAD_DIR}_warmup"
+
+          TABLE_BASE=$(echo "$PAYLOAD_DIR" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+          if [[ -z "$TABLE_BASE" ]]; then
+            TABLE_BASE="generated_tests"
+          fi
+          if [[ "$TABLE_BASE" =~ ^[0-9] ]]; then
+            TABLE_BASE="t_${TABLE_BASE}"
+          fi
+          DB_TABLE="${TABLE_BASE}_metadata"
+
           echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
           echo "SNAPSHOT_DIR_GETH=$SNAPSHOT_DIR_GETH" >> "$GITHUB_ENV"
+          echo "PAYLOAD_DIR=$PAYLOAD_DIR" >> "$GITHUB_ENV"
+          echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
+          echo "DB_TABLE=$DB_TABLE" >> "$GITHUB_ENV"
+
+      - name: Clean stale outputs from previous runs on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$PAYLOAD_DIR" "$WARMUP_DIR"
+          rm -f "$TRACES_JSON"
 
       - name: Generate stateful tests
         shell: bash
@@ -158,7 +149,7 @@ jobs:
             --rpc-seed-key "$RPC_SEED_KEY" \
             --rpc-address "${{ inputs.rpc_address }}" \
             --test-path "${{ inputs.test_path }}" \
-            --payload-dir "${{ inputs.payload_dir }}" \
+            --payload-dir "$PAYLOAD_DIR" \
             --eest-repo "${{ inputs.eest_repo }}" \
             --eest-branch "${{ inputs.eest_branch }}" \
             --gas-bump-count 0 \
@@ -167,24 +158,20 @@ jobs:
             --stubs-file "${{ inputs.stubs_file }}" \
             --snapshot-dir "$SNAPSHOT_DIR_NM" \
             --chain "${{ inputs.chain }}" \
-            --overlay-root "${{ inputs.overlay_root }}" \
+            --overlay-root "$OVERLAY_ROOT" \
             --trace-json \
-            --trace-json-output "${{ inputs.traces_json }}"
+            --trace-json-output "$TRACES_JSON"
 
       - name: Generate warmup tests
         shell: bash
         run: |
           set -euo pipefail
-          WARMUP_SOURCE="${{ inputs.warmup_source }}"
-          if [ -z "$WARMUP_SOURCE" ]; then
-            WARMUP_SOURCE="${{ inputs.payload_dir }}"
-          fi
           python3 make_warmup_tests.py \
-            -s "$WARMUP_SOURCE" \
-            -d "${{ inputs.warmup_dir }}" \
-            -p "${{ inputs.warmup_pattern }}" \
+            -s "$PAYLOAD_DIR" \
+            -d "$WARMUP_DIR" \
+            -p "*.txt" \
             --snapshotRoot "$SNAPSHOT_DIR_GETH" \
-            --overlayRoot "${{ inputs.overlay_root }}" \
+            --overlayRoot "$OVERLAY_ROOT" \
             --network "${{ inputs.chain }}"
 
       - name: Upload traces metadata to DB
@@ -193,18 +180,40 @@ jobs:
           DB_PASSWORD: ${{ secrets.METADATA_DB_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ ! -f "${{ inputs.traces_json }}" ]; then
-            echo "Trace json not found: ${{ inputs.traces_json }}" >&2
+          if [ ! -f "$TRACES_JSON" ]; then
+            echo "Trace json not found: $TRACES_JSON" >&2
             exit 1
           fi
           python3 fill_tests_metadata_db.py \
-            --json-file "${{ inputs.traces_json }}" \
-            --db-host "${{ inputs.db_host }}" \
-            --db-port "${{ inputs.db_port }}" \
-            --db-user "${{ inputs.db_user }}" \
+            --json-file "$TRACES_JSON" \
+            --db-host "$DB_HOST" \
+            --db-port "$DB_PORT" \
+            --db-user "$DB_USER" \
             --db-password "$DB_PASSWORD" \
-            --db-name "${{ inputs.db_name }}" \
-            --table-name "${{ inputs.db_table }}"
+            --db-name "$DB_NAME" \
+            --table-name "$DB_TABLE"
+
+      - name: Remove traces file after DB upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$TRACES_JSON"
+
+      - name: Commit generated tests and warmups to triggering branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add "$PAYLOAD_DIR" "$WARMUP_DIR"
+
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: generate stateful tests for ${PAYLOAD_DIR}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Upload generated artifacts
         if: always()
@@ -212,9 +221,8 @@ jobs:
         with:
           name: generated-stateful-tests-${{ github.run_id }}
           path: |
-            ${{ inputs.payload_dir }}
-            ${{ inputs.warmup_dir }}
-            ${{ inputs.traces_json }}
+            ${{ env.PAYLOAD_DIR }}
+            ${{ env.WARMUP_DIR }}
             mitm.log
             mitm_full.log
             mitm_nethermind.log
