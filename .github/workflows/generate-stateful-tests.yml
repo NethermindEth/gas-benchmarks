@@ -55,10 +55,6 @@ on:
           - repricing
           - benchmark
         default: "stateful"
-      stubs_file:
-        description: "Path to stubs file in repository"
-        required: true
-        default: "stubs.json"
       rpc_address:
         description: "RPC funding address"
         required: true
@@ -89,7 +85,7 @@ jobs:
       CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
       CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
       CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
-      CFG_STUBS_FILE: ${{ github.event.inputs.stubs_file || 'stubs.json' }}
+      CFG_STUBS_FILE: "execution-specs/tests/benchmark/stateful/bloatnet/stubs.json"
       CFG_RPC_ADDRESS: ${{ github.event.inputs.rpc_address || '0x86cF016FB873D50a7B8F31EB154c9234DD31b058' }}
 
     steps:
