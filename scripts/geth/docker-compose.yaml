@@ -48,9 +48,6 @@ services:
       - --metrics.port=8008
       - --verbosity=3
       - --networkid=12159
-      - --override.osaka=1746612311
-      - --override.bpo1=1746612311
-      - --override.bpo2=1746612311
     logging:
       driver: json-file
       options:
