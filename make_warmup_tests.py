@@ -4,6 +4,7 @@ from pathlib import Path
 
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
 IMAGES = '{"nethermind":"default","geth":"ethereum/client-go:latest","reth":"default","erigon":"default","besu":"default"}'
+KUTE_BINARY = Path("./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute")
 
 _ACTIVE_CLEANUP = {
     "client": "geth",
@@ -78,6 +79,15 @@ def process_line(line: str, counters: dict, bump: bool) -> str:
 def _is_hex32(value: str) -> bool:
     if not isinstance(value, str) or not value.startswith("0x") or len(value) != 66:
         return False
+
+
+def _ensure_kute_binary() -> None:
+    if KUTE_BINARY.exists():
+        return
+    print(f"[warn] Kute binary not found at {KUTE_BINARY}. Running `make prepare_tools`.")
+    subprocess.run(["make", "prepare_tools"], check=True)
+    if not KUTE_BINARY.exists():
+        raise RuntimeError(f"Kute binary still not found after prepare_tools: {KUTE_BINARY}")
     try:
         int(value[2:], 16)
         return True
@@ -316,6 +326,7 @@ def main():
         help="Optional network name to resolve snapshot subdirectories (and passed to setup_node.py)",
     )
     args = p.parse_args()
+    _ensure_kute_binary()
 
     # Optionally override GENESIS_ROOT from --genesisPath when a valid top-level stateRoot exists.
     print("[debug] Starting warmup test generation")
