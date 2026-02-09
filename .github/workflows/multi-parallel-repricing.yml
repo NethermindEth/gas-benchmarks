@@ -1,4 +1,4 @@
-name: Run Parallel Benchmarks in multiple clients
+name: Run Parallel Benchmarks (Repricing)
 
 on:
   push:
@@ -324,3 +324,4 @@ jobs:
           ref: "${{ github.ref }}"
           token: "${{ secrets.GH_TOKEN }}"
           inputs: ${{ toJson(github.event.inputs) }}
+
