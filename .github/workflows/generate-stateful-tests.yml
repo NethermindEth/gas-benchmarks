@@ -1,6 +1,14 @@
 name: Generate Stateful Tests
 
 on:
+  push:
+    branches:
+      - repricing
+    paths:
+      - .github/workflows/generate-stateful-tests.yml
+      - eest_stateful_generator.py
+      - make_warmup_tests.py
+      - fill_tests_metadata_db.py
   workflow_dispatch:
     inputs:
       nethermind_image:
@@ -72,6 +80,17 @@ jobs:
       DB_PORT: "5432"
       DB_USER: nethermind
       DB_NAME: monitoring
+      CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:testing-rpc' }}
+      CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
+      CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
+      CFG_PAYLOAD_DIR: ${{ github.event.inputs.payload_dir || 'repricings_stateful/bloatnet' }}
+      CFG_TEST_PATH: ${{ github.event.inputs.test_path || 'tests/benchmark/stateful/' }}
+      CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/LouisTsai-Csie/execution-specs' }}
+      CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'fix-sstore-invariant' }}
+      CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
+      CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'stateful' }}
+      CFG_STUBS_FILE: ${{ github.event.inputs.stubs_file || 'stubs.json' }}
+      CFG_RPC_ADDRESS: ${{ github.event.inputs.rpc_address || '0x86cF016FB873D50a7B8F31EB154c9234DD31b058' }}
 
     steps:
       - name: Checkout gas-benchmarks repository from triggering branch
@@ -97,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          case "${{ inputs.chain }}" in
+          case "$CFG_CHAIN" in
             mainnet)
               SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
               SNAPSHOT_DIR_GETH="/mnt/sda/mainnet/geth"
@@ -107,12 +126,12 @@ jobs:
               SNAPSHOT_DIR_GETH="/mnt/sda/perf-devnet-2/geth"
               ;;
             *)
-              echo "Unsupported chain: ${{ inputs.chain }}" >&2
+              echo "Unsupported chain: $CFG_CHAIN" >&2
               exit 1
               ;;
           esac
 
-          PAYLOAD_DIR="${{ inputs.payload_dir }}"
+          PAYLOAD_DIR="$CFG_PAYLOAD_DIR"
           WARMUP_DIR="${PAYLOAD_DIR}_warmup"
 
           TABLE_BASE=$(echo "$PAYLOAD_DIR" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
@@ -144,20 +163,20 @@ jobs:
         run: |
           set -euo pipefail
           python3 eest_stateful_generator.py \
-            --nethermind-image "${{ inputs.nethermind_image }}" \
-            --fork "${{ inputs.fork }}" \
+            --nethermind-image "$CFG_NETHERMIND_IMAGE" \
+            --fork "$CFG_FORK" \
             --rpc-seed-key "$RPC_SEED_KEY" \
-            --rpc-address "${{ inputs.rpc_address }}" \
-            --test-path "${{ inputs.test_path }}" \
+            --rpc-address "$CFG_RPC_ADDRESS" \
+            --test-path "$CFG_TEST_PATH" \
             --payload-dir "$PAYLOAD_DIR" \
-            --eest-repo "${{ inputs.eest_repo }}" \
-            --eest-branch "${{ inputs.eest_branch }}" \
+            --eest-repo "$CFG_EEST_REPO" \
+            --eest-branch "$CFG_EEST_BRANCH" \
             --gas-bump-count 0 \
-            --eest_mode "${{ inputs.eest_mode }}" \
-            --gas-benchmark-values "${{ inputs.gas_benchmark_values }}" \
-            --stubs-file "${{ inputs.stubs_file }}" \
+            --eest_mode "$CFG_EEST_MODE" \
+            --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
+            --stubs-file "$CFG_STUBS_FILE" \
             --snapshot-dir "$SNAPSHOT_DIR_NM" \
-            --chain "${{ inputs.chain }}" \
+            --chain "$CFG_CHAIN" \
             --overlay-root "$OVERLAY_ROOT" \
             --trace-json \
             --trace-json-output "$TRACES_JSON"
@@ -172,7 +191,7 @@ jobs:
             -p "*.txt" \
             --snapshotRoot "$SNAPSHOT_DIR_GETH" \
             --overlayRoot "$OVERLAY_ROOT" \
-            --network "${{ inputs.chain }}"
+            --network "$CFG_CHAIN"
 
       - name: Upload traces metadata to DB
         shell: bash
