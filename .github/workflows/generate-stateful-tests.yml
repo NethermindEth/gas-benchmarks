@@ -224,8 +224,8 @@ jobs:
         run: |
           set +e
           if [ -f warmup_geth.log ]; then
-            echo "=== warmup_geth.log (tail -n 400) ==="
-            tail -n 400 warmup_geth.log
+            echo "=== warmup_geth.log (full) ==="
+            cat warmup_geth.log
           else
             echo "warmup_geth.log not found"
           fi
@@ -285,8 +285,8 @@ jobs:
         run: |
           set +e
           if [ -f nethermind.log ]; then
-            echo "=== nethermind.log (tail -n 400) ==="
-            tail -n 400 nethermind.log
+            echo "=== nethermind.log (full) ==="
+            cat nethermind.log
           else
             echo "nethermind.log not found"
           fi
