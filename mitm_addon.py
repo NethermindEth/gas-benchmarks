@@ -546,7 +546,17 @@ def _tx_hash_from_raw(raw_tx: str) -> str:
     raw_bytes = _hex_to_bytes(raw_tx)
     if raw_bytes is None:
         raise ValueError("Invalid raw tx hex")
-    return "0x" + _keccak256(raw_bytes).hex()
+    try:
+        return "0x" + _keccak256(raw_bytes).hex()
+    except Exception as local_err:
+        # Fallback for minimal runner environments: ask node for Keccak(data).
+        raw_hex = raw_tx if isinstance(raw_tx, str) and raw_tx.startswith("0x") else ("0x" + raw_bytes.hex())
+        rpc_hash = _rpc("web3_sha3", [raw_hex])
+        if isinstance(rpc_hash, str) and rpc_hash.startswith("0x") and len(rpc_hash) == 66:
+            return rpc_hash
+        raise RuntimeError(
+            f"No local Keccak-256 implementation and web3_sha3 fallback failed: {local_err}"
+        )
 
 
 def _sendraw_success_response(req_obj: Dict[str, Any], tx_hash: str) -> Dict[str, Any]:
