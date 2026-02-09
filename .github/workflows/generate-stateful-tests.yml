@@ -155,6 +155,7 @@ jobs:
           set -euo pipefail
           rm -rf "$PAYLOAD_DIR" "$WARMUP_DIR"
           rm -f "$TRACES_JSON"
+          rm -rf execution-specs
 
       - name: Generate stateful tests
         shell: bash
@@ -171,6 +172,7 @@ jobs:
             --payload-dir "$PAYLOAD_DIR" \
             --eest-repo "$CFG_EEST_REPO" \
             --eest-branch "$CFG_EEST_BRANCH" \
+            --eest-clean-clone \
             --gas-bump-count 0 \
             --eest_mode "$CFG_EEST_MODE" \
             --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
