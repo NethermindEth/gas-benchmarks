@@ -195,6 +195,7 @@ jobs:
           python3 make_warmup_tests.py \
             -s "$PAYLOAD_DIR" \
             -d "$WARMUP_DIR" \
+            -g "scripts/genesisfiles/geth/bloatnet.json" \
             -p "*.txt" \
             --snapshotRoot "$SNAPSHOT_DIR_GETH" \
             --overlayRoot "$OVERLAY_ROOT" \
