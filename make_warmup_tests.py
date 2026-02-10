@@ -193,9 +193,6 @@ def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
 
     replaced_files = 0
     replaced_payloads = 0
-    print("[debug] blockHash mapping:")
-    for got, want in normalized_mapping.items():
-        print(f"  {got!r} -> {want!r}")
 
     for txt in tests_root.rglob(pattern):
         try:
@@ -244,11 +241,7 @@ def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
             txt.write_text("".join(new_lines), encoding="utf-8")
             replaced_files += 1
             replaced_payloads += file_replaced
-            print(f"[debug] {txt}: replaced blockHash in {file_replaced} payload line(s)")
-        else:
-            print(f"[debug] No blockHash replaced in {txt}")
-
-    print(f"[debug] total files changed: {replaced_files}; payload lines replaced: {replaced_payloads}")
+    print(f"[info] blockHash patching complete: files changed={replaced_files}, payload lines replaced={replaced_payloads}")
     return replaced_files
 
 
@@ -445,7 +438,6 @@ def main():
     _ensure_kute_binary()
 
     # Optionally override GENESIS_ROOT from --genesisPath when a valid top-level stateRoot exists.
-    print("[debug] Starting warmup test generation")
     genesis_state_root_applied = False
     if args.genesisPath:
         try:
@@ -454,9 +446,7 @@ def main():
             global GENESIS_ROOT
             state_root = gen_data.get("stateRoot")
             if isinstance(state_root, str) and _is_hex32(state_root):
-                print(f"[debug] Overriding GENESIS_ROOT:\n  before: {GENESIS_ROOT}")
                 GENESIS_ROOT = state_root
-                print(f"  after: {GENESIS_ROOT}")
                 genesis_state_root_applied = True
             else:
                 print(
@@ -557,7 +547,7 @@ def main():
             if use_overlay and snapshot_root is not None:
                 overlay = _prepare_overlay_for_client(snapshot_root, args.network, overlay_root, WARMUP_CLIENT)
                 data_dir = Path(overlay["merged"]).resolve()
-                print(f"[debug] Using overlay data dir: {data_dir}")
+                print(f"[info] Using overlay data dir: {data_dir}")
             else:
                 data_dir = Path(f"scripts/{WARMUP_CLIENT}/execution-data").resolve()
                 data_dir.mkdir(parents=True, exist_ok=True)
