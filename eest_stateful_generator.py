@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import atexit
 import re
+import threading
 
 CHAIN_TO_ID = {
     "mainnet": 1,
@@ -168,13 +169,107 @@ def _ensure_testing_placeholders(payload_dir: Path) -> None:
 
 # --------------------------------------------------------------------------------
 
+def _looks_like_block_hash(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith("0x") and len(value) == 66
+
+
+def _parse_block_number(value: Any) -> Optional[int]:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            if value.startswith("0x"):
+                return int(value, 16)
+            return int(value)
+        except Exception:
+            return None
+    return None
+
+
+def _extract_trace_block_hash(trace_data: Dict[str, Any]) -> Optional[str]:
+    candidates: List[Dict[str, Any]] = [trace_data]
+    for key in ("block", "header", "blockHeader", "executionPayload"):
+        value = trace_data.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
+
+    for candidate in candidates:
+        for key in ("blockHash", "block_hash", "hash"):
+            value = candidate.get(key)
+            if _looks_like_block_hash(value):
+                return value.lower()
+    return None
+
+
+def _extract_trace_opcode_counts(trace_data: Dict[str, Any]) -> Dict[str, int]:
+    raw = trace_data.get("opcodeCounts")
+    if not isinstance(raw, dict):
+        raw = trace_data.get("opcode_counts")
+    if not isinstance(raw, dict):
+        return {}
+
+    merged: Dict[str, int] = {}
+    for opcode, count in raw.items():
+        if not isinstance(opcode, str):
+            continue
+        try:
+            merged[opcode] = merged.get(opcode, 0) + int(count)
+        except Exception:
+            continue
+    return merged
+
+
+def _snapshot_trace_files_once(
+    opcode_tracing_dir: Path,
+    history_dir: Path,
+    seen_state: Dict[Path, tuple[int, int]],
+) -> None:
+    history_dir.mkdir(parents=True, exist_ok=True)
+    for trace_file in opcode_tracing_dir.glob("opcode-trace-block-*.json"):
+        if not trace_file.is_file():
+            continue
+        try:
+            stat = trace_file.stat()
+        except Exception:
+            continue
+        state = (stat.st_mtime_ns, stat.st_size)
+        if seen_state.get(trace_file) == state:
+            continue
+        seen_state[trace_file] = state
+
+        hash_suffix = "nohash"
+        try:
+            trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
+            block_hash = _extract_trace_block_hash(trace_data)
+            if block_hash:
+                hash_suffix = block_hash[2:14]
+        except Exception:
+            pass
+
+        snapshot_name = f"{trace_file.stem}--{state[0]}--{hash_suffix}.json"
+        snapshot_path = history_dir / snapshot_name
+        try:
+            shutil.copy2(trace_file, snapshot_path)
+        except Exception:
+            continue
+
+
+def _snapshot_trace_files_worker(stop_event: threading.Event, opcode_tracing_dir: Path) -> None:
+    history_dir = opcode_tracing_dir / "_history"
+    seen_state: Dict[Path, tuple[int, int]] = {}
+    while not stop_event.is_set():
+        _snapshot_trace_files_once(opcode_tracing_dir, history_dir, seen_state)
+        stop_event.wait(0.1)
+    _snapshot_trace_files_once(opcode_tracing_dir, history_dir, seen_state)
+
+
 def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, output_path: Path) -> None:
     """
     Process test files in testing_dir and create a JSON mapping test names to opcode counts.
 
     For each test file:
-    1. Extract blockNumber from the engine_newPayloadV4 request (hex to int)
-    2. Find corresponding opcode-trace-block-{blockNumber}.json
+    1. Extract blockNumber + blockHash from engine_newPayloadV* requests
+    2. Match opcode traces by blockHash (fallback: blockNumber)
     3. Extract opcodeCounts from the trace file
     4. If multiple blocks, merge (sum) opcode counts
     """
@@ -183,6 +278,36 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
     if not testing_dir.exists():
         print(f"[WARN] Testing directory {testing_dir} does not exist")
         return
+
+    trace_files = sorted(opcode_tracing_dir.rglob("opcode-trace-block-*.json"))
+    traces_by_hash: Dict[str, Dict[str, int]] = {}
+    traces_by_number: Dict[int, List[tuple[int, Dict[str, int]]]] = {}
+
+    for trace_file in trace_files:
+        if not trace_file.is_file():
+            continue
+        try:
+            trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        opcode_counts = _extract_trace_opcode_counts(trace_data)
+        if not opcode_counts:
+            continue
+
+        mtime_ns = trace_file.stat().st_mtime_ns
+        block_hash = _extract_trace_block_hash(trace_data)
+        if block_hash:
+            traces_by_hash[block_hash] = opcode_counts
+
+        match = re.search(r"opcode-trace-block-(\d+)", trace_file.name)
+        if match:
+            block_num = int(match.group(1))
+            traces_by_number.setdefault(block_num, []).append((mtime_ns, opcode_counts))
+
+    for block_num, entries in traces_by_number.items():
+        entries.sort(key=lambda item: item[0])
+        traces_by_number[block_num] = entries
 
     # Iterate through all numbered subdirectories
     for subdir in sorted(testing_dir.iterdir()):
@@ -199,43 +324,61 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
                 print(f"[WARN] Failed to read {txt_file}: {e}")
                 continue
 
-            # Collect all block numbers from the file
-            block_numbers = []
+            # Collect all block references from the file
+            block_refs: List[Dict[str, Any]] = []
             for line in lines:
                 if not line.strip():
                     continue
                 try:
                     data = json.loads(line)
-                    # Change this for other forks!
-                    if data.get("method") == "engine_newPayloadV4":
-                        params = data.get("params", [])
-                        if params and isinstance(params[0], dict):
-                            block_num_hex = params[0].get("blockNumber")
-                            if block_num_hex:
-                                block_numbers.append(int(block_num_hex, 16))
+                    method = data.get("method")
+                    if not isinstance(method, str) or not method.startswith("engine_newPayloadV"):
+                        continue
+                    params = data.get("params", [])
+                    if not params or not isinstance(params[0], dict):
+                        continue
+                    payload = params[0]
+                    block_num = _parse_block_number(payload.get("blockNumber"))
+                    if block_num is None:
+                        continue
+                    block_hash = payload.get("blockHash")
+                    if isinstance(block_hash, str):
+                        block_hash = block_hash.lower()
+                    else:
+                        block_hash = None
+                    block_refs.append({"number": block_num, "hash": block_hash})
                 except Exception:
                     continue
 
-            if not block_numbers:
-                print(f"[WARN] No blockNumber found in {txt_file}")
+            if not block_refs:
+                print(f"[WARN] No payload block references found in {txt_file}")
                 continue
 
             # Merge opcode counts from all blocks
             merged_counts: dict[str, int] = {}
-            for block_num in block_numbers:
-                trace_file = opcode_tracing_dir / f"opcode-trace-block-{block_num}.json"
-                if not trace_file.exists():
-                    print(f"[WARN] Trace file not found: {trace_file}")
+            number_cursor: Dict[int, int] = {}
+            for block_ref in block_refs:
+                block_num = int(block_ref["number"])
+                block_hash = block_ref.get("hash")
+                opcode_counts = None
+
+                if isinstance(block_hash, str):
+                    opcode_counts = traces_by_hash.get(block_hash)
+
+                if opcode_counts is None:
+                    number_entries = traces_by_number.get(block_num, [])
+                    if number_entries:
+                        cursor = number_cursor.get(block_num, 0)
+                        index = cursor if cursor < len(number_entries) else len(number_entries) - 1
+                        number_cursor[block_num] = cursor + 1
+                        opcode_counts = number_entries[index][1]
+
+                if opcode_counts is None:
+                    print(f"[WARN] No trace match for blockNumber={block_num} blockHash={block_hash} in {txt_file.name}")
                     continue
 
-                try:
-                    trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
-                    opcode_counts = trace_data.get("opcodeCounts", {})
-                    for opcode, count in opcode_counts.items():
-                        merged_counts[opcode] = merged_counts.get(opcode, 0) + count
-                except Exception as e:
-                    print(f"[WARN] Failed to parse {trace_file}: {e}")
-                    continue
+                for opcode, count in opcode_counts.items():
+                    merged_counts[opcode] = merged_counts.get(opcode, 0) + count
 
             if merged_counts:
                 results[test_name] = merged_counts
@@ -999,8 +1142,11 @@ def main():
 
     CLEANUP["scenario_merged"] = CLEANUP["scenario_upper"] = CLEANUP["scenario_work"] = None
 
+    opcode_tracing_dir = Path("opcode-tracing")
     if args.trace_json:
-        Path("opcode-tracing").mkdir(parents=True, exist_ok=True)
+        if opcode_tracing_dir.exists():
+            shutil.rmtree(opcode_tracing_dir, ignore_errors=True)
+        opcode_tracing_dir.mkdir(parents=True, exist_ok=True)
 
     stop_and_remove_container("eest-nethermind")
     if use_overlay_base:
@@ -1163,6 +1309,17 @@ def main():
             run_env["PYTHONPATH"] = src_path
         run_env["EEST_POLL_INTERVAL"] = "0.01"
 
+        trace_snapshot_stop: Optional[threading.Event] = None
+        trace_snapshot_thread: Optional[threading.Thread] = None
+        if args.trace_json:
+            trace_snapshot_stop = threading.Event()
+            trace_snapshot_thread = threading.Thread(
+                target=_snapshot_trace_files_worker,
+                args=(trace_snapshot_stop, opcode_tracing_dir),
+                daemon=True,
+            )
+            trace_snapshot_thread.start()
+
         tests_proc = subprocess.Popen(uv_cmd, cwd=str(repo_dir), env=run_env)
         processed_tokens: set[str] = set()
         return_code: Optional[int] = None
@@ -1208,13 +1365,17 @@ def main():
                 except subprocess.TimeoutExpired:
                     tests_proc.kill()
                     tests_proc.wait()
+            if trace_snapshot_stop is not None:
+                trace_snapshot_stop.set()
+            if trace_snapshot_thread is not None:
+                trace_snapshot_thread.join(timeout=10)
 
         if return_code is None:
             return_code = tests_proc.returncode
         if args.trace_json:
             generate_opcode_trace_json(
                 testing_dir=Path(payloads_dir / "testing"),
-                opcode_tracing_dir=Path("opcode-tracing"),
+                opcode_tracing_dir=opcode_tracing_dir,
                 output_path=Path(args.trace_json_output),
             )
         if return_code != 0:
