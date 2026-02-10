@@ -50,7 +50,6 @@ is_stateful_directory() {
 collect_stateful_directory() {
   local dir="$1"
   python3 - <<'PY' "$dir"
-import json
 import sys
 from pathlib import Path
 
@@ -67,103 +66,28 @@ ordered = []
 for name in ("gas-bump.txt", "funding.txt", "setup-global-test.txt"):
     try_append(root / name, ordered)
 
-scenario_entries = []
+phase_to_files = {}
+for phase in ("setup", "testing", "cleanup"):
+    phase_dir = root / phase
+    per_name = {}
+    if phase_dir.is_dir():
+        for file in sorted(phase_dir.rglob("*.txt")):
+            # If multiple files with the same stem exist (legacy leftovers),
+            # keep a deterministic choice.
+            existing = per_name.get(file.stem)
+            if existing is None or str(file) < str(existing):
+                per_name[file.stem] = file
+    phase_to_files[phase] = per_name
 
-order_file = root / "scenario_order.json"
-if order_file.is_file():
-    try:
-        data = json.loads(order_file.read_text(encoding="utf-8"))
-    except Exception:
-        data = []
-    if isinstance(data, list):
-        seen_names = set()
-        for item in data:
-            if isinstance(item, dict):
-                idx = item.get("index")
-                name = item.get("name")
-            else:
-                idx = None
-                name = item
-            if not isinstance(name, str):
-                continue
-            name = name.strip()
-            if not name or name in seen_names:
-                continue
-            seen_names.add(name)
-            scenario_entries.append((idx, name))
+scenario_names = sorted(
+    set(phase_to_files["setup"].keys())
+    | set(phase_to_files["testing"].keys())
+    | set(phase_to_files["cleanup"].keys())
+)
 
-testing_dir = root / "testing"
-subdirs = []
-if testing_dir.is_dir():
-    subdirs = [p for p in sorted(testing_dir.iterdir()) if p.is_dir()]
-
-if subdirs:
-    scenario_entries = []
-    for scen_dir in subdirs:
-        try:
-            idx_value = int(scen_dir.name)
-        except ValueError:
-            idx_value = None
-        txt_files = sorted(scen_dir.glob("*.txt"))
-        if not txt_files:
-            # Fall back to setup/cleanup directories sharing the same index.
-            for phase in ("setup", "cleanup"):
-                phase_dir = root / phase / scen_dir.name
-                if phase_dir.is_dir():
-                    txt_files = sorted(phase_dir.glob("*.txt"))
-                    if txt_files:
-                        break
-        if not txt_files:
-            # No files found for this scenario yet, skip but preserve ordering gap.
-            continue
-        for txt in txt_files:
-            scenario_entries.append((idx_value, txt.stem))
-
-if not scenario_entries:
-    names = []
-    if testing_dir.is_dir():
-        names = [file.stem for file in sorted(testing_dir.rglob("*.txt"))]
-    if not names:
-        phases = ("setup", "testing", "cleanup")
-        name_set = set()
-        for phase in phases:
-            phase_dir = root / phase
-            if not phase_dir.is_dir():
-                continue
-            for file in sorted(phase_dir.rglob("*.txt")):
-                name_set.add(file.stem)
-        names = sorted(name_set)
-    scenario_entries = [(None, name) for name in names]
-
-deduped_entries = []
-seen = set()
-for idx, name in scenario_entries:
-    key = (idx, name)
-    if key in seen:
-        continue
-    seen.add(key)
-    deduped_entries.append((idx, name))
-
-scenario_entries = deduped_entries
-
-
-def resolve_path(phase, idx, name):
-    candidates = []
-    if isinstance(idx, int):
-        candidates.append(root / phase / f"{idx:06d}" / f"{name}.txt")
-        candidates.append(root / phase / str(idx) / f"{name}.txt")
-    if isinstance(idx, str) and idx:
-        candidates.append(root / phase / idx / f"{name}.txt")
-    candidates.append(root / phase / f"{name}.txt")
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return None
-
-scenario_entries.sort(key=lambda item: (item[0] if isinstance(item[0], int) else float('inf')))
-for idx, name in scenario_entries:
+for name in scenario_names:
     for phase in ("setup", "testing", "cleanup"):
-        path = resolve_path(phase, idx, name)
+        path = phase_to_files[phase].get(name)
         if path is not None:
             ordered.append(str(path))
         elif phase == "testing":

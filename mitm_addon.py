@@ -175,6 +175,7 @@ _PENDING_OVERLAY: Optional[Tuple[str, int, Optional[str]]] = None  # (scenario, 
 _PENDING_OVERLAY_CONFIRMED: bool = False
 _SEPARATOR_READY_FOR_NEXT_SETUP: bool = False
 _PENDING_SEPARATOR_PAIR: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None
+_LEGACY_PHASE_DIRS_CLEANED: bool = False
 
 _OVERLAY_PRIMED: bool = False
 
@@ -183,11 +184,9 @@ def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
     base = _PHASE_BASE_DIRS.get(phase.lower())
     if base is None:
         raise ValueError(f"unknown phase '{phase}'")
-    idx = _register_scenario(scenario)
+    _register_scenario(scenario)
     base.mkdir(parents=True, exist_ok=True)
-    scenario_dir = base / f"{idx:06d}"
-    scenario_dir.mkdir(parents=True, exist_ok=True)
-    return scenario_dir / f"{scenario}.txt"
+    return base / f"{scenario}.txt"
 
 
 _SCENARIO_ORDER_FILE_RAW = _CFG.get("scenario_order_file")
@@ -705,20 +704,26 @@ def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dic
 # ---------------------------------------------------------------------------
 
 def _ensure_dirs_and_cleanup_old() -> None:
+    global _LEGACY_PHASE_DIRS_CLEANED
     _PAYLOADS_DIR.mkdir(parents=True, exist_ok=True)
     _SETUP_DIR.mkdir(parents=True, exist_ok=True)
     _TESTING_DIR.mkdir(parents=True, exist_ok=True)
     _CLEANUP_DIR.mkdir(parents=True, exist_ok=True)
-    # Remove stray files directly under phase directories (legacy layout)
+
+    # One-time cleanup: remove legacy numbered subdirectories from old layout.
+    if _LEGACY_PHASE_DIRS_CLEANED:
+        return
+    _LEGACY_PHASE_DIRS_CLEANED = True
+
     for phase_dir in (_SETUP_DIR, _TESTING_DIR, _CLEANUP_DIR):
         try:
             for child in phase_dir.iterdir():
-                if child.is_file() and child.suffix == ".txt":
+                if child.is_dir() and child.name.isdigit():
                     try:
-                        child.unlink()
-                        _log(f"removed legacy top-level payload file: {child}")
+                        shutil.rmtree(child, ignore_errors=True)
+                        _log(f"removed legacy numbered scenario dir: {child}")
                     except Exception as exc:
-                        _log(f"failed to remove legacy payload file {child}: {exc}")
+                        _log(f"failed to remove legacy scenario dir {child}: {exc}")
         except Exception:
             pass
 
@@ -806,10 +811,6 @@ def _truncate_if_first_seen(scenario: str) -> None:
         return
     idx = _register_scenario(scenario)
     _SEEN_SCENARIOS.add(scenario)
-    for phase in ("setup", "testing", "cleanup"):
-        p = _scenario_file_path(phase, scenario)
-        with p.open("w", encoding="utf-8"):
-            pass
     _TESTING_SEEN_COUNT[scenario] = 0
     _log(f"initialized scenario index {idx} for {scenario}")
 

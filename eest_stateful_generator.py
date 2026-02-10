@@ -476,86 +476,81 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
                 return candidate
         return None
 
-    # Iterate through all numbered subdirectories
-    for subdir in sorted(testing_dir.iterdir()):
-        if not subdir.is_dir():
+    testing_files = sorted([p for p in testing_dir.rglob("*.txt") if p.is_file()])
+    for txt_file in testing_files:
+        test_name = txt_file.stem
+
+        try:
+            lines = txt_file.read_text(encoding="utf-8").splitlines()
+        except Exception as e:
+            print(f"[WARN] Failed to read {txt_file}: {e}")
             continue
 
-        # Find .txt files in the subdirectory
-        for txt_file in subdir.glob("*.txt"):
-            test_name = txt_file.stem
-
+        # Collect all block references from the file
+        block_refs: List[Dict[str, Any]] = []
+        for line in lines:
+            if not line.strip():
+                continue
             try:
-                lines = txt_file.read_text(encoding="utf-8").splitlines()
-            except Exception as e:
-                print(f"[WARN] Failed to read {txt_file}: {e}")
+                data = json.loads(line)
+                method = data.get("method")
+                if not isinstance(method, str) or not method.startswith("engine_newPayloadV"):
+                    continue
+                params = data.get("params", [])
+                if not params or not isinstance(params[0], dict):
+                    continue
+                payload = params[0]
+                block_ref = _extract_payload_block_ref(payload)
+                if block_ref is not None:
+                    block_refs.append(block_ref)
+            except Exception:
                 continue
 
-            # Collect all block references from the file
-            block_refs: List[Dict[str, Any]] = []
-            for line in lines:
-                if not line.strip():
-                    continue
-                try:
-                    data = json.loads(line)
-                    method = data.get("method")
-                    if not isinstance(method, str) or not method.startswith("engine_newPayloadV"):
-                        continue
-                    params = data.get("params", [])
-                    if not params or not isinstance(params[0], dict):
-                        continue
-                    payload = params[0]
-                    block_ref = _extract_payload_block_ref(payload)
-                    if block_ref is not None:
-                        block_refs.append(block_ref)
-                except Exception:
-                    continue
+        if not block_refs:
+            print(f"[WARN] No payload block references found in {txt_file}")
+            continue
 
-            if not block_refs:
-                print(f"[WARN] No payload block references found in {txt_file}")
+        # Merge opcode counts from all blocks
+        merged_counts: dict[str, int] = {}
+        for block_ref in block_refs:
+            block_number = block_ref.get("block_number")
+            block_hash = block_ref.get("block_hash")
+            timestamp = block_ref.get("timestamp")
+            parent_hash = block_ref.get("parent_hash")
+            tx_count = block_ref.get("tx_count")
+            entry_id: Optional[int] = None
+
+            if isinstance(block_hash, str):
+                entry_id = _pick_unused(traces_by_hash.get(block_hash))
+            if entry_id is None:
+                entry_id = _pick_unused(traces_by_full.get((block_number, timestamp, parent_hash, tx_count)))
+            if entry_id is None:
+                entry_id = _pick_unused(traces_by_num_ts_parent.get((block_number, timestamp, parent_hash)))
+            if entry_id is None:
+                entry_id = _pick_unused(traces_by_num_ts.get((block_number, timestamp)))
+            if entry_id is None and isinstance(block_number, int):
+                entry_id = _pick_unused(traces_by_number.get(block_number))
+
+            if entry_id is None:
+                print(
+                    f"[WARN] No trace match for blockNumber={block_number} "
+                    f"blockHash={block_hash} timestamp={timestamp} parentHash={parent_hash} in {txt_file.name}"
+                )
                 continue
 
-            # Merge opcode counts from all blocks
-            merged_counts: dict[str, int] = {}
-            for block_ref in block_refs:
-                block_number = block_ref.get("block_number")
-                block_hash = block_ref.get("block_hash")
-                timestamp = block_ref.get("timestamp")
-                parent_hash = block_ref.get("parent_hash")
-                tx_count = block_ref.get("tx_count")
-                entry_id: Optional[int] = None
+            used_entry_ids.add(entry_id)
+            opcode_counts = trace_entries[entry_id]["opcode_counts"]
+            for opcode, count in opcode_counts.items():
+                merged_counts[opcode] = merged_counts.get(opcode, 0) + count
 
-                if isinstance(block_hash, str):
-                    entry_id = _pick_unused(traces_by_hash.get(block_hash))
-                if entry_id is None:
-                    entry_id = _pick_unused(traces_by_full.get((block_number, timestamp, parent_hash, tx_count)))
-                if entry_id is None:
-                    entry_id = _pick_unused(traces_by_num_ts_parent.get((block_number, timestamp, parent_hash)))
-                if entry_id is None:
-                    entry_id = _pick_unused(traces_by_num_ts.get((block_number, timestamp)))
-                if entry_id is None and isinstance(block_number, int):
-                    entry_id = _pick_unused(traces_by_number.get(block_number))
-
-                if entry_id is None:
-                    print(
-                        f"[WARN] No trace match for blockNumber={block_number} "
-                        f"blockHash={block_hash} timestamp={timestamp} parentHash={parent_hash} in {txt_file.name}"
-                    )
-                    continue
-
-                used_entry_ids.add(entry_id)
-                opcode_counts = trace_entries[entry_id]["opcode_counts"]
-                for opcode, count in opcode_counts.items():
-                    merged_counts[opcode] = merged_counts.get(opcode, 0) + count
-
-            if merged_counts:
-                result_key = str(txt_file.relative_to(testing_dir).with_suffix("")).replace("\\", "/")
-                if result_key in results:
-                    duplicate_idx = 1
-                    while f"{result_key}__{duplicate_idx}" in results:
-                        duplicate_idx += 1
-                    result_key = f"{result_key}__{duplicate_idx}"
-                results[result_key] = merged_counts
+        if merged_counts:
+            result_key = str(txt_file.relative_to(testing_dir).with_suffix("")).replace("\\", "/")
+            if result_key in results:
+                duplicate_idx = 1
+                while f"{result_key}__{duplicate_idx}" in results:
+                    duplicate_idx += 1
+                result_key = f"{result_key}__{duplicate_idx}"
+            results[result_key] = merged_counts
 
     # Write output JSON
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1556,7 +1551,6 @@ def main():
             raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:
             _append_suffix_to_scenarios(payloads_dir, gas_values[0])
-        _ensure_testing_placeholders(payloads_dir)
     finally:
         if not args.keep:
             try:
