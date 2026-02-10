@@ -196,6 +196,10 @@ jobs:
           set -euo pipefail
           STATEFUL_GENERATOR_LOG="stateful_generator.log"
           : > "$STATEFUL_GENERATOR_LOG"
+          GENESIS_ARGS=()
+          if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
+            GENESIS_ARGS=(--genesis-path "scripts/genesisfiles/nethermind/bloatnet-prague.json")
+          fi
           PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 eest_stateful_generator.py \
             --nethermind-image "$CFG_NETHERMIND_IMAGE" \
             --fork "$CFG_FORK" \
@@ -212,6 +216,7 @@ jobs:
             --stubs-file "$CFG_STUBS_FILE" \
             --snapshot-dir "$SNAPSHOT_DIR_NM" \
             --chain "$CFG_CHAIN" \
+            "${GENESIS_ARGS[@]}" \
             --overlay-root "$OVERLAY_ROOT" \
             --allow-execute-remote-failures \
             --trace-json \
