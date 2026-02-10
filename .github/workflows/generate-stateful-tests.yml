@@ -1,4 +1,5 @@
 name: Generate Stateful Tests
+run-name: Generate Stateful Tests [${{ inputs.payload_dir || 'repricings_compute/mainnet' }}]
 
 on:
   workflow_dispatch:
