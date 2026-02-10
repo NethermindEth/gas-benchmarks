@@ -91,7 +91,9 @@ jobs:
           df -h /mnt
 
       - name: Create temp directory for EEST fixture artifacts
-        run: mkdir -p /mnt/eest_artifacts
+        run: |
+          sudo mkdir -p /mnt/eest_artifacts
+          sudo chown $USER:$USER /mnt/eest_artifacts
 
       - name: Download EEST fixtures securely
         env:
