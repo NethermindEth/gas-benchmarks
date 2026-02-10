@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Download the latest benchmark fixtures from the execution-spec-tests repository,
+Download the latest benchmark fixtures from the execution-specs repository,
 cache the release metadata to avoid repeat downloads, and emit JSON-RPC payload
 files following the stateful test directory layout:
 
@@ -26,7 +26,7 @@ from typing import Dict, Iterable, Tuple
 
 import requests
 
-GITHUB_API = "https://api.github.com/repos/ethereum/execution-spec-tests/releases"
+GITHUB_API = "https://api.github.com/repos/ethereum/execution-specs/releases"
 BENCHMARK_PREFIX = "benchmark@v"
 ASSET_NAME = "fixtures_benchmark.tar.gz"
 CACHE_FILE = "release_cache.json"

@@ -11,9 +11,10 @@ import sys
 import textwrap
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import atexit
 import re
+import threading
 
 CHAIN_TO_ID = {
     "mainnet": 1,
@@ -34,14 +35,6 @@ CLEANUP = {
     "scenario_work": None,
     "mitm": None,
 }
-
-def _parse_bool(value: str) -> bool:
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "y", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "n", "off"}:
-        return False
-    raise argparse.ArgumentTypeError(f"Invalid boolean value: {value}")
 
 def run(cmd, cwd=None, env=None, check=True):
     print("\n[RUN] " + " ".join(cmd))
@@ -129,7 +122,441 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
                 pass
 
 
+def _ensure_testing_placeholders(payload_dir: Path) -> None:
+    testing_dir = payload_dir / "testing"
+
+    indices: set[str] = set()
+    numeric_indices: list[int] = []
+    widths: list[int] = []
+    if not testing_dir.is_dir():
+        return
+    for entry in testing_dir.iterdir():
+        if not entry.is_dir():
+            continue
+        indices.add(entry.name)
+        if entry.name.isdigit():
+            numeric_indices.append(int(entry.name))
+            widths.append(len(entry.name))
+
+    if numeric_indices:
+        min_idx = min(numeric_indices)
+        max_idx = max(numeric_indices)
+        pad_width = max(widths) if widths else 0
+        for idx in range(min_idx, max_idx + 1):
+            name = str(idx).zfill(pad_width) if pad_width else str(idx)
+            indices.add(name)
+
+    for idx in sorted(indices):
+        target_dir = testing_dir / idx
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            continue
+        try:
+            entries = list(target_dir.iterdir())
+        except Exception:
+            continue
+        if any(entry.name != ".gitkeep" for entry in entries):
+            continue
+        gitkeep = target_dir / ".gitkeep"
+        if gitkeep.exists():
+            continue
+        try:
+            gitkeep.write_text("", encoding="utf-8")
+        except Exception:
+            pass
+
+
 # --------------------------------------------------------------------------------
+
+def _looks_like_block_hash(value: Any) -> bool:
+    return isinstance(value, str) and value.startswith("0x") and len(value) == 66
+
+
+def _parse_block_number(value: Any) -> Optional[int]:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            if value.startswith("0x"):
+                return int(value, 16)
+            return int(value)
+        except Exception:
+            return None
+    return None
+
+
+def _extract_trace_block_hash(trace_data: Dict[str, Any]) -> Optional[str]:
+    candidates: List[Dict[str, Any]] = [trace_data]
+    for key in ("metadata", "meta", "result", "block", "header", "blockHeader", "executionPayload"):
+        value = trace_data.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
+            nested_meta = value.get("metadata")
+            if isinstance(nested_meta, dict):
+                candidates.append(nested_meta)
+
+    for candidate in candidates:
+        for key in ("blockHash", "block_hash", "hash", "blockhash"):
+            value = candidate.get(key)
+            if _looks_like_block_hash(value):
+                return value.lower()
+    return None
+
+
+def _extract_trace_opcode_counts(trace_data: Dict[str, Any]) -> Dict[str, int]:
+    raw = trace_data.get("opcodeCounts")
+    if not isinstance(raw, dict):
+        raw = trace_data.get("opcode_counts")
+    if not isinstance(raw, dict):
+        result = trace_data.get("result")
+        if isinstance(result, dict):
+            raw = result.get("opcodeCounts")
+            if not isinstance(raw, dict):
+                raw = result.get("opcode_counts")
+    if not isinstance(raw, dict):
+        return {}
+
+    merged: Dict[str, int] = {}
+    for opcode, count in raw.items():
+        if not isinstance(opcode, str):
+            continue
+        try:
+            merged[opcode] = merged.get(opcode, 0) + int(count)
+        except Exception:
+            continue
+    return merged
+
+
+def _extract_trace_metadata(trace_data: Dict[str, Any]) -> Dict[str, Any]:
+    candidates: List[Dict[str, Any]] = [trace_data]
+    for key in ("metadata", "meta", "result", "block", "header", "blockHeader", "executionPayload"):
+        value = trace_data.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
+            nested_meta = value.get("metadata")
+            if isinstance(nested_meta, dict):
+                candidates.append(nested_meta)
+
+    block_number: Optional[int] = None
+    timestamp: Optional[int] = None
+    parent_hash: Optional[str] = None
+    tx_count: Optional[int] = None
+
+    for candidate in candidates:
+        if block_number is None:
+            for key in ("blockNumber", "block_number", "number"):
+                parsed = _parse_block_number(candidate.get(key))
+                if parsed is not None:
+                    block_number = parsed
+                    break
+
+        if timestamp is None:
+            for key in ("timestamp", "blockTimestamp"):
+                parsed = _parse_block_number(candidate.get(key))
+                if parsed is not None:
+                    timestamp = parsed
+                    break
+
+        if parent_hash is None:
+            for key in ("parentHash", "parent_hash", "parentBlockHash"):
+                raw_parent = candidate.get(key)
+                if isinstance(raw_parent, str):
+                    parent_hash = raw_parent.lower()
+                    break
+
+        if tx_count is None:
+            tx_count_raw = None
+            for key in ("transactionCount", "transaction_count", "txCount"):
+                if key in candidate:
+                    tx_count_raw = candidate.get(key)
+                    break
+            if tx_count_raw is not None:
+                try:
+                    tx_count = int(tx_count_raw)
+                except Exception:
+                    tx_count = None
+
+    return {
+        "block_number": block_number,
+        "timestamp": timestamp,
+        "parent_hash": parent_hash,
+        "tx_count": tx_count,
+    }
+
+
+def _extract_payload_block_ref(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    block_number = _parse_block_number(payload.get("blockNumber"))
+    if block_number is None:
+        return None
+
+    block_hash = payload.get("blockHash")
+    if isinstance(block_hash, str):
+        block_hash = block_hash.lower()
+    else:
+        block_hash = None
+
+    timestamp = _parse_block_number(payload.get("timestamp"))
+    parent_hash = payload.get("parentHash")
+    if isinstance(parent_hash, str):
+        parent_hash = parent_hash.lower()
+    else:
+        parent_hash = None
+
+    tx_count = None
+    transactions = payload.get("transactions")
+    if isinstance(transactions, list):
+        tx_count = len(transactions)
+
+    return {
+        "block_number": block_number,
+        "block_hash": block_hash,
+        "timestamp": timestamp,
+        "parent_hash": parent_hash,
+        "tx_count": tx_count,
+    }
+
+
+def _snapshot_trace_files_once(
+    opcode_tracing_dir: Path,
+    history_dir: Path,
+    seen_state: Dict[Path, tuple[int, int]],
+) -> None:
+    history_dir.mkdir(parents=True, exist_ok=True)
+    for trace_file in opcode_tracing_dir.glob("opcode-trace-block-*.json"):
+        if not trace_file.is_file():
+            continue
+        try:
+            stat = trace_file.stat()
+        except Exception:
+            continue
+        state = (stat.st_mtime_ns, stat.st_size)
+        if seen_state.get(trace_file) == state:
+            continue
+        seen_state[trace_file] = state
+
+        hash_suffix = "nometa"
+        try:
+            trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
+            block_hash = _extract_trace_block_hash(trace_data)
+            if block_hash:
+                hash_suffix = block_hash[2:14]
+            else:
+                metadata = _extract_trace_metadata(trace_data)
+                ts = metadata.get("timestamp")
+                parent_hash = metadata.get("parent_hash")
+                if ts is not None and isinstance(parent_hash, str):
+                    hash_suffix = f"ts{ts}-ph{parent_hash[2:10]}"
+                elif ts is not None:
+                    hash_suffix = f"ts{ts}"
+                elif isinstance(parent_hash, str):
+                    hash_suffix = f"ph{parent_hash[2:10]}"
+        except Exception:
+            pass
+
+        snapshot_name = f"{trace_file.stem}--{state[0]}--{hash_suffix}.json"
+        snapshot_path = history_dir / snapshot_name
+        try:
+            shutil.copy2(trace_file, snapshot_path)
+        except Exception:
+            continue
+
+
+def _snapshot_trace_files_worker(stop_event: threading.Event, opcode_tracing_dir: Path) -> None:
+    history_dir = opcode_tracing_dir / "_history"
+    seen_state: Dict[Path, tuple[int, int]] = {}
+    while not stop_event.is_set():
+        _snapshot_trace_files_once(opcode_tracing_dir, history_dir, seen_state)
+        stop_event.wait(0.1)
+    _snapshot_trace_files_once(opcode_tracing_dir, history_dir, seen_state)
+
+
+def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, output_path: Path) -> None:
+    """
+    Process test files in testing_dir and create a JSON mapping test names to opcode counts.
+
+    For each test file:
+    1. Extract block metadata from engine_newPayloadV* requests
+    2. Match opcode traces by blockHash or trace metadata
+    3. Extract opcodeCounts from the trace file
+    4. If multiple blocks, merge (sum) opcode counts
+    """
+    results = {}
+
+    if not testing_dir.exists():
+        print(f"[WARN] Testing directory {testing_dir} does not exist")
+        return
+
+    trace_files = sorted(opcode_tracing_dir.rglob("opcode-trace-block-*.json"))
+    trace_entries: List[Dict[str, Any]] = []
+    seen_signatures: set[Any] = set()
+
+    for trace_file in trace_files:
+        if not trace_file.is_file():
+            continue
+        try:
+            trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        opcode_counts = _extract_trace_opcode_counts(trace_data)
+        if not opcode_counts:
+            continue
+
+        metadata = _extract_trace_metadata(trace_data)
+        block_hash = _extract_trace_block_hash(trace_data)
+        if block_hash:
+            block_hash = block_hash.lower()
+
+        try:
+            mtime_ns = trace_file.stat().st_mtime_ns
+        except Exception:
+            mtime_ns = 0
+
+        signature = (
+            block_hash,
+            metadata.get("block_number"),
+            metadata.get("timestamp"),
+            metadata.get("parent_hash"),
+            metadata.get("tx_count"),
+            tuple(sorted(opcode_counts.items())),
+        )
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+
+        trace_entries.append({
+            "block_hash": block_hash,
+            "block_number": metadata.get("block_number"),
+            "timestamp": metadata.get("timestamp"),
+            "parent_hash": metadata.get("parent_hash"),
+            "tx_count": metadata.get("tx_count"),
+            "opcode_counts": opcode_counts,
+            "mtime_ns": mtime_ns,
+        })
+
+    trace_entries.sort(key=lambda entry: entry["mtime_ns"])
+    for idx, entry in enumerate(trace_entries):
+        entry["id"] = idx
+
+    def _append_index(index: Dict[Any, List[int]], key: Any, entry_id: int) -> None:
+        if key is None:
+            return
+        index.setdefault(key, []).append(entry_id)
+
+    traces_by_hash: Dict[str, List[int]] = {}
+    traces_by_full: Dict[Any, List[int]] = {}
+    traces_by_num_ts_parent: Dict[Any, List[int]] = {}
+    traces_by_num_ts: Dict[Any, List[int]] = {}
+    traces_by_number: Dict[int, List[int]] = {}
+
+    for entry in trace_entries:
+        entry_id = int(entry["id"])
+        block_hash = entry.get("block_hash")
+        block_number = entry.get("block_number")
+        timestamp = entry.get("timestamp")
+        parent_hash = entry.get("parent_hash")
+        tx_count = entry.get("tx_count")
+
+        if isinstance(block_hash, str):
+            _append_index(traces_by_hash, block_hash, entry_id)
+        _append_index(traces_by_full, (block_number, timestamp, parent_hash, tx_count), entry_id)
+        _append_index(traces_by_num_ts_parent, (block_number, timestamp, parent_hash), entry_id)
+        _append_index(traces_by_num_ts, (block_number, timestamp), entry_id)
+        if isinstance(block_number, int):
+            _append_index(traces_by_number, block_number, entry_id)
+
+    used_entry_ids: set[int] = set()
+
+    def _pick_unused(candidates: Optional[List[int]]) -> Optional[int]:
+        if not candidates:
+            return None
+        for candidate in candidates:
+            if candidate not in used_entry_ids:
+                return candidate
+        return None
+
+    testing_files = sorted([p for p in testing_dir.rglob("*.txt") if p.is_file()])
+    for txt_file in testing_files:
+        test_name = txt_file.stem
+
+        try:
+            lines = txt_file.read_text(encoding="utf-8").splitlines()
+        except Exception as e:
+            print(f"[WARN] Failed to read {txt_file}: {e}")
+            continue
+
+        # Collect all block references from the file
+        block_refs: List[Dict[str, Any]] = []
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                data = json.loads(line)
+                method = data.get("method")
+                if not isinstance(method, str) or not method.startswith("engine_newPayloadV"):
+                    continue
+                params = data.get("params", [])
+                if not params or not isinstance(params[0], dict):
+                    continue
+                payload = params[0]
+                block_ref = _extract_payload_block_ref(payload)
+                if block_ref is not None:
+                    block_refs.append(block_ref)
+            except Exception:
+                continue
+
+        if not block_refs:
+            print(f"[WARN] No payload block references found in {txt_file}")
+            continue
+
+        # Merge opcode counts from all blocks
+        merged_counts: dict[str, int] = {}
+        for block_ref in block_refs:
+            block_number = block_ref.get("block_number")
+            block_hash = block_ref.get("block_hash")
+            timestamp = block_ref.get("timestamp")
+            parent_hash = block_ref.get("parent_hash")
+            tx_count = block_ref.get("tx_count")
+            entry_id: Optional[int] = None
+
+            if isinstance(block_hash, str):
+                entry_id = _pick_unused(traces_by_hash.get(block_hash))
+            if entry_id is None:
+                entry_id = _pick_unused(traces_by_full.get((block_number, timestamp, parent_hash, tx_count)))
+            if entry_id is None:
+                entry_id = _pick_unused(traces_by_num_ts_parent.get((block_number, timestamp, parent_hash)))
+            if entry_id is None:
+                entry_id = _pick_unused(traces_by_num_ts.get((block_number, timestamp)))
+            if entry_id is None and isinstance(block_number, int):
+                entry_id = _pick_unused(traces_by_number.get(block_number))
+
+            if entry_id is None:
+                print(
+                    f"[WARN] No trace match for blockNumber={block_number} "
+                    f"blockHash={block_hash} timestamp={timestamp} parentHash={parent_hash} in {txt_file.name}"
+                )
+                continue
+
+            used_entry_ids.add(entry_id)
+            opcode_counts = trace_entries[entry_id]["opcode_counts"]
+            for opcode, count in opcode_counts.items():
+                merged_counts[opcode] = merged_counts.get(opcode, 0) + count
+
+        if merged_counts:
+            result_key = str(txt_file.relative_to(testing_dir).with_suffix("")).replace("\\", "/")
+            if result_key in results:
+                duplicate_idx = 1
+                while f"{result_key}__{duplicate_idx}" in results:
+                    duplicate_idx += 1
+                result_key = f"{result_key}__{duplicate_idx}"
+            results[result_key] = merged_counts
+
+    # Write output JSON
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    print(f"[INFO] Opcode trace results written to {output_path}")
+
 
 def _read_json_file(path: Path):
     try:
@@ -169,18 +596,41 @@ def _block_exists(rpc_url: str, block_hash: str) -> bool:
     return bool(result)
 
 
-def _generate_preparation_payloads(jwt_path: Path, args, gas_bump_file: Path, funding_file: Path) -> str:
+def _generate_preparation_payloads(
+    jwt_path: Path,
+    args,
+    gas_bump_file: Path,
+    funding_file: Path,
+) -> str:
     print("[INFO] Regenerating gas-bump and funding payloads.")
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
     try:
-        for _ in range(max(args.gas_bump_count, 1)):
-            preparation_getpayload("http://127.0.0.1:8551", jwt_path, "EMPTY", save_path=gas_bump_file)
+        max_count = max(args.gas_bump_count, 1)
+        last_log = time.monotonic()
+        for idx in range(max_count):
+            now = time.monotonic()
+            if idx == 0 or idx == max_count - 1 or now - last_log >= 5:
+                print(f"[DEBUG] Generating gas-bump payload {idx + 1}/{max_count}")
+                last_log = now
+            preparation_getpayload(
+                "http://127.0.0.1:8551",
+                jwt_path,
+                "EMPTY",
+                save_path=gas_bump_file,
+                timestamp_hack=args.testing_buildblock_timestamp_hack,
+            )
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
     finalized = ""
     try:
-        finalized = preparation_getpayload("http://127.0.0.1:8551", jwt_path, args.rpc_address, save_path=funding_file)
+        finalized = preparation_getpayload(
+            "http://127.0.0.1:8551",
+            jwt_path,
+            args.rpc_address,
+            save_path=funding_file,
+            timestamp_hack=args.testing_buildblock_timestamp_hack,
+        )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
     return finalized or ""
@@ -205,6 +655,19 @@ def _latest_block_hash_from_payload_file(path: Path) -> Optional[str]:
                 if isinstance(block_hash, str):
                     return block_hash
     return None
+
+
+def _has_phase_payloads(payload_dir: Path) -> bool:
+    for phase in ("setup", "testing", "cleanup"):
+        phase_dir = payload_dir / phase
+        if not phase_dir.is_dir():
+            continue
+        try:
+            if any(phase_dir.rglob("*.txt")):
+                return True
+        except Exception:
+            continue
+    return False
 
 def is_mounted(mount_point: Path) -> bool:
     try:
@@ -233,18 +696,6 @@ def unmount_overlay(merged: Path):
         cmd = ["sudo"] + cmd
     subprocess.run(cmd, check=False)
 
-def describe_mount(path: Path) -> str:
-    try:
-        mount_path = path.resolve()
-        with open('/proc/mounts', 'r', encoding='utf-8') as mounts:
-            for line in mounts:
-                parts = line.split()
-                if len(parts) >= 4 and parts[1] == str(mount_path):
-                    return line.strip()
-    except Exception:
-        pass
-    return ''
-
 def download_snapshot(chain: str, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     sh = textwrap.dedent(f"""
@@ -267,35 +718,104 @@ def ensure_jwt(jwt_dir: Path) -> Path:
     if not jwt.exists(): jwt.write_text(os.urandom(32).hex())
     return jwt
 
-def start_nethermind_container(chain: str, db_dir: Path, jwt_path: Path,
-                               rpc_port=8545, engine_port=8551, name="eest-nethermind",
-                               image: str = "nethermindeth/nethermind:gp-hacked") -> str:
+def start_nethermind_container(
+    chain: str,
+    db_dir: Path,
+    jwt_path: Path,
+    rpc_port=8545,
+    engine_port=8551,
+    name="eest-nethermind",
+    image: str = "nethermindeth/nethermind:gp-hacked",
+    genesis_path: Optional[Path] = None,
+    trace_json: bool = False,
+) -> str:
+    subprocess.run(["docker", "pull", image], check=False)
+    resolved_db = db_dir.resolve()
+    resolved_jwt_parent = jwt_path.parent.resolve()
     cmd = [
-        "docker", "run", "-d",
-        "--name", name,
-        "-p", f"{rpc_port}:{rpc_port}",
-        "-p", f"{engine_port}:{engine_port}",
-        "-v", f"{str(db_dir.resolve())}:/db",
-        "-v", f"{str(jwt_path.parent.resolve())}:/jwt:ro",
-        image,
-        "--config", str(chain),
-        "--JsonRpc.Enabled", "true",
-        "--JsonRpc.Host", "0.0.0.0",
-        "--JsonRpc.Port", str(rpc_port),
-        "--JsonRpc.EngineHost", "0.0.0.0",
-        "--JsonRpc.EnginePort", str(engine_port),
-        "--JsonRpc.JwtSecretFile", "/jwt/jwt.hex",
-        "--JsonRpc.UnsecureDevNoRpcAuthentication", "true",
-        "--JsonRpc.EnabledModules", "Eth,Net,Web3,Admin,Debug,Trace,TxPool",
-        "--Blocks.TargetBlockGasLimit", "1000000000000",
-        "--data-dir", "/db",
-        "--log", "INFO",
-        "--Network.MaxActivePeers", "0",
-        "--TxPool.Size", "10000",
-        "--TxPool.MaxTxSize", "null",
-        "--Init.LogRules", "Consensus.Processing.ProcessingStats:Debug",
-        "--Blocks.SingleBlockImprovementOfSlot", "0.10",
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        name,
+        "-p",
+        f"{rpc_port}:{rpc_port}",
+        "-p",
+        f"{engine_port}:{engine_port}",
+        "-v",
+        f"{str(resolved_db)}:/db",
+        "-v",
+        f"{str(resolved_jwt_parent)}:/jwt:ro",
     ]
+    if trace_json:
+        cmd += ["-v", f"{str(Path('opcode-tracing').resolve())}:/test-output"]
+    genesis_volume = None
+    if genesis_path:
+        resolved_genesis = Path(genesis_path).resolve()
+        if not resolved_genesis.is_file():
+            raise FileNotFoundError(f"Genesis file not found at {resolved_genesis}")
+        genesis_volume = ["-v", f"{str(resolved_genesis)}:/genesis/custom.json:ro"]
+        cmd += genesis_volume
+
+    cmd.append(image)
+
+    if genesis_path:
+        cmd += ["--config", "none", "--Init.ChainSpecPath", "/genesis/custom.json"]
+    else:
+        cmd += ["--config", str(chain)]
+
+    cmd += [
+        "--JsonRpc.Enabled",
+        "true",
+        "--JsonRpc.Host",
+        "0.0.0.0",
+        "--JsonRpc.Port",
+        str(rpc_port),
+        "--JsonRpc.EngineHost",
+        "0.0.0.0",
+        "--JsonRpc.EnginePort",
+        str(engine_port),
+        "--JsonRpc.JwtSecretFile",
+        "/jwt/jwt.hex",
+        "--JsonRpc.UnsecureDevNoRpcAuthentication",
+        "true",
+        "--JsonRpc.EnabledModules",
+        "Eth,Net,Web3,Admin,Debug,Trace,TxPool,Testing",
+        "--JsonRpc.EngineEnabledModules",
+        "Net,Eth,Subscribe,Web3,Testing,Engine",
+        "--Blocks.TargetBlockGasLimit",
+        "1000000000000",
+        "--data-dir",
+        "/db",
+        "--log",
+        "INFO",
+        "--Network.MaxActivePeers",
+        "0",
+        "--TxPool.Size",
+        "0",
+        "--TxPool.MaxTxSize",
+        "null",
+        "--Merge.TerminalTotalDifficulty",
+        "0",
+        "--Init.LogRules",
+        "Consensus.Processing.ProcessingStats:Debug",
+        "--Blocks.SingleBlockImprovementOfSlot",
+        "10",
+        "--Blocks.SecondsPerSlot",
+        "2",
+        "--Merge.NewPayloadBlockProcessingTimeout",
+        "70000",
+        "--Init.BaseDbPath",
+        "/db/mainnet",
+    ]
+    if trace_json:
+        cmd += [
+            "--OpcodeTracing.Enabled", "true",
+            "--OpcodeTracing.Mode", "Realtime",
+            "--OpcodeTracing.StartBlock", "1",
+            "--OpcodeTracing.EndBlock", "2",
+            "--OpcodeTracing.OutputDirectory", "/test-output",
+        ]
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
 
@@ -343,21 +863,138 @@ def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: l
 
 # ----------------- changed: append NP and FCU to a single .txt file -----------------
 
-def preparation_getpayload(engine_url: str, jwt_hex_path: Path, rpc_address: str, save_path: Path | None = None):
+def _hex_to_bytes(value: Any) -> Optional[bytes]:
+    if not isinstance(value, str):
+        return None
+    v = value[2:] if value.startswith("0x") else value
+    if len(v) % 2 == 1:
+        v = "0" + v
+    try:
+        return bytes.fromhex(v)
+    except Exception:
+        return None
+
+
+def _kzg_commitment_to_versioned_hash(commitment_hex: Any) -> Optional[str]:
+    raw = _hex_to_bytes(commitment_hex)
+    if raw is None:
+        return None
+    digest = hashlib.sha256(raw).digest()
+    versioned = b"\x01" + digest[1:]
+    return "0x" + versioned.hex()
+
+
+def _extract_blob_versioned_hashes(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> List[str]:
+    for key in ("blobVersionedHashes", "blob_versioned_hashes", "versionedHashes", "versioned_hashes"):
+        hashes = payload.get(key)
+        if isinstance(hashes, list) and hashes:
+            return [h for h in hashes if isinstance(h, str)]
+
+    bundle = payload.get("blobsBundle") or payload.get("blobs_bundle") or {}
+    commitments = None
+    if isinstance(bundle, dict):
+        commitments = bundle.get("commitments")
+    if isinstance(commitments, list) and commitments:
+        computed: List[str] = []
+        for c in commitments:
+            vh = _kzg_commitment_to_versioned_hash(c)
+            if vh:
+                computed.append(vh)
+        if computed:
+            return computed
+    return []
+
+
+def _extract_execution_requests(payload: Dict[str, Any]) -> List[Any]:
+    for key in ("executionRequests", "execution_requests"):
+        reqs = payload.get(key)
+        if isinstance(reqs, list):
+            return reqs
+    return []
+
+
+def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> Optional[str]:
+    for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
+        val = payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
+        val = exec_payload.get(key)
+        if isinstance(val, str) and val:
+            return val
+    return None
+
+
+def preparation_getpayload(
+    engine_url: str,
+    jwt_hex_path: Path,
+    rpc_address: str,
+    save_path: Path | None = None,
+    *,
+    timestamp_hack: bool = False,
+):
     """
-    Build a payload on the engine, POST engine_newPayloadV4, then engine_forkchoiceUpdatedV3.
+    Build a payload on the engine via testing_buildBlockV1, POST engine_newPayloadV4,
+    then engine_forkchoiceUpdatedV3.
     If save_path is provided, append TWO minified JSON-RPC lines to that file:
       1) the engine_newPayloadV4 request body
       2) the engine_forkchoiceUpdatedV3 request body
     """
     ZERO32 = "0x" + ("00" * 32)
-    txrlp_empty = None
-    payload = _engine_with_jwt(engine_url, jwt_hex_path, "engine_getPayloadV4", [txrlp_empty, rpc_address])
-    exec_payload = payload.get("executionPayload")
-    parent_hash = exec_payload.get("parentHash") or ZERO32
+    head_block = rpc_call("http://127.0.0.1:8545", "eth_getBlockByNumber", ["latest", False])
+    if not isinstance(head_block, dict):
+        raise RuntimeError("Unable to fetch latest block for testing_buildBlockV1")
+
+    parent_hash = head_block.get("hash")
+    if not isinstance(parent_hash, str) or not parent_hash:
+        raise RuntimeError("Latest block is missing hash")
+
+    parent_ts_hex = head_block.get("timestamp")
+    parent_ts = int(parent_ts_hex, 16) if isinstance(parent_ts_hex, str) else int(parent_ts_hex or 0)
+    min_delta = (24 * 60 * 60 + 1) if timestamp_hack else 1
+    new_ts = parent_ts + min_delta
+
+    withdrawals: List[Dict[str, str]] = []
+    if rpc_address and isinstance(rpc_address, str) and rpc_address.upper() != "EMPTY":
+        withdrawals = [{
+            "index": "0x2",
+            "validatorIndex": "0x1",
+            "address": rpc_address,
+            "amount": hex((1 << 64) - 1),
+        }]
+
+    payload_attributes = {
+        "timestamp": hex(new_ts),
+        "prevRandao": parent_hash,
+        "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
+        "withdrawals": withdrawals,
+        "parentBeaconBlockRoot": parent_hash,
+    }
+    payload = _engine_with_jwt(
+        engine_url,
+        jwt_hex_path,
+        "testing_buildBlockV1",
+        [parent_hash, payload_attributes, [], "0x4e65746865726d696e642076312e33372e3061"],
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError("testing_buildBlockV1 returned non-dict result")
+
+    exec_payload = payload.get("executionPayload", payload)
+    if not isinstance(exec_payload, dict):
+        raise RuntimeError("testing_buildBlockV1 result missing execution payload")
+
+    parent_hash = exec_payload.get("parentHash") or parent_hash
+    blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
+    parent_beacon_block_root = payload_attributes["parentBeaconBlockRoot"]
+    execution_requests = _extract_execution_requests(payload)
 
     # Send NP
-    _ = _engine_with_jwt(engine_url, jwt_hex_path, "engine_newPayloadV4", [exec_payload, [], parent_hash, []])
+    _ = _engine_with_jwt(
+        engine_url,
+        jwt_hex_path,
+        "engine_newPayloadV4",
+        [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+    )
     block_hash = exec_payload.get("blockHash")
 
     # Build FCU params (safe/finalized=head)
@@ -378,7 +1015,12 @@ def preparation_getpayload(engine_url: str, jwt_hex_path: Path, rpc_address: str
 
     # Append NP + FCU requests as lines if requested
     if save_path is not None:
-        np_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_newPayloadV4","params":[exec_payload, [], parent_hash, []]}
+        np_body = {
+            "jsonrpc": "2.0",
+            "id": int(time.time()),
+            "method": "engine_newPayloadV4",
+            "params": [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+        }
         fcu_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_forkchoiceUpdatedV3","params":[fcs, None]}
         _append_line(save_path, _minified_json_line(np_body))
         _append_line(save_path, _minified_json_line(fcu_body))
@@ -423,6 +1065,12 @@ def _cleanup():
                 if d: shutil.rmtree(d, ignore_errors=True)
             except Exception:
                 pass
+        try:
+            cleanup_dir = CLEANUP.get("data_dir_cleanup")
+            if cleanup_dir:
+                shutil.rmtree(cleanup_dir, ignore_errors=True)
+        except Exception:
+            pass
 
 atexit.register(_cleanup)
 
@@ -450,6 +1098,16 @@ def main():
     parser.add_argument("--snapshot-dir", default="execution-data", help="Path to snapshot DB (default: execution-data)")
     parser.add_argument("--no-snapshot", action="store_true")
     parser.add_argument("--refresh-snapshot", action="store_true")
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="Path to use for Nethermind execution data instead of overlay mounts.",
+    )
+    parser.add_argument(
+        "--genesis-path",
+        default=None,
+        help="Path to a custom genesis JSON file to mount into Nethermind.",
+    )
     parser.add_argument("--keep", action="store_true")
     parser.add_argument(
         "--payload-dir",
@@ -462,6 +1120,15 @@ def main():
         help="Comma-separated gas benchmark values to pass to execute remote.",
     )
     parser.add_argument(
+        "--fixed-opcode-count",
+        "--fixed-ocpode-count",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated fixed opcode counts to pass to execute remote instead of --gas-benchmark-values. "
+             "Provide no value to pass an empty flag through.",
+    )
+    parser.add_argument(
         "--nethermind-image",
         default="nethermindeth/nethermind:gp-hacked",
         help="Docker image to use when launching the Nethermind container.",
@@ -470,23 +1137,70 @@ def main():
         "--gas-bump-count",
         type=int,
         default=301,
-        help="Number of engine_getPayload iterations when generating gas-bump payload (default: 301).",
+        help="Number of testing_buildBlockV1 iterations when generating gas-bump payload (default: 301).",
     )
     parser.add_argument(
-        "--overlay-reorgs",
-        type=_parse_bool,
-        default=True,
-        help="Enable per-scenario overlay + container restarts (true/false, default true).",
+        "--testing-buildblock-timestamp-hack",
+        action="store_true",
+        help="Use parent timestamp +24h+1 when building blocks via testing_buildBlockV1 (default: parent+1).",
+    )
+    parser.add_argument(
+        "--overlay-root",
+        default=".",
+        help="Base directory for overlay mount folders (default: current directory).",
     )
     parser.add_argument(
         "--eest-repo",
-        default="https://github.com/ethereum/execution-spec-tests",
-        help="Git repository URL for execution-spec-tests (supports forks).",
+        default="https://github.com/ethereum/execution-specs",
+        help="Git repository URL for execution-specs (supports forks).",
     )
     parser.add_argument(
         "--eest-branch",
         default="main",
-        help="Git branch of execution-spec-tests to checkout before running (default: main).",
+        help="Git branch of execution-specs to checkout before running (default: main).",
+    )
+    parser.add_argument(
+        "--eest-no-pull",
+        action="store_true",
+        help="Skip fetching/pulling execution-specs when the repo already exists.",
+    )
+    parser.add_argument(
+        "--eest-clean-clone",
+        action="store_true",
+        help="Remove existing execution-specs checkout and clone fresh before running.",
+    )
+    parser.add_argument(
+        "--parameter_filter",
+        default="",
+        help="Pass-through filter string forwarded to execute remote as -k \"...\".",
+    )
+    parser.add_argument(
+        "--trace-json",
+        action="store_true",
+        help="Enable opcode tracing and generate JSON output mapping tests to opcode counts.",
+    )
+    parser.add_argument(
+        "--trace-json-output",
+        default="opcode_trace_results.json",
+        help="Output path for the opcode trace results JSON (default: opcode_trace_results.json).",
+    )
+    parser.add_argument(
+        "--eest-mode",
+        "--eest_mode",
+        dest="eest_mode",
+        default="Benchmark",
+        help="Mode passed to execute remote via -m (supports repricings/benchmarks/stateful).",
+    )
+    parser.add_argument(
+        "--eest-stateful-testing",
+        action="store_true",
+        help="Keep all testing payloads in the testing/ directory (no migration to setup).",
+    )
+    parser.add_argument(
+        "--allow-execute-remote-failures",
+        action="store_true",
+        help="Continue when execute remote exits non-zero after phase payloads were generated; "
+             "still fail on startup/infra errors or when no phase payloads were produced.",
     )
     args = parser.parse_args()
 
@@ -494,15 +1208,23 @@ def main():
     ensure_pip_pkg("requests")
 
     payloads_dir = _ensure_payloads_dir(Path(args.payload_dir))
-    gas_values = [v.strip() for v in args.gas_benchmark_values.split(",") if v.strip()]
+    gas_value_source = args.fixed_opcode_count or args.gas_benchmark_values
+    gas_values = [v.strip() for v in gas_value_source.split(",") if v.strip()]
     scenario_order_file = payloads_dir / "scenario_order.json"
     if scenario_order_file.exists():
         scenario_order_file.unlink()
     gas_bump_file = payloads_dir / "gas-bump.txt"
     funding_file  = payloads_dir / "funding.txt"
+    legacy_hook_file = payloads_dir / "hook-empty.txt"
     setup_global_file = payloads_dir / "setup-global-test.txt"
     reuse_preparation = gas_bump_file.exists() and funding_file.exists()
     reuse_globals = setup_global_file.exists()
+    if legacy_hook_file.exists():
+        try:
+            legacy_hook_file.unlink()
+            print(f"[INFO] Removed legacy hook file: {legacy_hook_file}")
+        except Exception:
+            pass
 
 
     for subdir in ("setup", "testing", "cleanup"):
@@ -518,13 +1240,19 @@ def main():
     resume_file = control_dir / "resume.json"
 
 
-    repo_dir = Path("execution-spec-tests")
+    repo_dir = Path("execution-specs")
     repo_url = args.eest_repo
+    if args.eest_clean_clone and repo_dir.exists():
+        print(f"[INFO] --eest-clean-clone enabled; removing existing {repo_dir}")
+        shutil.rmtree(repo_dir)
     if repo_dir.exists():
-        run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
-        run(["git", "fetch", "origin"], cwd=str(repo_dir))
-        run(["git", "checkout", args.eest_branch], cwd=str(repo_dir))
-        run(["git", "pull", "origin", args.eest_branch], cwd=str(repo_dir))
+        if not args.eest_no_pull:
+            run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
+            run(["git", "fetch", "origin"], cwd=str(repo_dir))
+            run(["git", "checkout", args.eest_branch], cwd=str(repo_dir))
+            run(["git", "pull", "origin", args.eest_branch], cwd=str(repo_dir))
+        else:
+            print("[INFO] --eest-no-pull specified; using existing execution-specs checkout as-is.")
     else:
         run([
             "git",
@@ -543,41 +1271,74 @@ def main():
     run(["uv", "pip", "install", "-e", ".", "--break-system-packages"], cwd=str(repo_dir))
 
     snapshot_dir = Path(args.snapshot_dir).expanduser().resolve()
-    if not args.no_snapshot:
-        if snapshot_dir.exists() and any(snapshot_dir.iterdir()) and not args.refresh_snapshot:
-            pass
+
+    data_dir_path: Optional[Path] = None
+    if args.data_dir:
+        data_dir_path = Path(args.data_dir).expanduser().resolve()
+        data_dir_path.mkdir(parents=True, exist_ok=True)
+
+    genesis_file: Optional[Path] = None
+    if args.genesis_path:
+        candidate = Path(args.genesis_path).expanduser()
+        resolved_candidate = candidate.resolve()
+        if not resolved_candidate.is_file():
+            raise SystemExit(f"Genesis file not found at {resolved_candidate}")
+        genesis_file = resolved_candidate
+
+    use_overlay_base = data_dir_path is None
+    base_data_dir = data_dir_path or snapshot_dir
+
+    if genesis_file is None:
+        if not args.no_snapshot:
+            if base_data_dir.exists() and any(base_data_dir.iterdir()) and not args.refresh_snapshot:
+                pass
+            else:
+                if args.refresh_snapshot and base_data_dir.exists():
+                    shutil.rmtree(base_data_dir)
+                base_data_dir.mkdir(parents=True, exist_ok=True)
+                download_snapshot(args.chain, base_data_dir)
         else:
-            if args.refresh_snapshot and snapshot_dir.exists():
-                shutil.rmtree(snapshot_dir)
-                snapshot_dir.mkdir(parents=True, exist_ok=True)
-            download_snapshot(args.chain, snapshot_dir)
+            base_data_dir.mkdir(parents=True, exist_ok=True)
     else:
-        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        if args.refresh_snapshot and base_data_dir.exists():
+            shutil.rmtree(base_data_dir)
+        base_data_dir.mkdir(parents=True, exist_ok=True)
+
+    snapshot_dir = base_data_dir
+    if not use_overlay_base:
+        CLEANUP["data_dir_cleanup"] = snapshot_dir
+    else:
+        CLEANUP["data_dir_cleanup"] = None
 
     jwt_path = ensure_jwt(Path("engine-jwt"))
 
-    primary_merged = Path("overlay-merged")
-    primary_upper  = Path("overlay-upper")
-    primary_work   = Path("overlay-work")
-    CLEANUP["primary_merged"], CLEANUP["primary_upper"], CLEANUP["primary_work"] = primary_merged, primary_upper, primary_work
-
-    overlay_reorgs_enabled = args.overlay_reorgs
-
-    if overlay_reorgs_enabled:
-        scenario_merged = Path("overlay-scenario-merged")
-        scenario_upper  = Path("overlay-scenario-upper")
-        scenario_work   = Path("overlay-scenario-work")
-        CLEANUP["scenario_merged"], CLEANUP["scenario_upper"], CLEANUP["scenario_work"] = (
-            scenario_merged,
-            scenario_upper,
-            scenario_work,
+    if use_overlay_base:
+        overlay_root = Path(args.overlay_root).expanduser().resolve()
+        overlay_root.mkdir(parents=True, exist_ok=True)
+        primary_merged = overlay_root / "overlay-merged"
+        primary_upper = overlay_root / "overlay-upper"
+        primary_work = overlay_root / "overlay-work"
+        CLEANUP["primary_merged"], CLEANUP["primary_upper"], CLEANUP["primary_work"] = (
+            primary_merged,
+            primary_upper,
+            primary_work,
         )
     else:
-        scenario_merged = scenario_upper = scenario_work = None
-        CLEANUP["scenario_merged"] = CLEANUP["scenario_upper"] = CLEANUP["scenario_work"] = None
+        primary_merged = snapshot_dir.resolve()
+        primary_upper = primary_work = None
+        CLEANUP["primary_merged"] = CLEANUP["primary_upper"] = CLEANUP["primary_work"] = None
+
+    CLEANUP["scenario_merged"] = CLEANUP["scenario_upper"] = CLEANUP["scenario_work"] = None
+
+    opcode_tracing_dir = Path("opcode-tracing")
+    if args.trace_json:
+        if opcode_tracing_dir.exists():
+            shutil.rmtree(opcode_tracing_dir, ignore_errors=True)
+        opcode_tracing_dir.mkdir(parents=True, exist_ok=True)
 
     stop_and_remove_container("eest-nethermind")
-    ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
+    if use_overlay_base:
+        ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
 
     container_name = "eest-nethermind"
     CLEANUP["container"] = container_name
@@ -594,13 +1355,15 @@ def main():
             engine_port=8551,
             name=container_name,
             image=args.nethermind_image,
+            genesis_path=genesis_file,
+            trace_json=args.trace_json,
         )
-        if not wait_for_port("127.0.0.1", 8545, timeout=180):
+        if not wait_for_port("127.0.0.1", 8545, timeout=300):
             print("ERROR: 8545 not reachable.")
             print_container_logs(container_name)
             stop_and_remove_container(container_name)
             raise RuntimeError("JSON-RPC port not reachable")
-        for _ in range(60):
+        for _ in range(180):
             try:
                 _ = rpc_call("http://127.0.0.1:8545", "eth_blockNumber")
                 break
@@ -621,22 +1384,6 @@ def main():
         try: unmount_overlay(primary_merged)
         except Exception: pass
         sys.exit(1)
-
-    scenario_overlay_ready = False
-
-    def prepare_scenario_overlay() -> None:
-        nonlocal scenario_overlay_ready
-        if not overlay_reorgs_enabled:
-            return
-        if scenario_overlay_ready:
-            try: unmount_overlay(scenario_merged)
-            except Exception:
-                pass
-        shutil.rmtree(scenario_upper, ignore_errors=True)
-        shutil.rmtree(scenario_work, ignore_errors=True)
-        shutil.rmtree(scenario_merged, ignore_errors=True)
-        ensure_overlay_mount(lower=primary_merged, upper=scenario_upper, work=scenario_work, merged=scenario_merged)
-        scenario_overlay_ready = True
 
     chain_id = args.rpc_chain_id
     if chain_id is None:
@@ -670,9 +1417,19 @@ def main():
         "rpc_direct": "http://127.0.0.1:8545",
         "engine_url": "http://127.0.0.1:8551",
         "jwt_hex_path": str(jwt_path),
+        "fork": args.fork,
+        "skip_cleanup": True,
+        "eest_stateful_testing": args.eest_stateful_testing,
         "finalized_block": finalized_hash or "",
         "payload_dir": str(payloads_dir),
         "reuse_globals": reuse_globals,
+        "mitm_log_path": str(Path("mitm.log").resolve()),
+        "mitm_full_log_path": str(Path("mitm_full.log").resolve()),
+        "mitm_full_log": True,
+        "merged_log_path": str(Path("mitm_nethermind.log").resolve()),
+        "nethermind_container": container_name,
+        "light_logs": True,
+        "testing_buildblock_timestamp_hack": args.testing_buildblock_timestamp_hack,
     }
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
@@ -688,20 +1445,41 @@ def main():
             raise RuntimeError("mitmproxy failed to bind on 8549")
 
         tests_rpc = args.rpc_endpoint or "http://127.0.0.1:8549"
+        mode_key = (args.eest_mode or "").strip().lower()
+        mode_map = {
+            "repricing": "repricing",
+            "repricings": "repricing",
+            "benchmark": "benchmark",
+            "benchmarks": "benchmark",
+            "stateful": "stateful",
+        }
+        if mode_key not in mode_map:
+            raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
+        eest_mode = mode_map[mode_key]
         uv_cmd = [
             "uv", "run", "execute", "remote", "-v",
             f"--fork={args.fork}",
             f"--rpc-seed-key={args.rpc_seed_key}",
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
-            f"--gas-benchmark-values={args.gas_benchmark_values}",
-            "--eoa-fund-amount-default", "3100000000000000000",
-            "--tx-wait-timeout", "300",
+        ]
+        if args.fixed_opcode_count is not None:
+            if args.fixed_opcode_count == "":
+                uv_cmd.append("--fixed-opcode-count=")
+            else:
+                uv_cmd.append(f"--fixed-opcode-count={args.fixed_opcode_count}")
+        elif args.gas_benchmark_values:
+            uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
+        uv_cmd += [
+            "--tx-wait-timeout", "5",
             "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
+            "--skip-cleanup",
             args.test_path,
             "--",
-            "-m", "benchmark", "-n", "1",
+            "-m", eest_mode, "-n", "1",
         ]
+        if args.parameter_filter:
+            uv_cmd.extend(["-k", args.parameter_filter])
         stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")
         if stubs_source:
             stubs_path = Path(stubs_source).expanduser()
@@ -717,7 +1495,18 @@ def main():
             run_env["PYTHONPATH"] = os.pathsep.join([src_path, existing_path])
         else:
             run_env["PYTHONPATH"] = src_path
-        run_env["EEST_POLL_INTERVAL"] = "0.1"
+        run_env["EEST_POLL_INTERVAL"] = "0.01"
+
+        trace_snapshot_stop: Optional[threading.Event] = None
+        trace_snapshot_thread: Optional[threading.Thread] = None
+        if args.trace_json:
+            trace_snapshot_stop = threading.Event()
+            trace_snapshot_thread = threading.Thread(
+                target=_snapshot_trace_files_worker,
+                args=(trace_snapshot_stop, opcode_tracing_dir),
+                daemon=True,
+            )
+            trace_snapshot_thread.start()
 
         tests_proc = subprocess.Popen(uv_cmd, cwd=str(repo_dir), env=run_env)
         processed_tokens: set[str] = set()
@@ -729,41 +1518,6 @@ def main():
                 print(f"[WARN] Ignoring pause payload without token: {payload}")
                 return
             scenario_name = payload.get("scenario") or "unknown"
-            stage = payload.get("stage")
-            block_hash = payload.get("blockHash")
-            print(f"[STATE] Pause requested: scenario={scenario_name} stage={stage} token={token} block={block_hash}")
-
-            if not overlay_reorgs_enabled:
-                print("[INFO] Overlay reorgs disabled; skipping scenario overlay and node restart.")
-                try:
-                    resume_file.unlink(missing_ok=True)
-                except Exception:
-                    pass
-                _write_resume_signal(resume_file, token, scenario_name)
-                if not _wait_for_resume_consumed(resume_file, timeout=300.0):
-                    print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
-                else:
-                    print(f"[STATE] Resume acknowledged for scenario {scenario_name} token={token}")
-                processed_tokens.add(token)
-                return
-
-            try:
-                stop_and_remove_container(container_name)
-            except Exception:
-                pass
-            try:
-                prepare_scenario_overlay()
-                mount_line = describe_mount(scenario_merged)
-                if mount_line:
-                    print(f"[DEBUG] Scenario overlay mount: {mount_line}")
-            except Exception as exc:
-                print(f"[ERROR] Unable to prepare scenario overlay: {exc}")
-                raise
-            try:
-                restart_node(scenario_merged, show_logs=False)
-            except RuntimeError as exc:
-                print(f"[ERROR] Failed to restart node for scenario {scenario_name}: {exc}")
-                raise
             try:
                 resume_file.unlink(missing_ok=True)
             except Exception:
@@ -771,8 +1525,6 @@ def main():
             _write_resume_signal(resume_file, token, scenario_name)
             if not _wait_for_resume_consumed(resume_file, timeout=300.0):
                 print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
-            else:
-                print(f"[STATE] Resume acknowledged for scenario {scenario_name} token={token}")
             processed_tokens.add(token)
 
         try:
@@ -801,11 +1553,33 @@ def main():
                 except subprocess.TimeoutExpired:
                     tests_proc.kill()
                     tests_proc.wait()
+            if trace_snapshot_stop is not None:
+                trace_snapshot_stop.set()
+            if trace_snapshot_thread is not None:
+                trace_snapshot_thread.join(timeout=10)
 
         if return_code is None:
             return_code = tests_proc.returncode
+        if args.trace_json:
+            generate_opcode_trace_json(
+                testing_dir=Path(payloads_dir / "testing"),
+                opcode_tracing_dir=opcode_tracing_dir,
+                output_path=Path(args.trace_json_output),
+            )
         if return_code != 0:
-            raise subprocess.CalledProcessError(return_code, uv_cmd)
+            generated_phase_payloads = _has_phase_payloads(payloads_dir)
+            if args.allow_execute_remote_failures and generated_phase_payloads:
+                print(
+                    f"[WARN] execute remote exited with code {return_code}, but phase payloads were generated; "
+                    "continuing due to --allow-execute-remote-failures."
+                )
+            else:
+                if args.allow_execute_remote_failures and not generated_phase_payloads:
+                    print(
+                        f"[ERROR] execute remote exited with code {return_code} and produced no phase payloads; "
+                        "treating as startup/infra failure."
+                    )
+                raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:
             _append_suffix_to_scenarios(payloads_dir, gas_values[0])
     finally:
@@ -815,24 +1589,20 @@ def main():
             except Exception:
                 pass
             stop_and_remove_container(container_name)
-            if overlay_reorgs_enabled and scenario_merged is not None:
+            if use_overlay_base:
                 try:
-                    unmount_overlay(scenario_merged)
+                    unmount_overlay(primary_merged)
                 except Exception:
                     pass
-            try:
-                unmount_overlay(primary_merged)
-            except Exception:
-                pass
-            cleanup_paths = [primary_upper, primary_work, primary_merged]
-            if overlay_reorgs_enabled:
-                cleanup_paths.extend([scenario_upper, scenario_work, scenario_merged])
+            cleanup_paths = []
+            if use_overlay_base:
+                cleanup_paths.extend([primary_upper, primary_work, primary_merged])
             for path in cleanup_paths:
                 if path:
                     shutil.rmtree(path, ignore_errors=True)
+            if not use_overlay_base and snapshot_dir:
+                shutil.rmtree(snapshot_dir, ignore_errors=True)
         print("Done.")
 
 if __name__ == "__main__":
     main()
-
-

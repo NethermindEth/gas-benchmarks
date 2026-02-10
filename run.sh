@@ -2,7 +2,6 @@
 
 # Default inputs
 WARMUP_OPCODES_PATH="warmup-tests"
-WARMUP_FILE="warmup/warmup-1000bl-16wi-24tx.txt"
 CLIENTS="nethermind,geth,reth,besu,erigon,nimbus,ethrex"
 RUNS=1
 OPCODES_WARMUP_COUNT=1
@@ -12,9 +11,6 @@ EXECUTIONS_FILE="executions.json"
 TEST_PATHS_JSON=""
 LEGACY_TEST_PATH="eest_tests"
 LEGACY_GENESIS_PATH="zkevmgenesis.json"
-DEBUG=false
-DEBUG_FILE=""
-PROFILE_TEST=false
 NETWORK=""
 SNAPSHOT_ROOT="snapshots"
 OVERLAY_TMP_ROOT="overlay-runtime"
@@ -36,14 +32,13 @@ if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   source "scripts/common/wait_for_rpc.sh"
 fi
 
-# Timing variables
-declare -A STEP_TIMES
 declare -A ACTIVE_OVERLAY_MOUNTS
 declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
 declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
 declare -A RUNNING_CLIENTS
+
 SCRIPT_START_TIME=$(date +%s.%N)
 
 # Debug logging function
@@ -299,7 +294,6 @@ is_stateful_directory() {
 collect_stateful_directory() {
   local dir="$1"
   python3 - <<'PY' "$dir"
-import json
 import sys
 from pathlib import Path
 
@@ -316,103 +310,28 @@ ordered = []
 for name in ("gas-bump.txt", "funding.txt", "setup-global-test.txt"):
     try_append(root / name, ordered)
 
-scenario_entries = []
+phase_to_files = {}
+for phase in ("setup", "testing", "cleanup"):
+    phase_dir = root / phase
+    per_name = {}
+    if phase_dir.is_dir():
+        for file in sorted(phase_dir.rglob("*.txt")):
+            # If multiple files with the same stem exist (legacy leftovers),
+            # keep a deterministic choice.
+            existing = per_name.get(file.stem)
+            if existing is None or str(file) < str(existing):
+                per_name[file.stem] = file
+    phase_to_files[phase] = per_name
 
-order_file = root / "scenario_order.json"
-if order_file.is_file():
-    try:
-        data = json.loads(order_file.read_text(encoding="utf-8"))
-    except Exception:
-        data = []
-    if isinstance(data, list):
-        seen_names = set()
-        for item in data:
-            if isinstance(item, dict):
-                idx = item.get("index")
-                name = item.get("name")
-            else:
-                idx = None
-                name = item
-            if not isinstance(name, str):
-                continue
-            name = name.strip()
-            if not name or name in seen_names:
-                continue
-            seen_names.add(name)
-            scenario_entries.append((idx, name))
+scenario_names = sorted(
+    set(phase_to_files["setup"].keys())
+    | set(phase_to_files["testing"].keys())
+    | set(phase_to_files["cleanup"].keys())
+)
 
-testing_dir = root / "testing"
-subdirs = []
-if testing_dir.is_dir():
-    subdirs = [p for p in sorted(testing_dir.iterdir()) if p.is_dir()]
-
-if subdirs:
-    scenario_entries = []
-    for scen_dir in subdirs:
-        try:
-            idx_value = int(scen_dir.name)
-        except ValueError:
-            idx_value = None
-        txt_files = sorted(scen_dir.glob("*.txt"))
-        if not txt_files:
-            # Fall back to setup/cleanup directories sharing the same index.
-            for phase in ("setup", "cleanup"):
-                phase_dir = root / phase / scen_dir.name
-                if phase_dir.is_dir():
-                    txt_files = sorted(phase_dir.glob("*.txt"))
-                    if txt_files:
-                        break
-        if not txt_files:
-            # No files found for this scenario yet, skip but preserve ordering gap.
-            continue
-        for txt in txt_files:
-            scenario_entries.append((idx_value, txt.stem))
-
-if not scenario_entries:
-    names = []
-    if testing_dir.is_dir():
-        names = [file.stem for file in sorted(testing_dir.rglob("*.txt"))]
-    if not names:
-        phases = ("setup", "testing", "cleanup")
-        name_set = set()
-        for phase in phases:
-            phase_dir = root / phase
-            if not phase_dir.is_dir():
-                continue
-            for file in sorted(phase_dir.rglob("*.txt")):
-                name_set.add(file.stem)
-        names = sorted(name_set)
-    scenario_entries = [(None, name) for name in names]
-
-deduped_entries = []
-seen = set()
-for idx, name in scenario_entries:
-    key = (idx, name)
-    if key in seen:
-        continue
-    seen.add(key)
-    deduped_entries.append((idx, name))
-
-scenario_entries = deduped_entries
-
-
-def resolve_path(phase, idx, name):
-    candidates = []
-    if isinstance(idx, int):
-        candidates.append(root / phase / f"{idx:06d}" / f"{name}.txt")
-        candidates.append(root / phase / str(idx) / f"{name}.txt")
-    if isinstance(idx, str) and idx:
-        candidates.append(root / phase / idx / f"{name}.txt")
-    candidates.append(root / phase / f"{name}.txt")
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return None
-
-scenario_entries.sort(key=lambda item: (item[0] if isinstance(item[0], int) else float('inf')))
-for idx, name in scenario_entries:
+for name in scenario_names:
     for phase in ("setup", "testing", "cleanup"):
-        path = resolve_path(phase, idx, name)
+        path = phase_to_files[phase].get(name)
         if path is not None:
             ordered.append(str(path))
         elif phase == "testing":
@@ -432,7 +351,9 @@ for path in ordered + extra_root:
         seen.add(path)
         final.append(path)
 
-sys.stdout.write("\0".join(final))
+# Ensure a trailing NUL so bash read -d '' doesn't drop the last entry.
+if final:
+    sys.stdout.write("\0".join(final) + "\0")
 PY
 }
 
@@ -625,6 +546,17 @@ is_mounted() {
   grep -q " $abs_path " /proc/mounts 2>/dev/null
 }
 
+overlay_base_from_lower() {
+  local abs_lower="$1"
+  if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
+    echo "$OVERLAY_TMP_ROOT"
+    return
+  fi
+  local lower_parent
+  lower_parent=$(dirname "$abs_lower")
+  echo "$lower_parent/$OVERLAY_TMP_ROOT"
+}
+
 prepare_overlay_for_client() {
   local client="$1"
   local network="$2"
@@ -653,15 +585,10 @@ prepare_overlay_for_client() {
     return 1
   fi
 
-  local overlay_base="$OVERLAY_TMP_ROOT"
   local abs_lower
   abs_lower=$(abspath "$lower")
-
-  if [[ "$overlay_base" != /* ]]; then
-    local lower_parent
-    lower_parent=$(dirname "$abs_lower")
-    overlay_base="$lower_parent/$overlay_base"
-  fi
+  local overlay_base
+  overlay_base=$(overlay_base_from_lower "$abs_lower")
 
   mkdir -p "$overlay_base"
 
@@ -797,9 +724,9 @@ cleanup_all_overlays() {
 }
 
 cleanup_stale_overlay_mounts() {
-  local base="$OVERLAY_TMP_ROOT"
+  local base="$1"
   if [ -z "$base" ]; then
-    return
+    base="$OVERLAY_TMP_ROOT"
   fi
 
   if [[ "$base" != /* ]]; then
@@ -867,6 +794,53 @@ cleanup_stale_overlay_mounts() {
   done
 
   find "$base" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+}
+
+collect_overlay_bases() {
+  local bases=()
+  if [ -z "$OVERLAY_TMP_ROOT" ]; then
+    return
+  fi
+
+  if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
+    bases+=("$OVERLAY_TMP_ROOT")
+  else
+    if [ "${#CLIENT_ARRAY[@]}" -gt 0 ]; then
+      local client_spec client_base snapshot_root_for_client abs_snapshot parent
+      for client_spec in "${CLIENT_ARRAY[@]}"; do
+        if [ -z "$client_spec" ]; then
+          continue
+        fi
+        client_base=$(echo "$client_spec" | cut -d '_' -f 1)
+        snapshot_root_for_client=$(resolve_snapshot_root_for_client "$client_base" "$NETWORK")
+        if [ -z "$snapshot_root_for_client" ]; then
+          continue
+        fi
+        abs_snapshot=$(abspath "$snapshot_root_for_client")
+        parent=$(dirname "$abs_snapshot")
+        bases+=("$parent/$OVERLAY_TMP_ROOT")
+      done
+    fi
+    if [ "${#bases[@]}" -eq 0 ]; then
+      bases+=("$(abspath "$OVERLAY_TMP_ROOT")")
+    fi
+  fi
+
+  local b
+  declare -A seen
+  for b in "${bases[@]}"; do
+    if [ -n "$b" ] && [ -z "${seen[$b]}" ]; then
+      seen[$b]=1
+      echo "$b"
+    fi
+  done
+}
+
+cleanup_all_stale_overlay_mounts() {
+  local base
+  while IFS= read -r base; do
+    cleanup_stale_overlay_mounts "$base"
+  done < <(collect_overlay_bases)
 }
 
 drop_host_caches() {
@@ -955,8 +929,8 @@ cleanup_on_exit() {
     cleanup_all_overlays
   fi
 
-  if declare -F cleanup_stale_overlay_mounts >/dev/null 2>&1; then
-    cleanup_stale_overlay_mounts
+  if declare -F cleanup_all_stale_overlay_mounts >/dev/null 2>&1; then
+    cleanup_all_stale_overlay_mounts
   fi
 
   exit $exit_status
@@ -988,28 +962,26 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FSH:L" opt; do
+while getopts "T:t:g:w:c:r:i:o:f:n:B:R:FWSH:L" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
     g) LEGACY_GENESIS_PATH="$OPTARG" ;;
-    w) WARMUP_FILE="$OPTARG" ;;
     c) CLIENTS="$OPTARG" ;;
     r) RUNS="$OPTARG" ;;
     i) IMAGES="$OPTARG" ;;
     o) OPCODES_WARMUP_COUNT="$OPTARG" ;;
     f) FILTER="$OPTARG" ;;  # comma-separated exclude patterns
-    d) DEBUG=true ;;
-    D) DEBUG=true; DEBUG_FILE="$OPTARG" ;;
-    p) PROFILE_TEST=true ;;
     n) NETWORK="$OPTARG"; USE_OVERLAY=true ;;
     B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
+    O) OVERLAY_TMP_ROOT="$OPTARG"; USE_OVERLAY=true ;;
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
     S) SKIP_EMPTY=true;;
     H) GENERATE_RESPONSE_HASHES=true; HASH_CAPTURE_MODE="$OPTARG" ;;
     L) ENABLE_MITMPROXY_LOGGING=true ;;
-    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-S skipEmpty] [-H mode (request|response|all)] [-L enable mitmproxy logging]" >&2
+    W) WARMUP_OPCODES_PATH="$OPTARG" ;;
+    *) echo "Usage: $0 [-t test_path] [-w warmup_file] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-d debug] [-D debug_file] [-p profile_test] [-n network] [-B snapshot_root] [-F skipForkchoice] [-W warmup_opcodes_path] [-S skipEmpty] [-H mode (request|response|all)] [-L enable mitmproxy logging]" >&2
        exit 1 ;;
   esac
 done
@@ -1076,37 +1048,6 @@ trap cleanup_on_exit EXIT INT TERM
 mkdir -p results warmupresults logs
 
 # Initialize debug file if specified
-if [ -n "$DEBUG_FILE" ]; then
-  # Find next available filename to avoid overwriting
-  original_debug_file="$DEBUG_FILE"
-  counter=0
-
-  while [ -f "$DEBUG_FILE" ]; do
-    counter=$((counter + 1))
-    # Extract filename and extension
-    filename="${original_debug_file%.*}"
-    extension="${original_debug_file##*.}"
-
-    # Handle files without extension
-    if [ "$filename" = "$extension" ]; then
-      DEBUG_FILE="${original_debug_file}.${counter}"
-    else
-      DEBUG_FILE="${filename}.${counter}.${extension}"
-    fi
-  done
-
-  # Create debug file with timestamp header
-  echo "=== DEBUG LOG STARTED: $(date) ===" > "$DEBUG_FILE"
-  echo "Script: $0" >> "$DEBUG_FILE"
-  echo "Args: $*" >> "$DEBUG_FILE"
-  echo "=======================================" >> "$DEBUG_FILE"
-
-  # Notify user about the actual filename used
-  if [ "$DEBUG_FILE" != "$original_debug_file" ]; then
-    echo "Debug file '$original_debug_file' already exists, using '$DEBUG_FILE' instead"
-  fi
-fi
-
 if [ "$SKIP_FORKCHOICE" = true ]; then
   SKIP_FORKCHOICE_OPT=" --skipForkchoice"
 else
@@ -1114,35 +1055,28 @@ else
 fi
 
 if [ "$USE_OVERLAY" = true ]; then
-  cleanup_stale_overlay_mounts
+  cleanup_all_stale_overlay_mounts
   if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
     mkdir -p "$OVERLAY_TMP_ROOT"
   fi
 fi
 
 # Set up environment
-start_timer "environment_setup"
 rm -rf results
 mkdir -p results
 mkdir -p warmupresults
 mkdir -p logs
 rm -rf "$PREPARATION_RESULTS_DIR"
 mkdir -p "$PREPARATION_RESULTS_DIR"
-end_timer "environment_setup"
 
 # Initialize executions tracking
-start_timer "executions_init"
 init_executions_file
-end_timer "executions_init"
 
 # Install dependencies
-start_timer "dependencies_install"
 pip install -r requirements.txt
 make prepare_tools
-end_timer "dependencies_install"
 
 # Find test files and their associated genesis paths
-start_timer "test_discovery"
 TEST_FILES=()
 TEST_TO_GENESIS=()
 
@@ -1151,8 +1085,6 @@ for i in "${!TEST_PATHS[@]}"; do
   genesis="${GENESIS_PATHS[$i]}"
   append_tests_for_path "$path" "$genesis"
 done
-debug_log "Found ${#TEST_FILES[@]} test files"
-end_timer "test_discovery"
 
 DEFAULT_GENESIS=""
 for genesis_entry in "${TEST_TO_GENESIS[@]}"; do
@@ -1163,12 +1095,9 @@ for genesis_entry in "${TEST_TO_GENESIS[@]}"; do
 done
 
 # Run benchmarks
-start_timer "benchmarks_total"
 for run in $(seq 1 $RUNS); do
-  debug_log "Starting run $run/$RUNS"
   for client in "${CLIENT_ARRAY[@]}"; do
-    debug_log "Processing client: $client"
-
+    
     # Skip nimbus or ethrex if already run today
     if { [ "$client" = "nimbus" ] || [ "$client" = "ethrex" ]; } && was_executed_today "$client"; then
       echo "Skipping $client - already executed today"
@@ -1219,7 +1148,6 @@ for run in $(seq 1 $RUNS); do
       volume_name="${client_base}_volume"
     fi
 
-    end_timer "setup_node_${client}"
 
     setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
     if [ -n "$NETWORK" ]; then
@@ -1254,21 +1182,6 @@ for run in $(seq 1 $RUNS); do
 
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
     cat results/computer_specs.txt
-
-    warmed=false
-
-    # Warmup
-    if [ "$warmed" = false ] && [ -n "$WARMUP_FILE" ]; then
-      start_timer "warmup_${client}_run_${run}"
-      if [ -f "$WARMUP_FILE" ]; then
-        echo "[INFO] Running warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$WARMUP_FILE\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
-        python3 run_kute.py --output warmupresults --testsPath "$WARMUP_FILE" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
-      else
-        echo "[WARN] Warmup file '$WARMUP_FILE' not found; skipping warmup."
-      fi
-      warmed=true
-      end_timer "warmup_${client}_run_${run}"
-    fi
 
     declare -A warmup_run_counts=()
 
@@ -1331,31 +1244,74 @@ for run in $(seq 1 $RUNS); do
       fi
 
       base_prefix="${filename%-gas-value_*}"
-      warmup_candidates=( "$WARMUP_OPCODES_PATH"/"$base_prefix"-gas-value_*.txt )
-      warmup_path="${warmup_candidates[0]}"
+
+      IFS=',' read -ra _warmup_roots <<< "$WARMUP_OPCODES_PATH"
+      warmup_path=""
+      rel_path="$normalized_path"
+      rel_path="${rel_path#./}"
+      rel_path="${rel_path#/}"
+      esc_filename="$filename"
+      esc_filename=${esc_filename//\\/\\\\}
+      esc_filename=${esc_filename//\[/\\[}
+      esc_filename=${esc_filename//\]/\\]}
+      esc_filename=${esc_filename//\*/\\*}
+      esc_filename=${esc_filename//\?/\\?}
+      for root in "${_warmup_roots[@]}"; do
+        [ -z "$root" ] && continue
+        candidate="$root/$rel_path"
+        if [ -f "$candidate" ]; then
+          warmup_path="$candidate"
+          break
+        fi
+        found=$(find "$root" -type f -name "$esc_filename" -print -quit 2>/dev/null)
+        if [ -n "$found" ]; then
+          warmup_path="$found"
+          break
+        fi
+      done
+      # Legacy fallback: try matching <base_prefix> alongside the test
+      if [ -z "$warmup_path" ] && [ "$base_prefix" != "$filename" ]; then
+        rel_dir="${rel_path%/*}"
+        [ "$rel_dir" = "$rel_path" ] && rel_dir=""
+        esc_base_prefix="$base_prefix"
+        esc_base_prefix=${esc_base_prefix//\\/\\\\}
+        esc_base_prefix=${esc_base_prefix//\[/\\[}
+        esc_base_prefix=${esc_base_prefix//\]/\\]}
+        esc_base_prefix=${esc_base_prefix//\*/\\*}
+        esc_base_prefix=${esc_base_prefix//\?/\\?}
+        for root in "${_warmup_roots[@]}"; do
+          [ -z "$root" ] && continue
+          search_dir="$root"
+          [ -n "$rel_dir" ] && search_dir="$root/$rel_dir"
+          found=$(find "$search_dir" -maxdepth 1 -type f -name "$esc_base_prefix" -print -quit 2>/dev/null)
+          if [ -n "$found" ]; then
+            warmup_path="$found"
+            break
+          fi
+        done
+      fi
 
       if (( OPCODES_WARMUP_COUNT > 0 )); then
-        start_test_timer "opcodes_warmup_${client}_${filename}"
-        current_count="${warmup_run_counts[$warmup_path]:-0}"
-        if (( current_count >= OPCODES_WARMUP_COUNT )); then
-          echo ""
+        if [ -z "$warmup_path" ]; then
+          echo "[WARN] No opcode warmup file found for $filename (searched under $WARMUP_OPCODES_PATH)"
         else
-          for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-            test_debug_log "Opcodes warmup $warmup_count/$OPCODES_WARMUP_COUNT for $filename"
-            echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
-            python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
-            warmup_run_counts["$warmup_path"]=$((warmup_run_counts["$warmup_path"] + 1))
-          done
-          end_test_timer "opcodes_warmup_${client}_${filename}"
+          current_count="${warmup_run_counts["$warmup_path"]:-0}"
+          case "$current_count" in
+            ''|*[!0-9]*) current_count=0 ;;
+          esac
+          if (( current_count < OPCODES_WARMUP_COUNT )); then
+            for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
+              echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+              python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+              current_count=$((current_count + 1))
+            done
+            warmup_run_counts["$warmup_path"]=$current_count
+          fi
         fi
       fi
 
       # Actual measured run
-      if drop_host_caches; then
-        test_debug_log "Dropped host caches before scenario $filename"
-      else
-        test_debug_log "Skipped host cache drop before scenario $filename (insufficient permissions)"
-      fi
+      drop_host_caches || true
       start_test_timer "test_run_${client}_${filename}"
       test_debug_log "Running test: $filename"
       # Write test name for hash capture addon
@@ -1365,6 +1321,65 @@ for run in $(seq 1 $RUNS); do
       echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT$HASH_EC_URL_ARG"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT$HASH_EC_URL_ARG
       end_test_timer "test_run_${client}_${filename}"
+
+      # Capture debug_traceBlockByNumber for the testing payload (unigramTracer) when enabled
+      if [ "${TRACE_BLOCKS:-false}" = true ]; then
+        trace_block_number=$(python3 - "$test_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+block = ""
+try:
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        method = str(data.get("method", ""))
+        if not method.startswith("engine_newPayload"):
+            continue
+        params = data.get("params") or []
+        if params and isinstance(params[0], dict):
+            bn = params[0].get("blockNumber")
+            if isinstance(bn, str) and bn.strip():
+                block = bn.strip()
+            elif isinstance(bn, (int, float)):
+                block = hex(int(bn))
+        break
+except Exception:
+    block = ""
+
+# Sanitize for filename
+if block:
+    fname = block.replace("0x", "0x")
+    print(fname)
+else:
+    print("")
+PY
+)
+
+        if [ -n "$trace_block_number" ]; then
+          mkdir -p traces
+          trace_file="traces/block_${trace_block_number}.json"
+          trace_payload=$(cat <<EOF
+{"jsonrpc":"2.0","id":1,"method":"debug_traceBlockByNumber","params":["$trace_block_number",{"tracer":"unigramTracer"}]}
+EOF
+)
+          echo "[INFO] Capturing unigramTracer trace for block $trace_block_number into $trace_file"
+          if ! curl -s -X POST -H "Content-Type: application/json" --data "$trace_payload" http://127.0.0.1:8545 > "$trace_file"; then
+            echo "[WARN] Failed to capture trace for block $trace_block_number"
+            rm -f "$trace_file"
+          fi
+        else
+          echo "[WARN] Could not determine blockNumber for $filename; skipping debug_traceBlockByNumber"
+        fi
+      fi
+
       echo "" # Line break after each test for logs clarity
     done
 
@@ -1372,7 +1387,6 @@ for run in $(seq 1 $RUNS); do
     stop_hash_capture_proxy
 
     # Collect logs & teardown
-    start_timer "teardown_${client}"
     ts=$(date +%s)
     dump_client_logs "$client_base"
     docker_compose_down_for_client "$client_base"
@@ -1381,29 +1395,21 @@ for run in $(seq 1 $RUNS); do
 
     if [ "$USE_OVERLAY" = true ]; then
       cleanup_overlay_for_client "$client_base"
-      cleanup_stale_overlay_mounts
+      cleanup_all_stale_overlay_mounts
     fi
-    end_timer "teardown_${client}"
 
     unset RUNNING_CLIENTS["$client_base"]
 
-    if drop_host_caches; then
-      debug_log "Dropped host caches"
-    else
-      debug_log "Skipped host cache drop (insufficient permissions)"
-    fi
+    drop_host_caches || true
 
     # Only mark the client as executed after the final run to avoid skipping
     # subsequent runs within the same invocation when RUNS > 1.
     if [ "$run" -eq "$RUNS" ]; then
       update_execution_time "$client"
     fi
-    end_timer "client_${client}_run_${run}"
   done
 done
-end_timer "benchmarks_total"
 
-start_timer "results_processing"
 SKIP_EMPTY_OPT=""
 if [ "$SKIP_EMPTY" = true ]; then
   SKIP_EMPTY_OPT="--skipEmpty"
@@ -1416,18 +1422,14 @@ else
   python3 report_tables.py --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
   python3 report_html.py   --resultsPath results --clients "$CLIENTS" --testsPath "${TEST_PATHS[0]}" --runs "$RUNS" --images "$IMAGES" $SKIP_EMPTY_OPT
 fi
-end_timer "results_processing"
 
 start_timer "cross_client_validation"
 validate_cross_client_results
 end_timer "cross_client_validation"
 
 # Prepare and zip the results
-start_timer "results_packaging"
 mkdir -p reports/docker
 cp -r results/docker_* reports/docker
 zip -r reports.zip reports
-end_timer "results_packaging"
 
 # Print timing summary at the end
-print_timing_summary

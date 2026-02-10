@@ -1,12 +1,26 @@
 .PHONY: prepare_tools clean
 
+NETHERMIND_DIR := nethermind
+NETHERMIND_COMMIT := e1857d7ca6613ccdc40973899290f565f367e235
+KUTE_BIN := $(NETHERMIND_DIR)/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute
+
 prepare_tools:
-	@if [ ! -d nethermind ]; then \
-		git clone https://github.com/NethermindEth/nethermind nethermind; \
-		cd nethermind && git lfs pull; \
+	@set -e; \
+	if [ ! -d "$(NETHERMIND_DIR)/.git" ]; then \
+		git clone https://github.com/NethermindEth/nethermind "$(NETHERMIND_DIR)"; \
+	fi; \
+	cd "$(NETHERMIND_DIR)"; \
+	git fetch --all --prune; \
+	git checkout "$(NETHERMIND_COMMIT)"; \
+	git lfs pull; \
+	cd ..; \
+	if [ ! -f "$(KUTE_BIN)" ]; then \
+		dotnet build "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" -c Release --property WarningLevel=0; \
+	fi; \
+	if [ ! -f "$(KUTE_BIN)" ]; then \
+		echo "ERROR: Kute binary not found at $(KUTE_BIN) after build."; \
+		exit 1; \
 	fi
-	cd nethermind && git checkout e1857d7ca6613ccdc40973899290f565f367e235 && cd ..
-	dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release --property WarningLevel=0
 
 clean:
-	rm -rf nethermind
+	rm -rf "$(NETHERMIND_DIR)"

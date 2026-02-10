@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import json
 import os
 import re
@@ -251,16 +251,16 @@ def set_env(
 
 def copy_genesis_file(source: Path, target: Path) -> None:
     if not source.is_file():
-        print(f"❌ Genesis file not found at: {source}")
+        print(f"âťŚ Genesis file not found at: {source}")
         exit(1)
 
     target.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         shutil.copy(source, target)
-        print(f"✅ Copied genesis file: {source} → {target}")
+        print(f"âś… Copied genesis file: {source} â†’ {target}")
     except Exception as exc:
-        print(f"❌ Failed to copy genesis file from {source} to {target}: {exc}")
+        print(f"âťŚ Failed to copy genesis file from {source} to {target}: {exc}")
         exit(1)
 
 
@@ -303,7 +303,7 @@ def main():
         el_images = yaml.safe_load(f)["images"]
 
     if client_without_tag not in el_images:
-        print("❌ Client not supported:", client_without_tag)
+        print("âťŚ Client not supported:", client_without_tag)
         return
 
     # Override image from bulk if needed
@@ -319,11 +319,10 @@ def main():
     run_path = os.path.join(os.getcwd(), "scripts", client_without_tag)
 
     metadata = get_metadata(client_without_tag)
-    use_custom_genesis = network is None
+    use_custom_genesis = bool(genesis_path)
 
-    if network and genesis_path:
-        print("⚠️  Ignoring --genesisPath because --network was provided")
-        genesis_path = None
+    if network and use_custom_genesis:
+        print(f"[info] Using custom genesis with network context: {network}")
 
     genesis_target: Path = metadata["target"]
     if use_custom_genesis:
@@ -352,3 +351,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

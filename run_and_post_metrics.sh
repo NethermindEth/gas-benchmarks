@@ -6,39 +6,39 @@
 #   --db-user      The database user.
 #   --db-host      The database host.
 #   --db-password  The database password.
-#   --warmup       The warmup file (default: warmup/warmup-1000bl-16wi-24tx.txt)
 #   --prometheus-endpoint   The Prometheus endpoint URL.
 #   --prometheus-username   The Prometheus basic auth username.
 #   --prometheus-password   The Prometheus basic auth password.
 #   --network      Network name forwarded to run.sh (e.g. mainnet)
 #   --snapshot-root Base directory for overlay snapshots (can include placeholders)
 #   --snapshot-template Optional template appended to snapshot root (supports <<CLIENT>> / <<NETWORK>>)
+#   --overlay-root  Absolute path for overlay runtime directory (passed to run.sh -O)
 #   --clients      Comma-separated client list forwarded to run.sh
 #   --restarts     true/false to control client restarts (-R flag for run.sh)
-#   --debug        Enable debug mode with detailed timing
-#   --debug-file   Enable debug mode and save output to specified file
-#   --profile-test Enable test-specific profiling (shows individual test timings)
+#   --debug        Enable debug logging for this script
+#   --debug-file   Enable debug logging and save output to specified file
+#   --max-loops    Optional integer to stop after N iterations (default: unlimited)
+#   --warmup-opcodes-path Path to opcode warmup payloads directory (default: warmup-tests)
 #
 # Example usage:
-#   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --warmup "warmup/mycustom.txt" --debug &
-#   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --debug-file "debug.log" --profile-test &
-#
-# Default warmup file is set to "warmup/warmup-1000bl-16wi-24tx.txt"
+#   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --debug &
+#   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --debug-file "debug.log" &
 
-# Default warmup file (empty means skip warmup)
-WARMUP_FILE=""
 TEST_PATHS_JSON='[{"path":"eest_tests","genesis":"zkevmgenesis.json"}]'  # default test path
-DEBUG_ARGS=()
 DEBUG=false
 DEBUG_FILE=""
 NETWORK=""
 NETWORK_LABEL="all"
 SNAPSHOT_ROOT=""
 SNAPSHOT_TEMPLATE=""
+OVERLAY_ROOT=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
-SKIP_EMPTY=true
+MAX_LOOPS=""
+WARMUP_OPCODES_PATH=""
+SKIP_CLEANUP=false
+CLEANUP_ARMED=false
 parse_bool() {
   case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
     true|1|yes|on) echo true ;;
@@ -66,12 +66,11 @@ sanitize_label() {
   fi
 }
 
-# Timing variables
-declare -A STEP_TIMES
-SCRIPT_START_TIME=$(date +%s.%N)
-
 # Cleanup function
 cleanup() {
+  if [ "$SKIP_CLEANUP" = true ] || [ "$CLEANUP_ARMED" = false ]; then
+    return
+  fi
   debug_log "Script cleanup initiated"
   
   # Stop and delete the gas-execution-client container
@@ -87,12 +86,26 @@ cleanup() {
   # Remove script/*/execution-data folders
   debug_log "Removing script/*/execution-data folders..."
   find scripts/ -type d -name "execution-data" -exec rm -r {} + 2>/dev/null || true
+
+  # Stop and remove all containers, then prune Docker resources
+  if command -v docker >/dev/null 2>&1; then
+    debug_log "Stopping all running containers..."
+    docker ps -q | xargs -r docker stop 2>/dev/null || true
+    debug_log "Removing all containers..."
+    docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
+    debug_log "Pruning all Docker resources (including volumes)..."
+    docker system prune -af --volumes 2>/dev/null || true
+  fi
   
   debug_log "Script cleanup completed"
 }
 
 # Set up signal handlers for cleanup
 trap cleanup EXIT INT TERM
+
+usage() {
+  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --overlay-root <path> --clients <client_list> --restarts <true|false> --max-loops <N>]"
+}
 
 # Debug logging function
 debug_log() {
@@ -105,57 +118,14 @@ debug_log() {
   fi
 }
 
-# Timing functions
-start_timer() {
-  local step_name="$1"
-  STEP_TIMES["${step_name}_start"]=$(date +%s.%N)
-  debug_log "Starting: $step_name"
-}
-
-end_timer() {
-  local step_name="$1"
-  local end_time=$(date +%s.%N)
-  local start_time="${STEP_TIMES["${step_name}_start"]}"
-  if [ -n "$start_time" ]; then
-    local duration=$(awk "BEGIN {printf \"%.2f\", $end_time - $start_time}")
-    STEP_TIMES["${step_name}_duration"]=$duration
-    debug_log "Completed: $step_name (${duration}s)"
-  fi
-}
-
-print_timing_summary() {
-  if [ "$DEBUG" = true ]; then
-    local summary=""
-    summary+="\n"
-    summary+="=== LOOP TIMING SUMMARY ===\n"
-    local total_time=$(awk "BEGIN {printf \"%.2f\", $(date +%s.%N) - $LOOP_START_TIME}")
-    summary+="Total loop time: ${total_time}s\n"
-    summary+="\n"
-    
-    for key in "${!STEP_TIMES[@]}"; do
-      if [[ "$key" == *"_duration" ]]; then
-        local step_name="${key%_duration}"
-        local duration="${STEP_TIMES[$key]}"
-        summary+="$(printf "%-30s: %8ss\n" "$step_name" "$duration")"
-      fi
-    done
-    summary+="===========================\n"
-    
-    # Print to stdout
-    echo -e "$summary"
-    
-    # Save to file if specified
-    if [ -n "$DEBUG_FILE" ]; then
-      echo -e "$summary" >> "$DEBUG_FILE"
-    fi
-  fi
-}
-
-
-
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --help|-h)
+      SKIP_CLEANUP=true
+      usage
+      exit 0
+      ;;
     --table-name)
       TABLE_NAME="$2"
       shift 2
@@ -170,10 +140,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --db-password)
       DB_PASSWORD="$2"
-      shift 2
-      ;;
-    --warmup)
-      WARMUP_FILE="$2"
       shift 2
       ;;
     --prometheus-endpoint)
@@ -194,19 +160,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --debug)
       DEBUG=true
-      DEBUG_ARGS+=(-d)
       shift
       ;;
     --debug-file)
       DEBUG=true
       DEBUG_FILE="$2"
-      DEBUG_ARGS+=(-D "$DEBUG_FILE")
       shift 2
-      ;;
-    --profile-test)
-      DEBUG=true
-      DEBUG_ARGS+=(-p)
-      shift
       ;;
     --network)
       NETWORK="$2"
@@ -215,6 +174,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --snapshot-root)
       SNAPSHOT_ROOT="$2"
+      shift 2
+      ;;
+    --overlay-root)
+      OVERLAY_ROOT="$2"
       shift 2
       ;;
     --snapshot-template)
@@ -230,10 +193,6 @@ while [[ $# -gt 0 ]]; do
       RESTART_BEFORE_TESTING=true
       shift
       ;;
-    --skip-empty)
-      SKIP_EMPTY=true
-      shift
-      ;;
     --restarts)
       value=$(parse_bool "$2")
       if [ "$value" = "invalid" ]; then
@@ -241,6 +200,19 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       RESTART_BEFORE_TESTING=$value
+      shift 2
+      ;;
+    --warmup-opcodes-path)
+      WARMUP_OPCODES_PATH="$2"
+      shift 2
+      ;;
+    --max-loops)
+      if [[ "$2" =~ ^[0-9]+$ && "$2" -gt 0 ]]; then
+        MAX_LOOPS="$2"
+      else
+        echo "Invalid value for --max-loops: $2 (expected positive integer)"
+        exit 1
+      fi
       shift 2
       ;;
     *)
@@ -253,7 +225,7 @@ done
 
 
 if [[ -z "$TABLE_NAME" || -z "$DB_USER" || -z "$DB_HOST" || -z "$DB_PASSWORD" ]]; then
-echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup <warmup_file> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --clients <client_list> --restarts <true|false> --skip-empty]"
+  usage
   exit 1
 fi
 
@@ -289,31 +261,20 @@ if [ -n "$DEBUG_FILE" ]; then
   fi
 fi
 
-# Run commands in an infinite loop
+# Run commands in an infinite loop (optionally bounded by --max-loops)
+CLEANUP_ARMED=true
+loops_done=0
 while true; do
-  # Start timing for this loop iteration
-  LOOP_START_TIME=$(date +%s.%N)
+  loops_done=$((loops_done + 1))
   debug_log "Starting new loop iteration"
-  start_timer "git_pull"
   git pull
   git lfs pull
-  end_timer "git_pull"
   
-  start_timer "update_performance_images"
   # Update performance images
   python3 update_performance_images.py
-  end_timer "update_performance_images"
   
-  start_timer "benchmark_testing"
-  # Run the benchmark testing using specified warmup file
+  # Run the benchmark testing using opcode warmups only
   RUN_CMD=(bash run.sh -T "$TEST_PATHS_JSON" -r 1)
-  if [ -n "$WARMUP_FILE" ]; then
-    if [ -f "$WARMUP_FILE" ]; then
-      RUN_CMD+=(-w "$WARMUP_FILE")
-    else
-      echo "[WARN] Requested warmup file '$WARMUP_FILE' not found; skipping warmup."
-    fi
-  fi
   if [ -n "$NETWORK" ]; then
     RUN_CMD+=(-n "$NETWORK")
   fi
@@ -330,6 +291,10 @@ while true; do
     RUN_CMD+=(-B "$snapshot_arg")
   fi
 
+  if [ -n "$OVERLAY_ROOT" ]; then
+    RUN_CMD+=(-O "$OVERLAY_ROOT")
+  fi
+
   if [ -n "$CLIENTS" ]; then
     RUN_CMD+=(-c "$CLIENTS")
   fi
@@ -337,13 +302,8 @@ while true; do
   if [ "$RESTART_BEFORE_TESTING" = true ]; then
     RUN_CMD+=(-R true)
   fi
-
-  if [ "$SKIP_EMPTY" = true ]; then
-    RUN_CMD+=(-S)
-  fi
-
-  if [ ${#DEBUG_ARGS[@]} -gt 0 ]; then
-    RUN_CMD+=("${DEBUG_ARGS[@]}")
+  if [ -n "$WARMUP_OPCODES_PATH" ]; then
+    RUN_CMD+=(-W "$WARMUP_OPCODES_PATH")
   fi
 
   echo "[INFO] Executing benchmark command: ${RUN_CMD[*]}"
@@ -351,9 +311,7 @@ while true; do
   PROMETHEUS_USERNAME="$PROMETHEUS_USERNAME" \
   PROMETHEUS_PASSWORD="$PROMETHEUS_PASSWORD" \
     "${RUN_CMD[@]}"
-  end_timer "benchmark_testing"
 
-  start_timer "populate_postgres_db_background"
   # Create unique backup directory with timestamp
   TIMESTAMP=$(date +%Y%m%d_%H%M%S)
   BACKUP_PREFIX="reports_backup_${CLIENTS_LABEL}_${NETWORK_LABEL}"
@@ -375,26 +333,19 @@ while true; do
   
   # Populate the Postgres DB with the metrics data
   python3 fill_postgres_db.py --db-host "$DB_HOST" --db-port 5432 --db-user "$DB_USER" --db-name monitoring --table-name "$TABLE_NAME" --db-password "$DB_PASSWORD" --reports-dir "$BACKUP_DIR" &
-  end_timer "populate_postgres_db_background"
 
-  start_timer "cleanup_reports"
   # Clean up the reports directory
   rm -rf reports/
-  end_timer "cleanup_reports"
 
-  start_timer "revert_images"
   # Revert images.yml to original state
   python3 update_performance_images.py --revert
-  end_timer "revert_images"
-  
-  # Print timing summary for this loop iteration
-  print_timing_summary
-  
-  # Clear timing data for next iteration
-  unset STEP_TIMES
-  declare -A STEP_TIMES
   
   debug_log "Loop iteration completed"
   echo "--- End of loop iteration ---"
+
+  if [ -n "$MAX_LOOPS" ] && [ "$loops_done" -ge "$MAX_LOOPS" ]; then
+    echo "[INFO] Reached max loops ($MAX_LOOPS); exiting."
+    exit 0
+  fi
 done
 
