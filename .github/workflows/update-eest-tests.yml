@@ -87,28 +87,29 @@ jobs:
           echo "=== /tmp usage ==="
           du -sh /tmp/* 2>/dev/null | sort -hr | head -20 || echo "Empty or inaccessible"
           echo ""
-          echo "=== runner.temp location ==="
-          echo "${{ runner.temp }}"
-          df -h "${{ runner.temp }}"
+          echo "=== /mnt has more space, using it for large artifacts ==="
+          df -h /mnt
 
       - name: Create temp directory for EEST fixture artifacts
-        run: mkdir -p "${{ runner.temp }}/eest_artifacts"
+        run: mkdir -p /mnt/eest_artifacts
 
       - name: Download EEST fixtures securely
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: /mnt  # Use /mnt for temp files during extraction (66GB vs 33GB on root)
         run: |
           echo "=== Starting EEST fixtures download ==="
-          echo "Downloading to: ${{ runner.temp }}/eest_artifacts"
+          echo "Downloading to: /mnt/eest_artifacts"
+          echo "TMPDIR set to: $TMPDIR (for gh cli temp files)"
           
-          gh run download -R ethereum/execution-specs -n fixtures_benchmark_fast -D "${{ runner.temp }}/eest_artifacts"
+          gh run download -R ethereum/execution-specs -n fixtures_benchmark_fast -D /mnt/eest_artifacts
           
           echo ""
           echo "=== Download complete ==="
-          ls -la "${{ runner.temp }}/eest_artifacts"
+          ls -la /mnt/eest_artifacts
           echo ""
           echo "=== Artifact sizes ==="
-          du -sh "${{ runner.temp }}/eest_artifacts"/*
+          du -sh /mnt/eest_artifacts/*
           echo ""
           echo "=== Disk space after download ==="
           df -h
@@ -118,18 +119,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Securely verify and rename artifact, fail if not a regular file
-          if [ ! -f "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
+          if [ ! -f "/mnt/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
             echo "Expected file not found: fixtures_benchmark_fast.tar.gz" >&2
             exit 1
           fi
-          if [ -L "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
+          if [ -L "/mnt/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
             echo "Artifact file is a symbolic link! Aborting." >&2
             exit 1
           fi
-          cp "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
+          cp "/mnt/eest_artifacts/fixtures_benchmark_fast.tar.gz" "/mnt/eest_artifacts/fixtures_benchmark.tar.gz"
           
           echo "=== Running capture_eest_tests.py ==="
-          python3 capture_eest_tests.py -o eest_tests --local-archive "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
+          python3 capture_eest_tests.py -o eest_tests --local-archive "/mnt/eest_artifacts/fixtures_benchmark.tar.gz"
           
           echo ""
           echo "=== EEST tests captured ==="
@@ -141,7 +142,7 @@ jobs:
           # Clean up temp artifacts to free space
           echo ""
           echo "=== Cleaning up temp artifacts ==="
-          rm -rf "${{ runner.temp }}/eest_artifacts"
+          rm -rf "/mnt/eest_artifacts"
           df -h
 
       - name: Show disk space before genesis download
@@ -152,6 +153,7 @@ jobs:
       - name: Download benchmark genesis artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: /mnt  # Use /mnt for temp files during extraction
         run: |
           echo "=== Starting genesis artifact download ==="
           gh run download -R ethereum/execution-specs -n benchmark_genesis_benchmark_fast
