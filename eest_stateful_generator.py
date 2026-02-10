@@ -790,7 +790,12 @@ def start_nethermind_container(
     if genesis_path:
         cmd += ["--config", "none", "--Init.ChainSpecPath", "/genesis/custom.json"]
     else:
-        cmd += ["--config", str(chain)]
+        chain_name = str(chain).strip().lower()
+        # perf-devnet-2 uses mainnet-format DB/genesis in this workflow; Nethermind has no built-in "perf-devnet-2" config.
+        runtime_config = "mainnet" if chain_name in ("perf-devnet-2", "mainnet", "ethereum") else str(chain)
+        if runtime_config != str(chain):
+            print(f"[INFO] Overriding Nethermind runtime --config from {chain!r} to {runtime_config!r}")
+        cmd += ["--config", runtime_config]
 
     cmd += [
         "--JsonRpc.Enabled",

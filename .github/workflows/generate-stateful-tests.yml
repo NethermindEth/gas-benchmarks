@@ -263,7 +263,7 @@ jobs:
             "${GENESIS_ARGS[@]}" \
             --snapshotRoot "$SNAPSHOT_DIR_WARMUP" \
             --overlayRoot "$OVERLAY_ROOT" \
-            --network "$CFG_CHAIN"
+            --network "mainnet"
 
       - name: Print warmup nethermind log
         if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' }}
