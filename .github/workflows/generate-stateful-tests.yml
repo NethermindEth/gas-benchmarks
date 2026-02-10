@@ -134,10 +134,12 @@ jobs:
             mainnet)
               SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              EXECUTION_CHAIN="mainnet"
               ;;
             perf-devnet-2)
               SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-2/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              EXECUTION_CHAIN="mainnet"
               ;;
             *)
               echo "Unsupported chain: $CFG_CHAIN" >&2
@@ -167,6 +169,7 @@ jobs:
 
           echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
           echo "SNAPSHOT_DIR_WARMUP=$SNAPSHOT_DIR_WARMUP" >> "$GITHUB_ENV"
+          echo "EXECUTION_CHAIN=$EXECUTION_CHAIN" >> "$GITHUB_ENV"
           echo "PAYLOAD_DIR=$PAYLOAD_DIR" >> "$GITHUB_ENV"
           echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
           echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
@@ -211,7 +214,7 @@ jobs:
             --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
             --stubs-file "$CFG_STUBS_FILE" \
             --snapshot-dir "$SNAPSHOT_DIR_NM" \
-            --chain "$CFG_CHAIN" \
+            --chain "$EXECUTION_CHAIN" \
             "${GENESIS_ARGS[@]}" \
             --overlay-root "$OVERLAY_ROOT" \
             --allow-execute-remote-failures \
