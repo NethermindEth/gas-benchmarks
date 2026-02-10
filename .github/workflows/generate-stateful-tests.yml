@@ -1,9 +1,6 @@
 name: Generate Stateful Tests
 
 on:
-  push:
-    branches:
-      - repricing
   workflow_dispatch:
     inputs:
       nethermind_image:
@@ -25,19 +22,19 @@ on:
       payload_dir:
         description: "Output directory for generated tests"
         required: true
-        default: "test-shifts"
+        default: "repricings_compute/mainnet"
       test_path:
         description: "EEST test path passed to eest_stateful_generator.py"
         required: true
-        default: "tests/benchmark/stateful/"
+        default: "tests/benchmark/compute/"
       eest_repo:
         description: "execution-specs repository"
         required: true
-        default: "https://github.com/LouisTsai-Csie/execution-specs"
+        default: "https://github.com/ethereum/execution-specs"
       eest_branch:
         description: "execution-specs branch"
         required: true
-        default: "fix-sstore-invariant"
+        default: "forks/amsterdam"
       gas_benchmark_values:
         description: "Comma-separated benchmark values"
         required: true
@@ -54,7 +51,7 @@ on:
           - stateful
           - repricing
           - benchmark
-        default: "stateful"
+        default: "repricing"
       rpc_address:
         description: "RPC funding address"
         required: true
