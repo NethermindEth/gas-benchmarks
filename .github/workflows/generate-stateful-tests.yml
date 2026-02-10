@@ -199,6 +199,7 @@ jobs:
             --snapshot-dir "$SNAPSHOT_DIR_NM" \
             --chain "$CFG_CHAIN" \
             --overlay-root "$OVERLAY_ROOT" \
+            --allow-execute-remote-failures \
             --trace-json \
             --trace-json-output "$TRACES_JSON"
 
