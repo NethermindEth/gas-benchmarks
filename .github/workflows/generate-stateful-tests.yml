@@ -53,10 +53,6 @@ on:
           - repricing
           - benchmark
         default: "repricing"
-      rpc_address:
-        description: "RPC funding address"
-        required: true
-        default: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
       generation_mode:
         description: "Generation mode"
         required: true
@@ -93,7 +89,7 @@ jobs:
       CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
       CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
       CFG_STUBS_FILE: "execution-specs/tests/benchmark/stateful/bloatnet/stubs.json"
-      CFG_RPC_ADDRESS: ${{ github.event.inputs.rpc_address || '0x86cF016FB873D50a7B8F31EB154c9234DD31b058' }}
+      CFG_RPC_ADDRESS: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
       CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
 
     steps:
