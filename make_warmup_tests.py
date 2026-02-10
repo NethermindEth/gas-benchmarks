@@ -6,15 +6,17 @@ GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83
 IMAGES = '{"nethermind":"default","geth":"ethereum/client-go:latest","reth":"default","erigon":"default","besu":"default"}'
 KUTE_BINARY = Path("./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute")
 WARMUP_GETH_LOG = Path("warmup_geth.log")
+WARMUP_CLIENT = "nethermind"
 
 _ACTIVE_CLEANUP = {
-    "client": "geth",
+    "client": WARMUP_CLIENT,
     "data_dir": None,
     "overlay": None,
 }
 
 
-def _set_active_cleanup(data_dir: Path = None, overlay: dict = None) -> None:
+def _set_active_cleanup(data_dir: Path = None, overlay: dict = None, client: str = WARMUP_CLIENT) -> None:
+    _ACTIVE_CLEANUP["client"] = client
     _ACTIVE_CLEANUP["data_dir"] = data_dir
     _ACTIVE_CLEANUP["overlay"] = overlay
 
@@ -30,7 +32,7 @@ def _run_active_cleanup() -> None:
     if data_dir is None and overlay is None:
         return
     try:
-        teardown(str(_ACTIVE_CLEANUP.get("client") or "geth"), data_dir=data_dir, overlay=overlay)
+        teardown(str(_ACTIVE_CLEANUP.get("client") or WARMUP_CLIENT), data_dir=data_dir, overlay=overlay)
     except Exception as e:
         print(f"[warn] active cleanup failed: {e}")
     finally:
@@ -96,26 +98,91 @@ def _ensure_kute_binary() -> None:
         raise RuntimeError(f"Kute binary still not found after prepare_tools: {KUTE_BINARY}")
 
 
-def collect_mismatches(container: str = "gas-execution-client", log_path: Path = None, scope: str = "") -> dict:
-    logs = subprocess.check_output(["docker", "logs", container], stderr=subprocess.STDOUT, text=True)
+_NM_BLOCKHASH_MISMATCH_RE = re.compile(
+    r"Invalid block hash\s+(0x[0-9a-fA-F]{64})\s+does not match calculated hash\s+(0x[0-9a-fA-F]{64})",
+    re.IGNORECASE,
+)
+
+
+def _iter_dicts(value):
+    if isinstance(value, dict):
+        yield value
+        for nested in value.values():
+            yield from _iter_dicts(nested)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _iter_dicts(item)
+
+
+def _extract_validation_errors_from_payload(payload):
+    errors = []
+    for node in _iter_dicts(payload):
+        for key in ("validationError", "validation_error"):
+            raw = node.get(key)
+            if isinstance(raw, str) and raw:
+                errors.append(raw)
+    return errors
+
+
+def _parse_response_payloads(raw: str):
+    raw = raw.strip()
+    if not raw:
+        return []
+
+    payloads = []
+    try:
+        payloads.append(json.loads(raw))
+        return payloads
+    except Exception:
+        pass
+
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payloads.append(json.loads(line))
+        except Exception:
+            continue
+    return payloads
+
+
+def collect_mismatches_from_kute(response_dir: Path, log_path: Path = None, scope: str = "") -> dict:
+    mapping = {}
+    response_files = sorted(response_dir.glob(f"{WARMUP_CLIENT}_response_*.txt"))
+    if not response_files:
+        print(f"[warn] No {WARMUP_CLIENT} response files found in {response_dir}")
+        return mapping
+
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as f:
-            label = scope or "global"
-            f.write(f"\n===== {label} | {container} =====\n")
-            f.write(logs)
-            if not logs.endswith("\n"):
-                f.write("\n")
-    pat = re.compile(r"blockhash mismatch, want ([0-9a-f]{64}), got ([0-9a-f]{64})")
-    m = {}
-    for line in logs.splitlines():
-        mo = pat.search(line)
-        if mo:
-            want_raw, got_raw = mo.group(1), mo.group(2)
-            want = "0x" + want_raw
-            got = "0x" + got_raw
-            m[got] = want
-    return m
+
+    for response_file in response_files:
+        try:
+            raw = response_file.read_text(encoding="utf-8")
+        except Exception as exc:
+            print(f"[warn] Failed to read {response_file}: {exc}")
+            continue
+
+        if log_path is not None:
+            with log_path.open("a", encoding="utf-8") as f:
+                label = scope or "global"
+                f.write(f"\n===== {label} | {response_file.name} =====\n")
+                f.write(raw)
+                if not raw.endswith("\n"):
+                    f.write("\n")
+
+        payloads = _parse_response_payloads(raw)
+        for payload in payloads:
+            for validation_error in _extract_validation_errors_from_payload(payload):
+                mo = _NM_BLOCKHASH_MISMATCH_RE.search(validation_error)
+                if not mo:
+                    continue
+                got = mo.group(1).lower()
+                want = mo.group(2).lower()
+                mapping[got] = want
+
+    return mapping
 
 
 def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
@@ -128,7 +195,7 @@ def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
         text = txt.read_text()
         new_text = text
         file_changed = False
-        for want, got in mapping.items():  # Corrected order
+        for got, want in mapping.items():
             before = f'"blockHash": "{got}"'
             after = f'"blockHash": "{want}"'
             if before in new_text:
@@ -323,7 +390,7 @@ def main():
     )
     p.add_argument(
         "--snapshotRoot",
-        help="Enable overlayfs and use this snapshot root as lowerdir for geth",
+        help="Enable overlayfs and use this snapshot root as lowerdir for nethermind",
     )
     p.add_argument(
         "--overlayRoot",
@@ -452,19 +519,19 @@ def main():
         data_dir = None
         try:
             if use_overlay and snapshot_root is not None:
-                overlay = _prepare_overlay_for_client(snapshot_root, args.network, overlay_root, "geth")
+                overlay = _prepare_overlay_for_client(snapshot_root, args.network, overlay_root, WARMUP_CLIENT)
                 data_dir = Path(overlay["merged"]).resolve()
                 print(f"[debug] Using overlay data dir: {data_dir}")
             else:
-                data_dir = Path("scripts/geth/execution-data").resolve()
+                data_dir = Path(f"scripts/{WARMUP_CLIENT}/execution-data").resolve()
                 data_dir.mkdir(parents=True, exist_ok=True)
-            _set_active_cleanup(data_dir=data_dir, overlay=overlay)
+            _set_active_cleanup(data_dir=data_dir, overlay=overlay, client=WARMUP_CLIENT)
 
             setup_node_cmd = [
                 sys.executable,
                 "setup_node.py",
                 "--client",
-                "geth",
+                WARMUP_CLIENT,
                 "--imageBulk",
                 IMAGES,
                 "--dataDir",
@@ -478,20 +545,25 @@ def main():
             print(f"[info] Setting up node for {relative_subdir} with genesis: {genesis_path or 'default'}")
             subprocess.run(setup_node_cmd, check=True)
 
+            response_output_dir = Path("generationresults") / relative_subdir
+            if response_output_dir.exists():
+                shutil.rmtree(response_output_dir, ignore_errors=True)
+            response_output_dir.mkdir(parents=True, exist_ok=True)
+
             subprocess.run(
                 [
                     sys.executable, "run_kute.py",
-                    "--output", "generationresults",
+                    "--output", str(response_output_dir),
                     "--testsPath", tests_path,
                     "--jwtPath", "/tmp/jwtsecret",
-                    "--client", "geth",
+                    "--client", WARMUP_CLIENT,
                     "--run", "1"
                 ],
                 check=True,
             )
 
-            mapping = collect_mismatches(
-                "gas-execution-client",
+            mapping = collect_mismatches_from_kute(
+                response_output_dir,
                 log_path=WARMUP_GETH_LOG,
                 scope=relative_subdir,
             )
@@ -505,7 +577,7 @@ def main():
             fixed = fix_blockhashes(pattern, Path(tests_path), mapping)
             print(f"[info] Replaced blockHash in {fixed} file(s) for {relative_subdir}.")
         finally:
-            teardown("geth", data_dir=data_dir, overlay=overlay)
+            teardown(WARMUP_CLIENT, data_dir=data_dir, overlay=overlay)
             _clear_active_cleanup()
 
     # Flatten all generated warmup files into a single top-level directory
