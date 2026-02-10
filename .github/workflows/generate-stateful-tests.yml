@@ -335,3 +335,32 @@ jobs:
           set +e
           docker ps -q | xargs -r docker rm -f
           docker system prune -af --volumes || true
+
+      - name: Purge stale overlay mounts and dirs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+
+          # Warmup geth overlays: /mnt/sda/overlay-workspace/geth/<overlay_id>/{merged,upper,work}
+          if [ -d "$OVERLAY_ROOT/geth" ]; then
+            find "$OVERLAY_ROOT/geth" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
+              mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+            done
+            rm -rf "$OVERLAY_ROOT/geth" || true
+          fi
+
+          # Stateful generator primary overlay mountpoints if a run was interrupted
+          for mp in "$OVERLAY_ROOT/overlay-merged" "$OVERLAY_ROOT/scenario-merged"; do
+            if [ -d "$mp" ]; then
+              mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+            fi
+          done
+
+          rm -rf \
+            "$OVERLAY_ROOT/overlay-upper" \
+            "$OVERLAY_ROOT/overlay-work" \
+            "$OVERLAY_ROOT/overlay-merged" \
+            "$OVERLAY_ROOT/scenario-upper" \
+            "$OVERLAY_ROOT/scenario-work" \
+            "$OVERLAY_ROOT/scenario-merged" || true
