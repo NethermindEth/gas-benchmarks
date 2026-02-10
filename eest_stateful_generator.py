@@ -219,6 +219,63 @@ def _extract_trace_opcode_counts(trace_data: Dict[str, Any]) -> Dict[str, int]:
     return merged
 
 
+def _extract_trace_metadata(trace_data: Dict[str, Any]) -> Dict[str, Any]:
+    block_number = _parse_block_number(trace_data.get("blockNumber"))
+    timestamp = _parse_block_number(trace_data.get("timestamp"))
+    parent_hash = trace_data.get("parentHash")
+    if isinstance(parent_hash, str):
+        parent_hash = parent_hash.lower()
+    else:
+        parent_hash = None
+
+    tx_count_raw = trace_data.get("transactionCount")
+    tx_count = None
+    if tx_count_raw is not None:
+        try:
+            tx_count = int(tx_count_raw)
+        except Exception:
+            tx_count = None
+
+    return {
+        "block_number": block_number,
+        "timestamp": timestamp,
+        "parent_hash": parent_hash,
+        "tx_count": tx_count,
+    }
+
+
+def _extract_payload_block_ref(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    block_number = _parse_block_number(payload.get("blockNumber"))
+    if block_number is None:
+        return None
+
+    block_hash = payload.get("blockHash")
+    if isinstance(block_hash, str):
+        block_hash = block_hash.lower()
+    else:
+        block_hash = None
+
+    timestamp = _parse_block_number(payload.get("timestamp"))
+    parent_hash = payload.get("parentHash")
+    if isinstance(parent_hash, str):
+        parent_hash = parent_hash.lower()
+    else:
+        parent_hash = None
+
+    tx_count = None
+    transactions = payload.get("transactions")
+    if isinstance(transactions, list):
+        tx_count = len(transactions)
+
+    return {
+        "block_number": block_number,
+        "block_hash": block_hash,
+        "timestamp": timestamp,
+        "parent_hash": parent_hash,
+        "tx_count": tx_count,
+    }
+
+
 def _snapshot_trace_files_once(
     opcode_tracing_dir: Path,
     history_dir: Path,
@@ -237,12 +294,22 @@ def _snapshot_trace_files_once(
             continue
         seen_state[trace_file] = state
 
-        hash_suffix = "nohash"
+        hash_suffix = "nometa"
         try:
             trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
             block_hash = _extract_trace_block_hash(trace_data)
             if block_hash:
                 hash_suffix = block_hash[2:14]
+            else:
+                metadata = _extract_trace_metadata(trace_data)
+                ts = metadata.get("timestamp")
+                parent_hash = metadata.get("parent_hash")
+                if ts is not None and isinstance(parent_hash, str):
+                    hash_suffix = f"ts{ts}-ph{parent_hash[2:10]}"
+                elif ts is not None:
+                    hash_suffix = f"ts{ts}"
+                elif isinstance(parent_hash, str):
+                    hash_suffix = f"ph{parent_hash[2:10]}"
         except Exception:
             pass
 
@@ -268,8 +335,8 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
     Process test files in testing_dir and create a JSON mapping test names to opcode counts.
 
     For each test file:
-    1. Extract blockNumber + blockHash from engine_newPayloadV* requests
-    2. Match opcode traces by blockHash (fallback: blockNumber)
+    1. Extract block metadata from engine_newPayloadV* requests
+    2. Match opcode traces by blockHash or trace metadata
     3. Extract opcodeCounts from the trace file
     4. If multiple blocks, merge (sum) opcode counts
     """
@@ -280,8 +347,8 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         return
 
     trace_files = sorted(opcode_tracing_dir.rglob("opcode-trace-block-*.json"))
-    traces_by_hash: Dict[str, Dict[str, int]] = {}
-    traces_by_number: Dict[int, List[tuple[int, Dict[str, int]]]] = {}
+    trace_entries: List[Dict[str, Any]] = []
+    seen_signatures: set[Any] = set()
 
     for trace_file in trace_files:
         if not trace_file.is_file():
@@ -295,19 +362,78 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         if not opcode_counts:
             continue
 
-        mtime_ns = trace_file.stat().st_mtime_ns
+        metadata = _extract_trace_metadata(trace_data)
         block_hash = _extract_trace_block_hash(trace_data)
         if block_hash:
-            traces_by_hash[block_hash] = opcode_counts
+            block_hash = block_hash.lower()
 
-        match = re.search(r"opcode-trace-block-(\d+)", trace_file.name)
-        if match:
-            block_num = int(match.group(1))
-            traces_by_number.setdefault(block_num, []).append((mtime_ns, opcode_counts))
+        try:
+            mtime_ns = trace_file.stat().st_mtime_ns
+        except Exception:
+            mtime_ns = 0
 
-    for block_num, entries in traces_by_number.items():
-        entries.sort(key=lambda item: item[0])
-        traces_by_number[block_num] = entries
+        signature = (
+            block_hash,
+            metadata.get("block_number"),
+            metadata.get("timestamp"),
+            metadata.get("parent_hash"),
+            metadata.get("tx_count"),
+            tuple(sorted(opcode_counts.items())),
+        )
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+
+        trace_entries.append({
+            "block_hash": block_hash,
+            "block_number": metadata.get("block_number"),
+            "timestamp": metadata.get("timestamp"),
+            "parent_hash": metadata.get("parent_hash"),
+            "tx_count": metadata.get("tx_count"),
+            "opcode_counts": opcode_counts,
+            "mtime_ns": mtime_ns,
+        })
+
+    trace_entries.sort(key=lambda entry: entry["mtime_ns"])
+    for idx, entry in enumerate(trace_entries):
+        entry["id"] = idx
+
+    def _append_index(index: Dict[Any, List[int]], key: Any, entry_id: int) -> None:
+        if key is None:
+            return
+        index.setdefault(key, []).append(entry_id)
+
+    traces_by_hash: Dict[str, List[int]] = {}
+    traces_by_full: Dict[Any, List[int]] = {}
+    traces_by_num_ts_parent: Dict[Any, List[int]] = {}
+    traces_by_num_ts: Dict[Any, List[int]] = {}
+    traces_by_number: Dict[int, List[int]] = {}
+
+    for entry in trace_entries:
+        entry_id = int(entry["id"])
+        block_hash = entry.get("block_hash")
+        block_number = entry.get("block_number")
+        timestamp = entry.get("timestamp")
+        parent_hash = entry.get("parent_hash")
+        tx_count = entry.get("tx_count")
+
+        if isinstance(block_hash, str):
+            _append_index(traces_by_hash, block_hash, entry_id)
+        _append_index(traces_by_full, (block_number, timestamp, parent_hash, tx_count), entry_id)
+        _append_index(traces_by_num_ts_parent, (block_number, timestamp, parent_hash), entry_id)
+        _append_index(traces_by_num_ts, (block_number, timestamp), entry_id)
+        if isinstance(block_number, int):
+            _append_index(traces_by_number, block_number, entry_id)
+
+    used_entry_ids: set[int] = set()
+
+    def _pick_unused(candidates: Optional[List[int]]) -> Optional[int]:
+        if not candidates:
+            return None
+        for candidate in candidates:
+            if candidate not in used_entry_ids:
+                return candidate
+        return None
 
     # Iterate through all numbered subdirectories
     for subdir in sorted(testing_dir.iterdir()):
@@ -338,15 +464,9 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
                     if not params or not isinstance(params[0], dict):
                         continue
                     payload = params[0]
-                    block_num = _parse_block_number(payload.get("blockNumber"))
-                    if block_num is None:
-                        continue
-                    block_hash = payload.get("blockHash")
-                    if isinstance(block_hash, str):
-                        block_hash = block_hash.lower()
-                    else:
-                        block_hash = None
-                    block_refs.append({"number": block_num, "hash": block_hash})
+                    block_ref = _extract_payload_block_ref(payload)
+                    if block_ref is not None:
+                        block_refs.append(block_ref)
                 except Exception:
                     continue
 
@@ -356,32 +476,45 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
 
             # Merge opcode counts from all blocks
             merged_counts: dict[str, int] = {}
-            number_cursor: Dict[int, int] = {}
             for block_ref in block_refs:
-                block_num = int(block_ref["number"])
-                block_hash = block_ref.get("hash")
-                opcode_counts = None
+                block_number = block_ref.get("block_number")
+                block_hash = block_ref.get("block_hash")
+                timestamp = block_ref.get("timestamp")
+                parent_hash = block_ref.get("parent_hash")
+                tx_count = block_ref.get("tx_count")
+                entry_id: Optional[int] = None
 
                 if isinstance(block_hash, str):
-                    opcode_counts = traces_by_hash.get(block_hash)
+                    entry_id = _pick_unused(traces_by_hash.get(block_hash))
+                if entry_id is None:
+                    entry_id = _pick_unused(traces_by_full.get((block_number, timestamp, parent_hash, tx_count)))
+                if entry_id is None:
+                    entry_id = _pick_unused(traces_by_num_ts_parent.get((block_number, timestamp, parent_hash)))
+                if entry_id is None:
+                    entry_id = _pick_unused(traces_by_num_ts.get((block_number, timestamp)))
+                if entry_id is None and isinstance(block_number, int):
+                    entry_id = _pick_unused(traces_by_number.get(block_number))
 
-                if opcode_counts is None:
-                    number_entries = traces_by_number.get(block_num, [])
-                    if number_entries:
-                        cursor = number_cursor.get(block_num, 0)
-                        index = cursor if cursor < len(number_entries) else len(number_entries) - 1
-                        number_cursor[block_num] = cursor + 1
-                        opcode_counts = number_entries[index][1]
-
-                if opcode_counts is None:
-                    print(f"[WARN] No trace match for blockNumber={block_num} blockHash={block_hash} in {txt_file.name}")
+                if entry_id is None:
+                    print(
+                        f"[WARN] No trace match for blockNumber={block_number} "
+                        f"blockHash={block_hash} timestamp={timestamp} parentHash={parent_hash} in {txt_file.name}"
+                    )
                     continue
 
+                used_entry_ids.add(entry_id)
+                opcode_counts = trace_entries[entry_id]["opcode_counts"]
                 for opcode, count in opcode_counts.items():
                     merged_counts[opcode] = merged_counts.get(opcode, 0) + count
 
             if merged_counts:
-                results[test_name] = merged_counts
+                result_key = str(txt_file.relative_to(testing_dir).with_suffix("")).replace("\\", "/")
+                if result_key in results:
+                    duplicate_idx = 1
+                    while f"{result_key}__{duplicate_idx}" in results:
+                        duplicate_idx += 1
+                    result_key = f"{result_key}__{duplicate_idx}"
+                results[result_key] = merged_counts
 
     # Write output JSON
     output_path.parent.mkdir(parents=True, exist_ok=True)
