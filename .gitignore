@@ -7,17 +7,24 @@
 /results/
 /prepresults/
 /reports/
+/reports.zip
 
 /warmupresults/
 /warmup/
 /venv/
+.venv/
 /generationresults/
 /tmp/
+/opcode-tracing/
 
 # Others
 .idea/
 /__pycache__/
 */execution-data/
+mitm.log
+mitm_full.log
+mitm_nethermind.log
+reports_*
 
 # Generated env files
 scripts/**/.env
@@ -34,6 +41,12 @@ executions.json
 engine-jwt/
 execution-data
 execution-spec-tests/
+execution-specs/
 mitm_config.json
 nethermind.log
 nethermind-generation.log
+traces.json
+opcode-tracing*
+erigon.log
+reth.log
+geth.log

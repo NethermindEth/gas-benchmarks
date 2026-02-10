@@ -1,0 +1,327 @@
+name: Run Parallel Benchmarks (Repricing)
+
+on:
+  push:
+    branches:
+      - repricing
+  workflow_dispatch:
+    inputs:
+      test:
+        description: 'Path to test file'
+        default: 'repricings_compute'
+      runs:
+        description: 'Number of runs for the application'
+        default: 1
+      images:
+        description: 'JSON map of images for the clients'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+      opcodes_warmup_count:
+        description: 'Number of opcode-warmup iterations'
+        default: 1
+      filter:
+        description: 'Comma-separated include-only filename patterns'
+        default: ''
+      txt_report:
+        description: 'Mark as true to generate txt report'
+        default: 'false'
+      genesis:
+        description: 'Genesis filename (used for all clients)'
+        default: 'zkevmgenesis.json'
+
+concurrency:
+  group: repricing-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  INPUT_TEST: ${{ github.event.inputs.test || 'repricings_compute' }}
+  INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
+  INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
+  INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
+  INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
+  INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
+  INPUT_GENESIS: ${{ github.event.inputs.genesis || 'zkevmgenesis.json' }}
+
+jobs:
+  set-matrix:
+    if: github.ref == 'refs/heads/repricing'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
+
+      - name: Set matrix dynamically
+        id: set-matrix
+        run: |
+          runs="${{ env.INPUT_RUNS }}"
+          if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
+            runs=1
+          fi
+          clients="geth,nethermind,erigon,besu,reth"
+          IFS=',' read -ra client_array <<< "$clients"
+          matrix_elements=()
+          
+          for ((i=1; i<=runs; i++)); do
+            for client in "${client_array[@]}"; do
+              element="{'run': '$i', 'client': '$client'}"
+              matrix_elements+=("$element")
+            done
+          done
+          
+          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
+          
+          echo "::set-output name=matrix::$matrix"
+
+  build:
+    needs: set-matrix
+    runs-on: [self-hosted, repricing]
+
+    strategy:
+      # Consume the JSON matrix we just emitted
+      matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+      fail-fast: false
+      max-parallel: 5
+
+    env:
+      DOTNET_INSTALL_DIR: "~/.dotnet"
+
+    steps:
+      - name: Ensure git-lfs and zip are installed
+        run: |
+          missing=()
+          if ! command -v git-lfs >/dev/null 2>&1; then
+            missing+=("git-lfs")
+          fi
+          if ! command -v zip >/dev/null 2>&1; then
+            missing+=("zip")
+          fi
+          if [ ${#missing[@]} -eq 0 ]; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+          else
+            echo "Missing: ${missing[*]}. Install them on the runner or provide apt-get."
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Python & .NET
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Make run.sh executable
+        run: chmod +x ./run.sh
+
+      - name: Run benchmarks for client=${{ matrix.client }}
+        run: |
+          GENESIS_FILENAME="${{ env.INPUT_GENESIS }}"
+          TEST_PATH="${{ env.INPUT_TEST }}"
+          CLIENT="${{ matrix.client }}"
+          TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
+      
+          ./run.sh \
+            -T "$TEST_PATHS_JSON" \
+            -c "$CLIENT" \
+            -r 1 \
+            -i '${{ env.INPUT_IMAGES }}' \
+            -o "${{ env.INPUT_OPCODES_WARMUP }}" \
+            -f "${{ env.INPUT_FILTER }}" \
+            -W "warmup-repricing"
+
+      - name: Dump latest Docker logs for ${{ matrix.client }}
+        if: always()
+        run: |
+          # Find the newest docker log file for this client
+          LATEST=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
+          LATEST_SYNC=$(ls -1t logs/docker_sync_${{ matrix.client }}_*.log | head -n1 || true)
+          if [[ -n "$LATEST" ]]; then
+            echo "=== Dumping $LATEST ==="
+            cat "$LATEST"
+          else
+            echo "No docker_*.log files found for client=${{ matrix.client }}"
+          fi
+
+          if [[ -n "$LATEST_SYNC" ]]; then
+            echo "=== Dumping $LATEST_SYNC ==="
+            cat "$LATEST_SYNC"
+          else
+            echo "No docker_sync_*.log files found for client=${{ matrix.client }}"
+          fi
+
+      - name: Zip the results folder
+        run: |
+          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
+          CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
+          echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
+          echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+
+      - name: Docker full prune
+        if: always()
+        run: |
+          docker ps -q | xargs -r docker stop || true
+          docker ps -aq | xargs -r docker rm -f || true
+          docker system prune -af --volumes || true
+  combine-results:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install python dependencies
+        run: pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: combined-results
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Process combined results
+        run: |
+          set -euo pipefail
+          RESULTS_ROOT="extracted-results/results"
+          if [ ! -d "$RESULTS_ROOT" ]; then
+            echo "Results directory not found: $RESULTS_ROOT"
+            exit 1
+          fi
+
+          mapfile -t CLIENTS < <(find "$RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
+          if [ "${#CLIENTS[@]}" -eq 0 ]; then
+            echo "No client result files detected under $RESULTS_ROOT; skipping report generation."
+            mkdir -p reports
+            exit 0
+          fi
+
+          CLIENT_LIST=$(
+            printf "%s\n" "${CLIENTS[@]}" \
+              | xargs -n1 basename \
+              | sed 's/_results_.*//' \
+              | sort -u \
+              | paste -sd',' -
+          )
+
+          if [ -z "$CLIENT_LIST" ]; then
+            echo "Unable to derive client list from results; skipping report generation."
+            mkdir -p reports
+            exit 0
+          fi
+          echo "CLIENT_LIST=$CLIENT_LIST" >> $GITHUB_ENV
+
+          rm -rf reports
+          mkdir -p reports
+
+          RUNS="${{ env.INPUT_RUNS }}"
+          TESTS="${{ env.INPUT_TEST }}"
+          IMAGES='${{ env.INPUT_IMAGES }}'
+
+          python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+          python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+
+      - name: Generate Report
+        if: ${{ env.INPUT_TXT_REPORT == 'true' }}
+        run: |
+          python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath "${{ env.INPUT_TEST }}"
+
+      - name: Zip the results folder
+        run: |
+          zip -r reports.zip reports
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: reports.zip
+
+  populate-db:
+    needs: combine-results
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install python dependencies for submodule
+        run: |
+          pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: combined-results # Download artifacts from previous jobs
+          merge-multiple: true
+
+      - name: Extract all result files
+        run: |
+          mkdir -p extracted-results
+          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
+
+      - name: Populate Benchmark DB
+        run: |
+          python fill_postgres_db.py \
+            --db-host ${{ env.DB_HOST }} \
+            --db-port ${{ env.DB_PORT }} \
+            --db-user ${{ env.DB_USER }} \
+            --db-name monitoring \
+            --table-name repricings_new \
+            --db-password "${{ env.DB_PASSWORD }}" \
+            --log-level DEBUG \
+            --reports-dir 'extracted-results/reports/'
+
+  retrigger:
+    needs: populate-db
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/repricing' && needs.populate-db.result == 'success' }}
+    steps:
+      - name: Retrigger workflow
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: multi-parallel.yml
+          ref: "${{ github.ref }}"
+          token: "${{ secrets.GH_TOKEN }}"
+          inputs: ${{ toJson(github.event.inputs) }}
+

@@ -1,0 +1,369 @@
+name: Generate Stateful Tests
+
+on:
+  push:
+    branches:
+      - repricing
+  workflow_dispatch:
+    inputs:
+      nethermind_image:
+        description: "Nethermind Docker image"
+        required: true
+        default: "nethermindeth/nethermind:testing-rpc"
+      fork:
+        description: "Fork name"
+        required: true
+        default: "Osaka"
+      chain:
+        description: "Chain name (drives snapshot path selection)"
+        required: true
+        type: choice
+        options:
+          - mainnet
+          - perf-devnet-2
+        default: "mainnet"
+      payload_dir:
+        description: "Output directory for generated tests"
+        required: true
+        default: "test-shifts"
+      test_path:
+        description: "EEST test path passed to eest_stateful_generator.py"
+        required: true
+        default: "tests/benchmark/stateful/"
+      eest_repo:
+        description: "execution-specs repository"
+        required: true
+        default: "https://github.com/LouisTsai-Csie/execution-specs"
+      eest_branch:
+        description: "execution-specs branch"
+        required: true
+        default: "fix-sstore-invariant"
+      gas_benchmark_values:
+        description: "Comma-separated benchmark values"
+        required: true
+        default: "30,60,90,120,150,180,210,240,270,300"
+      gas_bump_count:
+        description: "Gas bump count (-1 = chain default: 0 for perf-devnet-2, 2000 for mainnet)"
+        required: true
+        default: "-1"
+      eest_mode:
+        description: "EEST mode"
+        required: true
+        type: choice
+        options:
+          - stateful
+          - repricing
+          - benchmark
+        default: "stateful"
+      rpc_address:
+        description: "RPC funding address"
+        required: true
+        default: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: stateful-generator
+    timeout-minutes: 360
+
+    env:
+      OVERLAY_ROOT: /mnt/sda/overlay-workspace
+      TRACES_JSON: traces.json
+      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT }}
+      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      DB_NAME: ${{ secrets.PERFNET_0_DB_NAME }}
+      CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:testing-rpc' }}
+      CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
+      CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
+      CFG_PAYLOAD_DIR: ${{ github.event.inputs.payload_dir || 'test-not-op' }}
+      CFG_TEST_PATH: ${{ github.event.inputs.test_path || 'tests/benchmark/compute/instruction/test_bitwise.py::test_not_op' }}
+      CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/ethereum/execution-specs' }}
+      CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'forks/amsterdam' }}
+      CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
+      CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
+      CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
+      CFG_STUBS_FILE: "execution-specs/tests/benchmark/stateful/bloatnet/stubs.json"
+      CFG_RPC_ADDRESS: ${{ github.event.inputs.rpc_address || '0x86cF016FB873D50a7B8F31EB154c9234DD31b058' }}
+
+    steps:
+      - name: Checkout gas-benchmarks repository from triggering branch
+        uses: actions/checkout@v4
+        with:
+          repository: NethermindEth/gas-benchmarks
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          lfs: true
+          clean: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Prepare Nethermind tools (Kute)
+        shell: bash
+        run: |
+          set -euo pipefail
+          make prepare_tools
+
+      - name: Resolve runtime paths and table naming
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$CFG_CHAIN" in
+            mainnet)
+              SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
+              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              ;;
+            perf-devnet-2)
+              SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-2/nethermind"
+              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              ;;
+            *)
+              echo "Unsupported chain: $CFG_CHAIN" >&2
+              exit 1
+              ;;
+          esac
+
+          PAYLOAD_DIR="$CFG_PAYLOAD_DIR"
+          WARMUP_DIR="${PAYLOAD_DIR}_warmup"
+          GAS_BUMP_COUNT="$CFG_GAS_BUMP_COUNT"
+          if [[ "$GAS_BUMP_COUNT" == "-1" ]]; then
+            if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
+              GAS_BUMP_COUNT="0"
+            else
+              GAS_BUMP_COUNT="2000"
+            fi
+          fi
+
+          TABLE_BASE=$(echo "$PAYLOAD_DIR" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+          if [[ -z "$TABLE_BASE" ]]; then
+            TABLE_BASE="generated_tests"
+          fi
+          if [[ "$TABLE_BASE" =~ ^[0-9] ]]; then
+            TABLE_BASE="t_${TABLE_BASE}"
+          fi
+          DB_TABLE="${TABLE_BASE}_metadata"
+
+          echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
+          echo "SNAPSHOT_DIR_WARMUP=$SNAPSHOT_DIR_WARMUP" >> "$GITHUB_ENV"
+          echo "PAYLOAD_DIR=$PAYLOAD_DIR" >> "$GITHUB_ENV"
+          echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
+          echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
+          echo "DB_TABLE=$DB_TABLE" >> "$GITHUB_ENV"
+
+      - name: Clean stale outputs from previous runs on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$PAYLOAD_DIR" "$WARMUP_DIR"
+          rm -f "$TRACES_JSON"
+          rm -rf execution-specs
+
+      - name: Generate stateful tests
+        shell: bash
+        env:
+          RPC_SEED_KEY: ${{ secrets.EEST_RPC_SEED_KEY }}
+        run: |
+          set -euo pipefail
+          python3 eest_stateful_generator.py \
+            --nethermind-image "$CFG_NETHERMIND_IMAGE" \
+            --fork "$CFG_FORK" \
+            --rpc-seed-key "$RPC_SEED_KEY" \
+            --rpc-address "$CFG_RPC_ADDRESS" \
+            --test-path "$CFG_TEST_PATH" \
+            --payload-dir "$PAYLOAD_DIR" \
+            --eest-repo "$CFG_EEST_REPO" \
+            --eest-branch "$CFG_EEST_BRANCH" \
+            --eest-clean-clone \
+            --gas-bump-count "$GAS_BUMP_COUNT" \
+            --eest_mode "$CFG_EEST_MODE" \
+            --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
+            --stubs-file "$CFG_STUBS_FILE" \
+            --snapshot-dir "$SNAPSHOT_DIR_NM" \
+            --chain "$CFG_CHAIN" \
+            --overlay-root "$OVERLAY_ROOT" \
+            --trace-json \
+            --trace-json-output "$TRACES_JSON"
+
+      - name: Generate warmup tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          GENESIS_ARGS=()
+          if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
+            GENESIS_ARGS=(-g "scripts/genesisfiles/nethermind/bloatnet-prague.json")
+          fi
+          python3 make_warmup_tests.py \
+            -s "$PAYLOAD_DIR" \
+            -d "$WARMUP_DIR" \
+            -p "*.txt" \
+            "${GENESIS_ARGS[@]}" \
+            --snapshotRoot "$SNAPSHOT_DIR_WARMUP" \
+            --overlayRoot "$OVERLAY_ROOT" \
+            --network "$CFG_CHAIN"
+
+      - name: Print warmup nethermind log
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -f warmup_nethermind.log ]; then
+            echo "=== warmup_nethermind.log (full) ==="
+            cat warmup_nethermind.log
+          else
+            echo "warmup_nethermind.log not found"
+          fi
+
+      - name: Upload warmup nethermind log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warmup-nethermind-log-${{ github.run_id }}
+          path: warmup_nethermind.log
+          if-no-files-found: warn
+
+      - name: Upload traces metadata to DB
+        shell: bash
+        env:
+          DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$TRACES_JSON" ]; then
+            echo "Trace json not found: $TRACES_JSON" >&2
+            exit 1
+          fi
+          python3 fill_tests_metadata_db.py \
+            --json-file "$TRACES_JSON" \
+            --db-host "$DB_HOST" \
+            --db-port "$DB_PORT" \
+            --db-user "$DB_USER" \
+            --db-password "$DB_PASSWORD" \
+            --db-name "$DB_NAME" \
+            --table-name "$DB_TABLE"
+
+      - name: Remove traces file after DB upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$TRACES_JSON"
+
+      - name: Commit generated tests and warmups to triggering branch
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git add "$PAYLOAD_DIR" "$WARMUP_DIR"
+
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: generate stateful tests for ${PAYLOAD_DIR}"
+          for attempt in 1 2 3 4 5; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "Push succeeded on attempt ${attempt}"
+              exit 0
+            fi
+            if [ "${attempt}" -eq 5 ]; then
+              echo "Push failed after ${attempt} attempts"
+              exit 1
+            fi
+            sleep_seconds=$((attempt * 10))
+            echo "Push failed (attempt ${attempt}), retrying in ${sleep_seconds}s..."
+            sleep "${sleep_seconds}"
+          done
+
+      - name: Print nethermind.log
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -f nethermind.log ]; then
+            echo "=== nethermind.log (full) ==="
+            cat nethermind.log
+          else
+            echo "nethermind.log not found"
+          fi
+
+      - name: Upload nethermind.log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethermind-log-${{ github.run_id }}
+          path: nethermind.log
+          if-no-files-found: warn
+
+      - name: Upload generated artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-stateful-tests-${{ github.run_id }}
+          path: |
+            ${{ env.PAYLOAD_DIR }}
+            ${{ env.WARMUP_DIR }}
+            mitm.log
+            mitm_full.log
+            mitm_nethermind.log
+            nethermind.log
+            warmup_nethermind.log
+
+      - name: Purge all running Docker containers on runner
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          docker ps -q | xargs -r docker rm -f
+          docker system prune -af --volumes || true
+
+      - name: Purge stale overlay mounts and dirs
+        if: always()
+        shell: bash
+        run: |
+          set +e
+
+          # Warmup overlays: /mnt/sda/overlay-workspace/<client>/<overlay_id>/{merged,upper,work}
+          for client in nethermind geth; do
+            if [ -d "$OVERLAY_ROOT/$client" ]; then
+              find "$OVERLAY_ROOT/$client" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
+                mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+              done
+              rm -rf "$OVERLAY_ROOT/$client" || true
+            fi
+          done
+
+          # Stateful generator primary overlay mountpoints if a run was interrupted
+          for mp in "$OVERLAY_ROOT/overlay-merged" "$OVERLAY_ROOT/scenario-merged"; do
+            if [ -d "$mp" ]; then
+              mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+            fi
+          done
+
+          rm -rf \
+            "$OVERLAY_ROOT/overlay-upper" \
+            "$OVERLAY_ROOT/overlay-work" \
+            "$OVERLAY_ROOT/overlay-merged" \
+            "$OVERLAY_ROOT/scenario-upper" \
+            "$OVERLAY_ROOT/scenario-work" \
+            "$OVERLAY_ROOT/scenario-merged" || true
