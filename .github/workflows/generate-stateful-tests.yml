@@ -88,7 +88,6 @@ jobs:
       CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
       CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
       CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
-      CFG_STUBS_FILE: "execution-specs/tests/benchmark/stateful/bloatnet/stubs.json"
       CFG_RPC_ADDRESS: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
       CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
 
@@ -135,11 +134,13 @@ jobs:
               SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
               EXECUTION_CHAIN="mainnet"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_mainnet.json"
               ;;
             perf-devnet-2)
               SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-2/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
               EXECUTION_CHAIN="mainnet"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_bloatnet.json"
               ;;
             *)
               echo "Unsupported chain: $CFG_CHAIN" >&2
@@ -170,6 +171,7 @@ jobs:
           echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
           echo "SNAPSHOT_DIR_WARMUP=$SNAPSHOT_DIR_WARMUP" >> "$GITHUB_ENV"
           echo "EXECUTION_CHAIN=$EXECUTION_CHAIN" >> "$GITHUB_ENV"
+          echo "STUBS_FILE=$STUBS_FILE" >> "$GITHUB_ENV"
           echo "PAYLOAD_DIR=$PAYLOAD_DIR" >> "$GITHUB_ENV"
           echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
           echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
@@ -212,7 +214,7 @@ jobs:
             --gas-bump-count "$GAS_BUMP_COUNT" \
             --eest_mode "$CFG_EEST_MODE" \
             --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
-            --stubs-file "$CFG_STUBS_FILE" \
+            --stubs-file "$STUBS_FILE" \
             --snapshot-dir "$SNAPSHOT_DIR_NM" \
             --chain "$EXECUTION_CHAIN" \
             "${GENESIS_ARGS[@]}" \
