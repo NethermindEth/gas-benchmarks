@@ -186,29 +186,69 @@ def collect_mismatches_from_kute(response_dir: Path, log_path: Path = None, scop
 
 
 def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
-    replaced_files = 0
-    print("[debug] blockHash mapping:")
+    normalized_mapping = {}
     for got, want in mapping.items():
-        print(f"  {got!r} → {want!r}")
+        if isinstance(got, str) and isinstance(want, str):
+            normalized_mapping[got.lower()] = want.lower()
+
+    replaced_files = 0
+    replaced_payloads = 0
+    print("[debug] blockHash mapping:")
+    for got, want in normalized_mapping.items():
+        print(f"  {got!r} -> {want!r}")
 
     for txt in tests_root.rglob(pattern):
-        text = txt.read_text()
-        new_text = text
+        try:
+            lines = txt.read_text(encoding="utf-8").splitlines(keepends=True)
+        except Exception as exc:
+            print(f"[warn] Failed to read {txt}: {exc}")
+            continue
+
+        new_lines = []
         file_changed = False
-        for got, want in mapping.items():
-            before = f'"blockHash": "{got}"'
-            after = f'"blockHash": "{want}"'
-            if before in new_text:
+        file_replaced = 0
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                new_lines.append(line)
+                continue
+
+            line_body = line.rstrip("\r\n")
+            line_suffix = line[len(line_body):]
+            try:
+                obj = json.loads(line_body)
+            except json.JSONDecodeError:
+                new_lines.append(line)
+                continue
+
+            replaced_this_line = False
+            if isinstance(obj, dict):
+                params = obj.get("params")
+                if isinstance(params, list) and params and isinstance(params[0], dict):
+                    payload = params[0]
+                    current = payload.get("blockHash")
+                    if isinstance(current, str):
+                        replacement = normalized_mapping.get(current.lower())
+                        if replacement and replacement != current.lower():
+                            payload["blockHash"] = replacement
+                            replaced_this_line = True
+
+            if replaced_this_line:
                 file_changed = True
-                print(f"[debug] {txt}: replacing {before} → {after}")
-                new_text = new_text.replace(before, after)
+                file_replaced += 1
+                new_lines.append(json.dumps(obj, separators=(",", ":")) + line_suffix)
+            else:
+                new_lines.append(line)
+
         if file_changed:
-            txt.write_text(new_text)
+            txt.write_text("".join(new_lines), encoding="utf-8")
             replaced_files += 1
+            replaced_payloads += file_replaced
+            print(f"[debug] {txt}: replaced blockHash in {file_replaced} payload line(s)")
         else:
             print(f"[debug] No blockHash replaced in {txt}")
 
-    print(f"[debug] total files changed: {replaced_files}")
+    print(f"[debug] total files changed: {replaced_files}; payload lines replaced: {replaced_payloads}")
     return replaced_files
 
 
@@ -489,15 +529,11 @@ def main():
             out.parent.mkdir(parents=True, exist_ok=True)
 
             with src.open() as fin, out.open("w") as fout:
-                total_payloads = sum(1 for line in fin if "engine_newPayload" in line)
-                fin.seek(0)
-                seen_payloads = 0
+                payload_lines = [line for line in fin if "engine_newPayload" in line]
+                total_payloads = len(payload_lines)
 
-                for line in fin:
-                    if "engine_newPayload" not in line:
-                        continue
-                    seen_payloads += 1
-                    bump = change_all or (seen_payloads == total_payloads)
+                for idx, line in enumerate(payload_lines, start=1):
+                    bump = change_all or (idx == total_payloads)
                     nl = process_line(line, counters, bump)
                     if nl:
                         fout.write(nl)
@@ -602,3 +638,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

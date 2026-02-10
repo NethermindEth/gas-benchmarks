@@ -36,6 +36,28 @@ CLEANUP = {
     "mitm": None,
 }
 
+_HTTP_SESSION = None
+
+
+def _get_http_session():
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        import requests
+        _HTTP_SESSION = requests.Session()
+    return _HTTP_SESSION
+
+
+def _close_http_session():
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        return
+    try:
+        _HTTP_SESSION.close()
+    except Exception:
+        pass
+    _HTTP_SESSION = None
+
+
 def run(cmd, cwd=None, env=None, check=True):
     print("\n[RUN] " + " ".join(cmd))
     return subprocess.run(cmd, cwd=cwd, env=env, check=check)
@@ -60,9 +82,9 @@ def ensure_pip_pkg(pkg):
         run([sys.executable, "-m", "pip", "install", "-U", pkg])
 
 def rpc_call(url, method, params=None, headers=None, timeout=10):
-    import requests
+    session = _get_http_session()
     body = {"jsonrpc": "2.0", "id": int(time.time()), "method": method, "params": params or []}
-    r = requests.post(url, json=body, headers=headers or {}, timeout=timeout)
+    r = session.post(url, json=body, headers=headers or {}, timeout=timeout)
     r.raise_for_status()
     data = r.json()
     if "error" in data: raise RuntimeError(f"RPC error from {url}: {data['error']}")
@@ -606,20 +628,26 @@ def _generate_preparation_payloads(
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
     try:
-        max_count = max(args.gas_bump_count, 1)
-        last_log = time.monotonic()
-        for idx in range(max_count):
-            now = time.monotonic()
-            if idx == 0 or idx == max_count - 1 or now - last_log >= 5:
-                print(f"[DEBUG] Generating gas-bump payload {idx + 1}/{max_count}")
-                last_log = now
-            preparation_getpayload(
-                "http://127.0.0.1:8551",
-                jwt_path,
-                "EMPTY",
-                save_path=gas_bump_file,
-                timestamp_hack=args.testing_buildblock_timestamp_hack,
-            )
+        gas_bump_count = int(args.gas_bump_count)
+        if gas_bump_count < 0:
+            print(f"[WARN] Negative gas-bump count {gas_bump_count}; treating as 0.")
+            gas_bump_count = 0
+        if gas_bump_count == 0:
+            print("[INFO] Gas-bump count is 0; skipping gas-bump payload generation.")
+        else:
+            last_log = time.monotonic()
+            for idx in range(gas_bump_count):
+                now = time.monotonic()
+                if idx == 0 or idx == gas_bump_count - 1 or now - last_log >= 5:
+                    print(f"[DEBUG] Generating gas-bump payload {idx + 1}/{gas_bump_count}")
+                    last_log = now
+                preparation_getpayload(
+                    "http://127.0.0.1:8551",
+                    jwt_path,
+                    "EMPTY",
+                    save_path=gas_bump_file,
+                    timestamp_hack=args.testing_buildblock_timestamp_hack,
+                )
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
     finalized = ""
@@ -846,7 +874,8 @@ def start_mitm_proxy(addon_path: Path, listen_port=8549, upstream="http://127.0.
     return subprocess.Popen(cmd, env=env)
 
 def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: list, timeout=30):
-    import requests, hmac, hashlib
+    import hmac, hashlib
+    session = _get_http_session()
     header = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"JWT"}').rstrip(b'=')
     payload = base64.urlsafe_b64encode(json.dumps({"iat": int(time.time())}).encode()).rstrip(b'=')
     unsigned = header + b"." + payload
@@ -855,7 +884,7 @@ def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: l
     token = unsigned + b"." + base64.urlsafe_b64encode(sig).rstrip(b'=')
     token_str = token.decode()
     body = {"jsonrpc":"2.0","id":int(time.time()),"method":method,"params":params}
-    r = requests.post(engine_url, json=body, headers={"Authorization": f"Bearer {token_str}"}, timeout=timeout)
+    r = session.post(engine_url, json=body, headers={"Authorization": f"Bearer {token_str}"}, timeout=timeout)
     r.raise_for_status()
     j = r.json()
     if "error" in j: raise RuntimeError(f"Engine error: {j['error']}")
@@ -1072,6 +1101,7 @@ def _cleanup():
         except Exception:
             pass
 
+atexit.register(_close_http_session)
 atexit.register(_cleanup)
 
 def _sig_handler(signum, frame):
