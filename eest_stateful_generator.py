@@ -656,6 +656,19 @@ def _latest_block_hash_from_payload_file(path: Path) -> Optional[str]:
                     return block_hash
     return None
 
+
+def _has_phase_payloads(payload_dir: Path) -> bool:
+    for phase in ("setup", "testing", "cleanup"):
+        phase_dir = payload_dir / phase
+        if not phase_dir.is_dir():
+            continue
+        try:
+            if any(phase_dir.rglob("*.txt")):
+                return True
+        except Exception:
+            continue
+    return False
+
 def is_mounted(mount_point: Path) -> bool:
     try:
         with open("/proc/mounts", "r") as f:
@@ -1183,6 +1196,12 @@ def main():
         action="store_true",
         help="Keep all testing payloads in the testing/ directory (no migration to setup).",
     )
+    parser.add_argument(
+        "--allow-execute-remote-failures",
+        action="store_true",
+        help="Continue when execute remote exits non-zero after phase payloads were generated; "
+             "still fail on startup/infra errors or when no phase payloads were produced.",
+    )
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
@@ -1548,7 +1567,19 @@ def main():
                 output_path=Path(args.trace_json_output),
             )
         if return_code != 0:
-            raise subprocess.CalledProcessError(return_code, uv_cmd)
+            generated_phase_payloads = _has_phase_payloads(payloads_dir)
+            if args.allow_execute_remote_failures and generated_phase_payloads:
+                print(
+                    f"[WARN] execute remote exited with code {return_code}, but phase payloads were generated; "
+                    "continuing due to --allow-execute-remote-failures."
+                )
+            else:
+                if args.allow_execute_remote_failures and not generated_phase_payloads:
+                    print(
+                        f"[ERROR] execute remote exited with code {return_code} and produced no phase payloads; "
+                        "treating as startup/infra failure."
+                    )
+                raise subprocess.CalledProcessError(return_code, uv_cmd)
         if len(gas_values) == 1:
             _append_suffix_to_scenarios(payloads_dir, gas_values[0])
     finally:
