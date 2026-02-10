@@ -98,7 +98,7 @@ jobs:
       - name: Download EEST fixtures securely
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TMPDIR: /mnt  # Use /mnt for temp files during extraction (66GB vs 33GB on root)
+          TMPDIR: /mnt/eest_artifacts  # Use /mnt for temp files during extraction (66GB vs 33GB on root)
         run: |
           echo "=== Starting EEST fixtures download ==="
           echo "Downloading to: /mnt/eest_artifacts"
@@ -152,10 +152,15 @@ jobs:
           echo "=== Disk space before genesis artifact download ==="
           df -h
 
+      - name: Create temp directory for genesis artifacts
+        run: |
+          sudo mkdir -p /mnt/genesis_temp
+          sudo chown $USER:$USER /mnt/genesis_temp
+
       - name: Download benchmark genesis artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TMPDIR: /mnt  # Use /mnt for temp files during extraction
+          TMPDIR: /mnt/genesis_temp  # Use /mnt for temp files during extraction
         run: |
           echo "=== Starting genesis artifact download ==="
           gh run download -R ethereum/execution-specs -n benchmark_genesis_benchmark_fast
@@ -200,10 +205,11 @@ jobs:
           echo "=== Disk space after genesis extraction ==="
           df -h
           
-          # Clean up the archive to free space
+          # Clean up the archive and temp dir to free space
           echo ""
-          echo "=== Cleaning up genesis archive ==="
+          echo "=== Cleaning up genesis archive and temp ==="
           rm -f "$archive"
+          rm -rf /mnt/genesis_temp
           df -h
 
       - name: Find largest genesis directory
