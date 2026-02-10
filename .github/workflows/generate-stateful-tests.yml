@@ -182,7 +182,9 @@ jobs:
           RPC_SEED_KEY: ${{ secrets.EEST_RPC_SEED_KEY }}
         run: |
           set -euo pipefail
-          python3 eest_stateful_generator.py \
+          STATEFUL_GENERATOR_LOG="stateful_generator.log"
+          : > "$STATEFUL_GENERATOR_LOG"
+          PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 eest_stateful_generator.py \
             --nethermind-image "$CFG_NETHERMIND_IMAGE" \
             --fork "$CFG_FORK" \
             --rpc-seed-key "$RPC_SEED_KEY" \
@@ -201,7 +203,28 @@ jobs:
             --overlay-root "$OVERLAY_ROOT" \
             --allow-execute-remote-failures \
             --trace-json \
-            --trace-json-output "$TRACES_JSON"
+            --trace-json-output "$TRACES_JSON" \
+            2>&1 | tee -a "$STATEFUL_GENERATOR_LOG"
+
+      - name: Print stateful generator log
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [ -f stateful_generator.log ]; then
+            echo "=== stateful_generator.log (full) ==="
+            cat stateful_generator.log
+          else
+            echo "stateful_generator.log not found"
+          fi
+
+      - name: Upload stateful generator log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stateful-generator-log-${{ github.run_id }}
+          path: stateful_generator.log
+          if-no-files-found: warn
 
       - name: Generate warmup tests
         shell: bash
@@ -329,6 +352,7 @@ jobs:
             mitm_nethermind.log
             nethermind.log
             warmup_nethermind.log
+            stateful_generator.log
 
       - name: Purge all running Docker containers on runner
         if: always()
