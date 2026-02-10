@@ -5,7 +5,7 @@ from pathlib import Path
 GENESIS_ROOT = "0xe8d3a308a0d3fdaeed6c196f78aad4f9620b571da6dd5b886e7fa5eba07c83e0"
 IMAGES = '{"nethermind":"default","geth":"ethereum/client-go:latest","reth":"default","erigon":"default","besu":"default"}'
 KUTE_BINARY = Path("./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute")
-WARMUP_GETH_LOG = Path("warmup_geth.log")
+WARMUP_NETHERMIND_LOG = Path("warmup_nethermind.log")
 WARMUP_CLIENT = "nethermind"
 
 _ACTIVE_CLEANUP = {
@@ -461,7 +461,7 @@ def main():
     pattern = args.pattern
 
     counters = {"total": 0, "bumped": 0, "dropped": 0}
-    WARMUP_GETH_LOG.write_text("", encoding="utf-8")
+    WARMUP_NETHERMIND_LOG.write_text("", encoding="utf-8")
     use_overlay = bool(args.snapshotRoot)
     snapshot_root = Path(args.snapshotRoot).expanduser() if use_overlay else None
     overlay_root = Path(args.overlayRoot).expanduser()
@@ -564,7 +564,7 @@ def main():
 
             mapping = collect_mismatches_from_kute(
                 response_output_dir,
-                log_path=WARMUP_GETH_LOG,
+                log_path=WARMUP_NETHERMIND_LOG,
                 scope=relative_subdir,
             )
             if not mapping:

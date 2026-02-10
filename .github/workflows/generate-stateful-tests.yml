@@ -96,6 +96,7 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
           lfs: true
+          clean: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -128,11 +129,11 @@ jobs:
           case "$CFG_CHAIN" in
             mainnet)
               SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
-              SNAPSHOT_DIR_GETH="/mnt/sda/mainnet/geth"
+              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
               ;;
             perf-devnet-2)
               SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-2/nethermind"
-              SNAPSHOT_DIR_GETH="/mnt/sda/perf-devnet-2/geth"
+              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
               ;;
             *)
               echo "Unsupported chain: $CFG_CHAIN" >&2
@@ -161,7 +162,7 @@ jobs:
           DB_TABLE="${TABLE_BASE}_metadata"
 
           echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
-          echo "SNAPSHOT_DIR_GETH=$SNAPSHOT_DIR_GETH" >> "$GITHUB_ENV"
+          echo "SNAPSHOT_DIR_WARMUP=$SNAPSHOT_DIR_WARMUP" >> "$GITHUB_ENV"
           echo "PAYLOAD_DIR=$PAYLOAD_DIR" >> "$GITHUB_ENV"
           echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
           echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
@@ -207,35 +208,35 @@ jobs:
           set -euo pipefail
           GENESIS_ARGS=()
           if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
-            GENESIS_ARGS=(-g "scripts/genesisfiles/geth/bloatnet.json")
+            GENESIS_ARGS=(-g "scripts/genesisfiles/nethermind/bloatnet-prague.json")
           fi
           python3 make_warmup_tests.py \
             -s "$PAYLOAD_DIR" \
             -d "$WARMUP_DIR" \
             -p "*.txt" \
             "${GENESIS_ARGS[@]}" \
-            --snapshotRoot "$SNAPSHOT_DIR_GETH" \
+            --snapshotRoot "$SNAPSHOT_DIR_WARMUP" \
             --overlayRoot "$OVERLAY_ROOT" \
             --network "$CFG_CHAIN"
 
-      - name: Print warmup geth log
+      - name: Print warmup nethermind log
         if: always()
         shell: bash
         run: |
           set +e
-          if [ -f warmup_geth.log ]; then
-            echo "=== warmup_geth.log (full) ==="
-            cat warmup_geth.log
+          if [ -f warmup_nethermind.log ]; then
+            echo "=== warmup_nethermind.log (full) ==="
+            cat warmup_nethermind.log
           else
-            echo "warmup_geth.log not found"
+            echo "warmup_nethermind.log not found"
           fi
 
-      - name: Upload warmup geth log artifact
+      - name: Upload warmup nethermind log artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: warmup-geth-log-${{ github.run_id }}
-          path: warmup_geth.log
+          name: warmup-nethermind-log-${{ github.run_id }}
+          path: warmup_nethermind.log
           if-no-files-found: warn
 
       - name: Upload traces metadata to DB
@@ -326,7 +327,7 @@ jobs:
             mitm_full.log
             mitm_nethermind.log
             nethermind.log
-            warmup_geth.log
+            warmup_nethermind.log
 
       - name: Purge all running Docker containers on runner
         if: always()
@@ -342,13 +343,15 @@ jobs:
         run: |
           set +e
 
-          # Warmup geth overlays: /mnt/sda/overlay-workspace/geth/<overlay_id>/{merged,upper,work}
-          if [ -d "$OVERLAY_ROOT/geth" ]; then
-            find "$OVERLAY_ROOT/geth" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
-              mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
-            done
-            rm -rf "$OVERLAY_ROOT/geth" || true
-          fi
+          # Warmup overlays: /mnt/sda/overlay-workspace/<client>/<overlay_id>/{merged,upper,work}
+          for client in nethermind geth; do
+            if [ -d "$OVERLAY_ROOT/$client" ]; then
+              find "$OVERLAY_ROOT/$client" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
+                mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+              done
+              rm -rf "$OVERLAY_ROOT/$client" || true
+            fi
+          done
 
           # Stateful generator primary overlay mountpoints if a run was interrupted
           for mp in "$OVERLAY_ROOT/overlay-merged" "$OVERLAY_ROOT/scenario-merged"; do
