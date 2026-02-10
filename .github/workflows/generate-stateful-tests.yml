@@ -1,4 +1,5 @@
 name: Generate Stateful Tests
+run-name: Generate Stateful Tests [${{ inputs.payload_dir || 'repricings_compute/mainnet' }}]
 
 on:
   workflow_dispatch:
@@ -52,10 +53,15 @@ on:
           - repricing
           - benchmark
         default: "repricing"
-      rpc_address:
-        description: "RPC funding address"
+      generation_mode:
+        description: "Generation mode"
         required: true
-        default: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
+        type: choice
+        options:
+          - full
+          - warmup_only
+          - stateful_only
+        default: "full"
 
 permissions:
   contents: write
@@ -82,8 +88,8 @@ jobs:
       CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
       CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
       CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
-      CFG_STUBS_FILE: "execution-specs/tests/benchmark/stateful/bloatnet/stubs.json"
-      CFG_RPC_ADDRESS: ${{ github.event.inputs.rpc_address || '0x86cF016FB873D50a7B8F31EB154c9234DD31b058' }}
+      CFG_RPC_ADDRESS: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
+      CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
 
     steps:
       - name: Checkout gas-benchmarks repository from triggering branch
@@ -127,10 +133,14 @@ jobs:
             mainnet)
               SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              EXECUTION_CHAIN="mainnet"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_mainnet.json"
               ;;
             perf-devnet-2)
               SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-2/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              EXECUTION_CHAIN="mainnet"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_bloatnet.json"
               ;;
             *)
               echo "Unsupported chain: $CFG_CHAIN" >&2
@@ -160,6 +170,8 @@ jobs:
 
           echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
           echo "SNAPSHOT_DIR_WARMUP=$SNAPSHOT_DIR_WARMUP" >> "$GITHUB_ENV"
+          echo "EXECUTION_CHAIN=$EXECUTION_CHAIN" >> "$GITHUB_ENV"
+          echo "STUBS_FILE=$STUBS_FILE" >> "$GITHUB_ENV"
           echo "PAYLOAD_DIR=$PAYLOAD_DIR" >> "$GITHUB_ENV"
           echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
           echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
@@ -169,11 +181,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf "$PAYLOAD_DIR" "$WARMUP_DIR"
+          if [[ "$CFG_GENERATION_MODE" != "warmup_only" ]]; then
+            rm -rf "$PAYLOAD_DIR"
+          fi
+          rm -rf "$WARMUP_DIR"
           rm -f "$TRACES_JSON"
           rm -rf execution-specs
 
       - name: Generate stateful tests
+        if: ${{ env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         env:
           RPC_SEED_KEY: ${{ secrets.EEST_RPC_SEED_KEY }}
@@ -181,6 +197,10 @@ jobs:
           set -euo pipefail
           STATEFUL_GENERATOR_LOG="stateful_generator.log"
           : > "$STATEFUL_GENERATOR_LOG"
+          GENESIS_ARGS=()
+          # if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
+          #   GENESIS_ARGS=(--genesis-path "scripts/genesisfiles/nethermind/bloatnet-prague.json")
+          # fi
           PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 eest_stateful_generator.py \
             --nethermind-image "$CFG_NETHERMIND_IMAGE" \
             --fork "$CFG_FORK" \
@@ -194,9 +214,10 @@ jobs:
             --gas-bump-count "$GAS_BUMP_COUNT" \
             --eest_mode "$CFG_EEST_MODE" \
             --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
-            --stubs-file "$CFG_STUBS_FILE" \
+            --stubs-file "$STUBS_FILE" \
             --snapshot-dir "$SNAPSHOT_DIR_NM" \
-            --chain "$CFG_CHAIN" \
+            --chain "$EXECUTION_CHAIN" \
+            "${GENESIS_ARGS[@]}" \
             --overlay-root "$OVERLAY_ROOT" \
             --allow-execute-remote-failures \
             --trace-json \
@@ -224,13 +245,18 @@ jobs:
           if-no-files-found: warn
 
       - name: Generate warmup tests
+        if: ${{ env.CFG_GENERATION_MODE != 'stateful_only' }}
         shell: bash
         run: |
           set -euo pipefail
-          GENESIS_ARGS=()
-          if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
-            GENESIS_ARGS=(-g "scripts/genesisfiles/nethermind/bloatnet-prague.json")
+          if [[ ! -d "$PAYLOAD_DIR" ]]; then
+            echo "Payload source directory not found for warmup generation: $PAYLOAD_DIR" >&2
+            exit 1
           fi
+          GENESIS_ARGS=()
+          # if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
+          #   GENESIS_ARGS=(-g "scripts/genesisfiles/nethermind/bloatnet-prague.json")
+          # fi
           python3 make_warmup_tests.py \
             -s "$PAYLOAD_DIR" \
             -d "$WARMUP_DIR" \
@@ -238,10 +264,10 @@ jobs:
             "${GENESIS_ARGS[@]}" \
             --snapshotRoot "$SNAPSHOT_DIR_WARMUP" \
             --overlayRoot "$OVERLAY_ROOT" \
-            --network "$CFG_CHAIN"
+            --network "mainnet"
 
       - name: Print warmup nethermind log
-        if: always()
+        if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' }}
         shell: bash
         run: |
           set +e
@@ -253,7 +279,7 @@ jobs:
           fi
 
       - name: Upload warmup nethermind log artifact
-        if: always()
+        if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' }}
         uses: actions/upload-artifact@v4
         with:
           name: warmup-nethermind-log-${{ github.run_id }}
@@ -261,6 +287,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload traces metadata to DB
+        if: ${{ env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         env:
           DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
@@ -280,6 +307,7 @@ jobs:
             --table-name "$DB_TABLE"
 
       - name: Remove traces file after DB upload
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
@@ -294,7 +322,12 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git add "$PAYLOAD_DIR" "$WARMUP_DIR"
+          if [ -e "$PAYLOAD_DIR" ]; then
+            git add "$PAYLOAD_DIR"
+          fi
+          if [ -e "$WARMUP_DIR" ]; then
+            git add "$WARMUP_DIR"
+          fi
 
           if git diff --cached --quiet; then
             echo "No generated changes to commit."
