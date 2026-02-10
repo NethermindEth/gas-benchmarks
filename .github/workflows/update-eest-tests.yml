@@ -30,12 +30,12 @@ jobs:
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: false      # Keep tool-cache for setup-python/setup-dotnet
-          android: true          # ~14GB
-          dotnet: true           # ~6GB - setup-dotnet will install what we need
+          android: true          # 9.7GiB
+          dotnet: false          # 4.1GiB fail installation
           haskell: true          # ~5GB
-          large-packages: true   # ~4GB
-          docker-images: true    # ~3GB
-          swap-storage: true     # ~4GB
+          large-packages: false  # 4.8GiB but slow
+          docker-images: false   # 813MiB
+          swap-storage: false    # ~4GB
 
       - name: Show disk space after cleanup
         run: |
