@@ -188,13 +188,16 @@ def _parse_block_number(value: Any) -> Optional[int]:
 
 def _extract_trace_block_hash(trace_data: Dict[str, Any]) -> Optional[str]:
     candidates: List[Dict[str, Any]] = [trace_data]
-    for key in ("block", "header", "blockHeader", "executionPayload"):
+    for key in ("metadata", "meta", "result", "block", "header", "blockHeader", "executionPayload"):
         value = trace_data.get(key)
         if isinstance(value, dict):
             candidates.append(value)
+            nested_meta = value.get("metadata")
+            if isinstance(nested_meta, dict):
+                candidates.append(nested_meta)
 
     for candidate in candidates:
-        for key in ("blockHash", "block_hash", "hash"):
+        for key in ("blockHash", "block_hash", "hash", "blockhash"):
             value = candidate.get(key)
             if _looks_like_block_hash(value):
                 return value.lower()
@@ -205,6 +208,12 @@ def _extract_trace_opcode_counts(trace_data: Dict[str, Any]) -> Dict[str, int]:
     raw = trace_data.get("opcodeCounts")
     if not isinstance(raw, dict):
         raw = trace_data.get("opcode_counts")
+    if not isinstance(raw, dict):
+        result = trace_data.get("result")
+        if isinstance(result, dict):
+            raw = result.get("opcodeCounts")
+            if not isinstance(raw, dict):
+                raw = result.get("opcode_counts")
     if not isinstance(raw, dict):
         return {}
 
@@ -220,21 +229,53 @@ def _extract_trace_opcode_counts(trace_data: Dict[str, Any]) -> Dict[str, int]:
 
 
 def _extract_trace_metadata(trace_data: Dict[str, Any]) -> Dict[str, Any]:
-    block_number = _parse_block_number(trace_data.get("blockNumber"))
-    timestamp = _parse_block_number(trace_data.get("timestamp"))
-    parent_hash = trace_data.get("parentHash")
-    if isinstance(parent_hash, str):
-        parent_hash = parent_hash.lower()
-    else:
-        parent_hash = None
+    candidates: List[Dict[str, Any]] = [trace_data]
+    for key in ("metadata", "meta", "result", "block", "header", "blockHeader", "executionPayload"):
+        value = trace_data.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
+            nested_meta = value.get("metadata")
+            if isinstance(nested_meta, dict):
+                candidates.append(nested_meta)
 
-    tx_count_raw = trace_data.get("transactionCount")
-    tx_count = None
-    if tx_count_raw is not None:
-        try:
-            tx_count = int(tx_count_raw)
-        except Exception:
-            tx_count = None
+    block_number: Optional[int] = None
+    timestamp: Optional[int] = None
+    parent_hash: Optional[str] = None
+    tx_count: Optional[int] = None
+
+    for candidate in candidates:
+        if block_number is None:
+            for key in ("blockNumber", "block_number", "number"):
+                parsed = _parse_block_number(candidate.get(key))
+                if parsed is not None:
+                    block_number = parsed
+                    break
+
+        if timestamp is None:
+            for key in ("timestamp", "blockTimestamp"):
+                parsed = _parse_block_number(candidate.get(key))
+                if parsed is not None:
+                    timestamp = parsed
+                    break
+
+        if parent_hash is None:
+            for key in ("parentHash", "parent_hash", "parentBlockHash"):
+                raw_parent = candidate.get(key)
+                if isinstance(raw_parent, str):
+                    parent_hash = raw_parent.lower()
+                    break
+
+        if tx_count is None:
+            tx_count_raw = None
+            for key in ("transactionCount", "transaction_count", "txCount"):
+                if key in candidate:
+                    tx_count_raw = candidate.get(key)
+                    break
+            if tx_count_raw is not None:
+                try:
+                    tx_count = int(tx_count_raw)
+                except Exception:
+                    tx_count = None
 
     return {
         "block_number": block_number,
