@@ -184,7 +184,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          python3 -m pip install -r requirements.txt
+          python3 -m pip install --user --ignore-installed -r requirements.txt
 
       - name: Make run.sh executable
         run: chmod +x ./run.sh

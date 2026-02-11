@@ -753,7 +753,7 @@ mkdir -p "$PREPARATION_RESULTS_DIR"
 init_executions_file
 
 # Install dependencies
-python3 -m pip install -r requirements.txt
+python3 -m pip install --user --ignore-installed -r requirements.txt
 make prepare_tools
 
 # Find test files and their associated genesis paths
