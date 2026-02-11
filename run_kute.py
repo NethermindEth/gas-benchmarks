@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 
 LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
 PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
@@ -13,6 +14,47 @@ PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
 executables = {
     "kute": "./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute"
 }
+
+
+def _quote(path: Path) -> str:
+    return f"\"{path.as_posix()}\""
+
+
+def resolve_kute_command(preferred_path: str) -> str:
+    candidates = []
+    if preferred_path:
+        candidates.append(Path(preferred_path))
+
+    artifacts_root = Path("nethermind/tools/artifacts/bin")
+    if artifacts_root.exists():
+        patterns = (
+            "Nethermind.Tools.Kute",
+            "Nethermind.Tools.Kute.exe",
+            "Kute",
+            "Kute.exe",
+            "Nethermind.Tools.Kute.dll",
+            "Kute.dll",
+        )
+        for pattern in patterns:
+            candidates.extend(sorted(artifacts_root.rglob(pattern)))
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate or not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        key = str(resolved)
+        if key in seen:
+            continue
+        seen.add(key)
+        if resolved.suffix.lower() == ".dll":
+            return f"dotnet {_quote(resolved)}"
+        return _quote(resolved)
+
+    raise FileNotFoundError(
+        "Unable to find a Kute executable under nethermind/tools/artifacts/bin. "
+        "Run `make prepare_tools` first."
+    )
 
 def get_command_env(
     client: str,
@@ -69,7 +111,7 @@ def run_command(
             temp_path = temp_file.name
     # Add logic here to run the appropriate command for each client
     command = (
-        f"{executables['kute']} -i \"{input_path}\" -s {jwt_secret} -r \"{response}\" -a {ec_url} "
+        f"{executables['kute']} -i \"{input_path}\" -s \"{jwt_secret}\" -r \"{response}\" -a \"{ec_url}\" "
         f"{kute_extra_arguments} "
     )
     # Prepare env variables
@@ -175,7 +217,10 @@ def main():
     execution_url = args.ecURL
     output_folder = args.output
     executables["dotnet"] = args.dotnetPath
-    executables["kute"] = args.kutePath
+    try:
+        executables["kute"] = resolve_kute_command(args.kutePath)
+    except FileNotFoundError as exc:
+        raise SystemExit(str(exc)) from exc
     kute_arguments = args.kuteArguments
     warmup_file = args.warmupPath
     client = args.client

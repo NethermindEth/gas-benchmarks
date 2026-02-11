@@ -37,6 +37,12 @@ prepare_tools:
 	fi; \
 	echo "Installed SDKs:"; \
 	dotnet --list-sdks; \
+	kute_project=$$(find "./$(NETHERMIND_DIR)/tools" -maxdepth 4 -type f -name '*Kute*.csproj' | head -n 1); \
+	if [ -z "$$kute_project" ]; then \
+		echo "ERROR: Unable to find a Kute project file under ./$(NETHERMIND_DIR)/tools"; \
+		exit 1; \
+	fi; \
+	echo "Using Kute project: $$kute_project"; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
 		restore_args=""; \
 		if [ -n "$$NUGET_PACKAGES" ]; then \
@@ -46,7 +52,7 @@ prepare_tools:
 		restore_ok=false; \
 		for attempt in 1 2 3; do \
 			echo "Running dotnet restore for Kute (attempt $$attempt/3)"; \
-			if dotnet restore "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" $$restore_args --disable-parallel; then \
+			if dotnet restore "$$kute_project" $$restore_args --disable-parallel; then \
 				restore_ok=true; \
 				break; \
 			fi; \
@@ -61,7 +67,7 @@ prepare_tools:
 		build_ok=false; \
 		for attempt in 1 2 3; do \
 			echo "Running dotnet build for Kute (attempt $$attempt/3)"; \
-			if dotnet build "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" -c Release --no-restore --property WarningLevel=0; then \
+			if dotnet build "$$kute_project" -c Release --no-restore --property WarningLevel=0; then \
 				build_ok=true; \
 				break; \
 			fi; \
@@ -72,6 +78,15 @@ prepare_tools:
 		if [ "$$build_ok" != true ]; then \
 			echo "ERROR: dotnet build failed for Kute after 3 attempts."; \
 			exit 1; \
+		fi; \
+	fi; \
+	if [ ! -f "$(KUTE_BIN)" ]; then \
+		kute_candidate=$$(find "./$(NETHERMIND_DIR)/tools/artifacts/bin" -maxdepth 8 -type f \( -name 'Nethermind.Tools.Kute' -o -name 'Nethermind.Tools.Kute.exe' -o -name 'Kute' -o -name 'Kute.exe' -o -name 'Nethermind.Tools.Kute.dll' -o -name 'Kute.dll' \) | head -n 1); \
+		if [ -n "$$kute_candidate" ]; then \
+			echo "Linking detected Kute artifact $$kute_candidate to $(KUTE_BIN)"; \
+			mkdir -p "$$(dirname "$(KUTE_BIN)")"; \
+			ln -sf "$$kute_candidate" "$(KUTE_BIN)" 2>/dev/null || cp -f "$$kute_candidate" "$(KUTE_BIN)"; \
+			chmod +x "$(KUTE_BIN)" 2>/dev/null || true; \
 		fi; \
 	fi; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
