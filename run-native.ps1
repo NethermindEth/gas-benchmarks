@@ -26,9 +26,14 @@ $RunnerBin = Join-Path $NethermindRepo "src\Nethermind\artifacts\bin\Nethermind.
 $DataDir = Join-Path $ScriptDir "scripts\nethermind\execution-data"
 $JwtSecret = Join-Path $ScriptDir "scripts\nethermind\jwtsecret"
 $Chainspec = Join-Path $ScriptDir "scripts\genesisfiles\nethermind\zkevmgenesis.json"
-$LogFile = Join-Path $ScriptDir "scripts\nethermind\nethermind_native.log"
+$LogsDir = Join-Path $ScriptDir "logs"
+$ScriptLog = Join-Path $LogsDir "run-script.log"
 $PidFile = Join-Path $ScriptDir ".nethermind_native.pid"
 $KuteBin = Join-Path $ScriptDir "nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe"
+
+# --- Start transcript (logs all script output to run-script.log) ---
+New-Item -ItemType Directory -Path $LogsDir -Force | Out-Null
+Start-Transcript -Path $ScriptLog -Force | Out-Null
 
 $NethProc = $null
 
@@ -36,6 +41,9 @@ function Stop-Nethermind {
     if ($script:NethProc -and !$script:NethProc.HasExited) {
         Write-Host "[run-native] Stopping Nethermind (PID $($script:NethProc.Id))"
         Stop-Process -Id $script:NethProc.Id -Force -ErrorAction SilentlyContinue
+        # Wait for process to fully exit and release file locks (RocksDB LOCK files)
+        $script:NethProc.WaitForExit(10000) | Out-Null
+        Start-Sleep -Seconds 2
     }
     if (Test-Path $PidFile) { Remove-Item $PidFile -Force -ErrorAction SilentlyContinue }
 }
@@ -92,22 +100,16 @@ if (!$SkipPrepareTools) {
 }
 
 # --- Prepare directories ---
-foreach ($dir in "results", "prepresults", "warmupresults", "logs") {
+foreach ($dir in "results", "prepresults", "warmupresults") {
     $p = Join-Path $ScriptDir $dir
     if ($dir -eq "results" -and (Test-Path $p)) { Remove-Item $p -Recurse -Force }
     New-Item -ItemType Directory -Path $p -Force | Out-Null
 }
-if (Test-Path $DataDir) {
-    Write-Host "[run-native] Cleaning execution-data for fresh state"
-    Remove-Item $DataDir -Recurse -Force
-}
-New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
 
 # --- Install Python deps ---
 pip install -r (Join-Path $ScriptDir "requirements.txt") --quiet
 
-# --- Start Nethermind ---
-Write-Host "[run-native] Starting Nethermind from $RunnerBin"
+# --- Nethermind arguments (reused each run) ---
 $nethArgs = @(
     "--config=none"
     "--datadir=$DataDir"
@@ -132,40 +134,57 @@ $nethArgs = @(
     "--Init.ChainSpecPath=$Chainspec"
 )
 
-$NethProc = Start-Process -FilePath $RunnerBin -ArgumentList $nethArgs `
-    -RedirectStandardOutput $LogFile -RedirectStandardError "$LogFile.err" `
-    -PassThru -NoNewWindow
-$NethProc.Id | Set-Content $PidFile
-Write-Host "[run-native] Nethermind PID: $($NethProc.Id)"
+function Start-FreshNethermind([int]$runNumber) {
+    # Clean execution-data for fresh chain state (retry in case of lingering file locks)
+    if (Test-Path $DataDir) {
+        Write-Host "[run-native] Cleaning execution-data for fresh state"
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try { Remove-Item $DataDir -Recurse -Force -ErrorAction Stop; break }
+            catch { Write-Host "[run-native] Cleanup attempt $attempt failed, retrying..."; Start-Sleep -Seconds 2 }
+        }
+    }
+    New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
 
-# --- Wait for RPC ---
-Write-Host "[run-native] Waiting for RPC at http://127.0.0.1:8545"
-$rpcBody = '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}'
-$maxAttempts = 300
-$rpcReady = $false
-for ($i = 1; $i -le $maxAttempts; $i++) {
-    if ($NethProc.HasExited) {
-        Write-Host "[run-native] Nethermind exited unexpectedly (exit code $($NethProc.ExitCode)). Last log lines:"
-        Get-Content $LogFile -Tail 30 -ErrorAction SilentlyContinue
+    # Per-run log files (append run number for multi-run)
+    $runNethLog = Join-Path $LogsDir "nethermind-exe.run${runNumber}.log"
+    $runNethErr = Join-Path $LogsDir "nethermind-exe.run${runNumber}.err.log"
+
+    Write-Host "[run-native] Starting Nethermind from $RunnerBin (run $runNumber)"
+    $script:NethProc = Start-Process -FilePath $RunnerBin -ArgumentList $nethArgs `
+        -RedirectStandardOutput $runNethLog -RedirectStandardError $runNethErr `
+        -PassThru -NoNewWindow
+    $script:NethProc.Id | Set-Content $PidFile
+    Write-Host "[run-native] Nethermind PID: $($script:NethProc.Id)"
+
+    # Wait for RPC
+    Write-Host "[run-native] Waiting for RPC at http://127.0.0.1:8545"
+    $rpcBody = '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}'
+    $maxAttempts = 300
+    $rpcReady = $false
+    for ($i = 1; $i -le $maxAttempts; $i++) {
+        if ($script:NethProc.HasExited) {
+            Write-Host "[run-native] Nethermind exited unexpectedly (exit code $($script:NethProc.ExitCode)). Last log lines:"
+            Get-Content $runNethLog -Tail 30 -ErrorAction SilentlyContinue
+            Stop-Nethermind
+            exit 1
+        }
+        try {
+            $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8545" -Method POST `
+                -Body $rpcBody -ContentType "application/json" -TimeoutSec 2 -UseBasicParsing
+            if ($resp.Content -match '"result"') {
+                Write-Host "[run-native] RPC ready (attempt $i/$maxAttempts)"
+                $rpcReady = $true
+                break
+            }
+        } catch {}
+        Start-Sleep -Seconds 2
+    }
+    if (!$rpcReady) {
+        Write-Host "[run-native] RPC failed to start. Last log lines:"
+        Get-Content $runNethLog -Tail 50 -ErrorAction SilentlyContinue
         Stop-Nethermind
         exit 1
     }
-    try {
-        $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8545" -Method POST `
-            -Body $rpcBody -ContentType "application/json" -TimeoutSec 2 -UseBasicParsing
-        if ($resp.Content -match '"result"') {
-            Write-Host "[run-native] RPC ready (attempt $i/$maxAttempts)"
-            $rpcReady = $true
-            break
-        }
-    } catch {}
-    Start-Sleep -Seconds 2
-}
-if (!$rpcReady) {
-    Write-Host "[run-native] RPC failed to start. Last log lines:"
-    Get-Content $LogFile -Tail 50 -ErrorAction SilentlyContinue
-    Stop-Nethermind
-    exit 1
 }
 
 # --- Discover test files ---
@@ -284,7 +303,9 @@ python -c "from utils import print_computer_specs; print(print_computer_specs())
 
 # --- Common run_kute args ---
 # Use --kutePath so run_kute.py doesn't try to run "./nethermind/..." via cmd.exe
+# Use 127.0.0.1 to avoid DNS/IPv6 resolution overhead on Windows
 $kutePathArg = "--kutePath `"$KuteBin`""
+$ecUrlArg = "--ecURL http://127.0.0.1:8551"
 $skipFcOpt = ""
 if ($SkipForkchoice) { $skipFcOpt = " --skipForkchoice" }
 
@@ -292,10 +313,12 @@ if ($SkipForkchoice) { $skipFcOpt = " --skipForkchoice" }
 function To-ForwardSlash([string]$p) { $p.Replace('\', '/') }
 
 # --- Main execution loop ---
-$warmupDone = @{}
-
 for ($run = 1; $run -le $Runs; $run++) {
     Write-Host "`n=== Run $run of $Runs ==="
+
+    # Fresh Nethermind instance with clean state for each run
+    Start-FreshNethermind $run
+    $warmupDone = @{}
 
     foreach ($testFile in $testFiles) {
         $filename = Split-Path -Leaf $testFile
@@ -315,7 +338,7 @@ for ($run = 1; $run -le $Runs; $run++) {
             $tf = To-ForwardSlash $testFile
             $jp = To-ForwardSlash $JwtSecret
             Write-Host "Executing preparation script (not measured): $filename"
-            $cmd = "python run_kute.py --output prepresults --testsPath `"$tf`" --jwtPath `"$jp`" --client $Client --rerunSyncing --run $run $kutePathArg$skipFcOpt"
+            $cmd = "python run_kute.py --output prepresults --testsPath `"$tf`" --jwtPath `"$jp`" --client $Client --rerunSyncing --run $run $kutePathArg $ecUrlArg$skipFcOpt"
             Write-Host "[INFO] $cmd"
             Invoke-Expression $cmd
             continue
@@ -345,7 +368,7 @@ for ($run = 1; $run -le $Runs; $run++) {
                 $wf = To-ForwardSlash $warmupFile
                 $jp = To-ForwardSlash $JwtSecret
                 for ($w = 1; $w -le $WarmupCount; $w++) {
-                    $cmd = "python run_kute.py --output warmupresults --testsPath `"$wf`" --jwtPath `"$jp`" --client $Client --run $run --kuteArguments '-f engine_newPayload' $kutePathArg$skipFcOpt"
+                    $cmd = "python run_kute.py --output warmupresults --testsPath `"$wf`" --jwtPath `"$jp`" --client $Client --run $run --kuteArguments '-f engine_newPayload' $kutePathArg $ecUrlArg$skipFcOpt"
                     Write-Host "[INFO] Warmup $w/$WarmupCount : $cmd"
                     Invoke-Expression $cmd
                 }
@@ -358,11 +381,14 @@ for ($run = 1; $run -le $Runs; $run++) {
         # Measured run
         $tf = To-ForwardSlash $testFile
         $jp = To-ForwardSlash $JwtSecret
-        $cmd = "python run_kute.py --output results --testsPath `"$tf`" --jwtPath `"$jp`" --client $Client --run $run $kutePathArg$skipFcOpt"
+        $cmd = "python run_kute.py --output results --testsPath `"$tf`" --jwtPath `"$jp`" --client $Client --run $run $kutePathArg $ecUrlArg$skipFcOpt"
         Write-Host "[INFO] Measured: $cmd"
         Invoke-Expression $cmd
         Write-Host ""
     }
+
+    # Stop Nethermind after each run (next run starts fresh)
+    Stop-Nethermind
 }
 
 # --- Reports ---
@@ -375,4 +401,5 @@ Write-Host "[run-native] Running: python report_tables.py $($reportBaseArgs -joi
 
 # --- Cleanup ---
 Write-Host "`n=== Done ==="
-Stop-Nethermind
+Write-Host "[run-native] Logs: $LogsDir"
+Stop-Transcript | Out-Null
