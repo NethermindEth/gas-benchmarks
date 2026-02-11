@@ -97,6 +97,10 @@ foreach ($dir in "results", "prepresults", "warmupresults", "logs") {
     if ($dir -eq "results" -and (Test-Path $p)) { Remove-Item $p -Recurse -Force }
     New-Item -ItemType Directory -Path $p -Force | Out-Null
 }
+if (Test-Path $DataDir) {
+    Write-Host "[run-native] Cleaning execution-data for fresh state"
+    Remove-Item $DataDir -Recurse -Force
+}
 New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
 
 # --- Install Python deps ---
