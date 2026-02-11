@@ -164,19 +164,30 @@ jobs:
 
           required="${MIN_DOCKER_API_VERSION:-1.44}"
 
-          if [ -n "${DOCKER_API_VERSION:-}" ] && ! version_ge "${DOCKER_API_VERSION}" "$required"; then
-            echo "DOCKER_API_VERSION=${DOCKER_API_VERSION} is below required API ${required}; unsetting."
-            echo "DOCKER_API_VERSION=" >> "$GITHUB_ENV"
-            unset DOCKER_API_VERSION
-          fi
+          docker_bin="$(command -v docker || true)"
+          while IFS= read -r candidate; do
+            if [ -n "$candidate" ] && [[ "$candidate" != *"/.native-bin/"* ]] && [ -x "$candidate" ]; then
+              docker_bin="$candidate"
+              break
+            fi
+          done < <(which -a docker 2>/dev/null | awk '!seen[$0]++')
 
-          if ! command -v docker >/dev/null 2>&1; then
+          if [ -z "${docker_bin}" ] || [ ! -x "${docker_bin}" ]; then
             echo "docker CLI is missing on runner."
             exit 1
           fi
 
-          client_api="$(docker version --format '{{.Client.APIVersion}}' 2>/dev/null || true)"
-          daemon_min="$(docker version --format '{{.Server.MinAPIVersion}}' 2>/dev/null || true)"
+          echo "Using docker binary: ${docker_bin}"
+          echo "DOCKER_BIN=${docker_bin}" >> "$GITHUB_ENV"
+
+          if [ -n "${DOCKER_API_VERSION:-}" ]; then
+            echo "Clearing DOCKER_API_VERSION=${DOCKER_API_VERSION} to allow client/daemon negotiation."
+            echo "DOCKER_API_VERSION=" >> "$GITHUB_ENV"
+            unset DOCKER_API_VERSION
+          fi
+
+          client_api="$("${docker_bin}" version --format '{{.Client.APIVersion}}' 2>/dev/null || true)"
+          daemon_min="$("${docker_bin}" version --format '{{.Server.MinAPIVersion}}' 2>/dev/null || true)"
 
           if [ -n "$daemon_min" ] && version_ge "$daemon_min" "$required"; then
             required="$daemon_min"
@@ -184,7 +195,7 @@ jobs:
 
           if [ -z "$client_api" ]; then
             echo "Unable to read Docker client API version. Diagnostic output:"
-            docker version || true
+            "${docker_bin}" version || true
             exit 1
           fi
 

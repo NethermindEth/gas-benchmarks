@@ -41,8 +41,23 @@ resolve_docker_bin() {
     docker_bin="$(command -v docker 2>/dev/null || true)"
   fi
 
-  if [ -n "$docker_bin" ] && [[ "$docker_bin" == *"/.native-bin/"* ]] && [ -x "/usr/bin/docker" ]; then
-    docker_bin="/usr/bin/docker"
+  if [ -n "$docker_bin" ] && [[ "$docker_bin" == *"/.native-bin/"* ]]; then
+    local candidate
+    while IFS= read -r candidate; do
+      if [ -n "$candidate" ] && [[ "$candidate" != *"/.native-bin/"* ]] && [ -x "$candidate" ]; then
+        docker_bin="$candidate"
+        break
+      fi
+    done < <(which -a docker 2>/dev/null | awk '!seen[$0]++')
+  fi
+
+  if [ -n "$docker_bin" ] && [[ "$docker_bin" == *"/.native-bin/"* ]]; then
+    for candidate in /usr/bin/docker /usr/local/bin/docker /bin/docker; do
+      if [ -x "$candidate" ]; then
+        docker_bin="$candidate"
+        break
+      fi
+    done
   fi
 
   echo "$docker_bin"
