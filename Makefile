@@ -15,10 +15,15 @@ prepare_tools:
 	git lfs pull; \
 	cd ..; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
+		restore_args=""; \
+		if [ -n "$$NUGET_PACKAGES" ]; then \
+			mkdir -p "$$NUGET_PACKAGES"; \
+			restore_args="--packages $$NUGET_PACKAGES"; \
+		fi; \
 		restore_ok=false; \
 		for attempt in 1 2 3; do \
 			echo "Running dotnet restore for Kute (attempt $$attempt/3)"; \
-			if dotnet restore "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" --disable-parallel; then \
+			if dotnet restore "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" $$restore_args --disable-parallel; then \
 				restore_ok=true; \
 				break; \
 			fi; \

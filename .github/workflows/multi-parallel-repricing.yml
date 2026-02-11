@@ -117,6 +117,10 @@ jobs:
     env:
       DOTNET_INSTALL_DIR: "~/.dotnet"
       PIP_BREAK_SYSTEM_PACKAGES: "1"
+      NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT: "12"
+      NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS: "5000"
+      NUGET_ENHANCED_NETWORK_TIMEOUT_MILLISECONDS: "300000"
+      NUGET_PACKAGES: "/data/nuget/packages"
 
     steps:
       - name: Ensure base tools are installed
@@ -141,6 +145,8 @@ jobs:
             echo "Missing: ${missing[*]}. Install them on the runner or provide apt-get."
             exit 1
           fi
+
+          mkdir -p "$NUGET_PACKAGES"
 
       - name: Checkout code
         uses: actions/checkout@v4
