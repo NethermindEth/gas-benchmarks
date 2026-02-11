@@ -8,7 +8,7 @@ import utils
 import csv
 
 
-def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
+def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images, skip_empty=False):
     # Load the computer specs
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
@@ -81,7 +81,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              '</tr>\n'
                              '</thread>\n'
                              '<tbody>\n')
-        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, args.skipEmpty)
+        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, skip_empty)
         csv_table[client] = gas_table_norm
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'<tr>\n<td class="title">{data[0]}</td>\n'
@@ -290,7 +290,7 @@ def main():
                     rows = [name, gas_value_mgas, opcount_value if opcount_value is not None else ''] + client_results[client][test_case_name][gas][methods[0]] + [description]
                     csvwriter.writerow(rows)
 
-    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
+    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, args.skipEmpty)
 
     print('Done!')
 
