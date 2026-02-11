@@ -890,10 +890,6 @@ for run in $(seq 1 $RUNS); do
         fi
 
         if [ "$match" -ne 1 ]; then
-          if [ -z "${SCENARIO_SKIP_LOGGED[$scenario_key]}" ]; then
-            echo "Skipping scenario $filename (does not match case-insensitive filter)"
-            SCENARIO_SKIP_LOGGED["$scenario_key"]=1
-          fi
           continue
         fi
       fi
