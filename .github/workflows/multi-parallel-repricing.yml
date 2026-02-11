@@ -80,7 +80,10 @@ jobs:
 
   build:
     needs: set-matrix
-    runs-on: [self-hosted, repricing]
+    runs-on:
+      - self-hosted
+      - repricing
+      - ${{ matrix.client }}
 
     strategy:
       # Consume the JSON matrix we just emitted
