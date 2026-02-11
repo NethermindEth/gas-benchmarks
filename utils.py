@@ -383,6 +383,19 @@ def get_test_cases(tests_path: str, return_metadata: bool = False):
     return sorted_cases
 
 
+def filter_test_cases(test_cases, filter_str):
+    """Filter test cases using the same logic as run.sh: case-insensitive substring match, comma-separated OR."""
+    if not filter_str:
+        return test_cases
+    patterns = [p.strip().lower() for p in filter_str.split(',') if p.strip()]
+    if not patterns:
+        return test_cases
+    return {
+        tc: gas for tc, gas in test_cases.items()
+        if any(p in tc.lower() for p in patterns)
+    }
+
+
 def _extract_gas_used_from_payload(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:

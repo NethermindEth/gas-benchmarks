@@ -81,7 +81,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              '</tr>\n'
                              '</thread>\n'
                              '<tbody>\n')
-        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
+        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, args.skipEmpty)
         csv_table[client] = gas_table_norm
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'<tr>\n<td class="title">{data[0]}</td>\n'
@@ -185,6 +185,8 @@ def main():
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
                         default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}')
+    parser.add_argument('--skipEmpty', action='store_true', default=True, help='Skip empty results')
+    parser.add_argument('--filter', type=str, default='', help='Comma-separated case-insensitive substring filters for test cases')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -208,6 +210,8 @@ def main():
     fields = 'max'
 
     test_cases, test_case_meta = utils.get_test_cases(tests_path, return_metadata=True)
+    test_cases = utils.filter_test_cases(test_cases, args.filter)
+    test_case_meta = {tc: test_case_meta[tc] for tc in test_cases if tc in test_case_meta}
     for client in clients.split(','):
         client_results[client] = {}
         failed_tests[client] = {}

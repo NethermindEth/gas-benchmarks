@@ -74,6 +74,7 @@ def main():
                         default='{ "nethermind": "default", "besu": "default", "geth": "default", "reth": "default" , '
                                 '"erigon": "default"}')
     parser.add_argument('--skipEmpty', action='store_true', default=True, help='Skip empty results')
+    parser.add_argument('--filter', type=str, default='', help='Comma-separated case-insensitive substring filters for test cases')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -98,6 +99,8 @@ def main():
     fields = 'max'
 
     test_cases, test_case_meta = utils.get_test_cases(tests_path, return_metadata=True)
+    test_cases = utils.filter_test_cases(test_cases, args.filter)
+    test_case_meta = {tc: test_case_meta[tc] for tc in test_cases if tc in test_case_meta}
     for client in clients.split(','):
         client_results[client] = {}
         failed_tests[client] = {}
