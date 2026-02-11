@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       test:
-        description: 'Path to test file'
-        default: 'repricings_compute'
+        description: 'Path to repricing test directory'
+        default: 'repricings_compute/mainnet'
       runs:
         description: 'Number of runs for the application'
         default: 1
@@ -24,22 +24,18 @@ on:
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
-      genesis:
-        description: 'Genesis filename (used for all clients)'
-        default: 'zkevmgenesis.json'
 
 concurrency:
   group: repricing-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  INPUT_TEST: ${{ github.event.inputs.test || 'repricings_compute' }}
+  INPUT_TEST: ${{ github.event.inputs.test || 'repricings_compute/mainnet' }}
   INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
   INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
   INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
   INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
   INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
-  INPUT_GENESIS: ${{ github.event.inputs.genesis || 'zkevmgenesis.json' }}
 
 jobs:
   set-matrix:
@@ -133,19 +129,31 @@ jobs:
 
       - name: Run benchmarks for client=${{ matrix.client }}
         run: |
-          GENESIS_FILENAME="${{ env.INPUT_GENESIS }}"
           TEST_PATH="${{ env.INPUT_TEST }}"
           CLIENT="${{ matrix.client }}"
-          TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
-      
+          WARMUP_PATH="${TEST_PATH}_warmup"
+
+          if [ ! -d "$TEST_PATH" ]; then
+            echo "Test path does not exist: $TEST_PATH"
+            exit 1
+          fi
+
+          WARMUP_ARGS=()
+          if [ -d "$WARMUP_PATH" ]; then
+            WARMUP_ARGS=(-W "$WARMUP_PATH")
+          else
+            echo "Warmup path not found: $WARMUP_PATH; continuing without explicit warmup path"
+          fi
+
           ./run.sh \
-            -T "$TEST_PATHS_JSON" \
+            -t "$TEST_PATH" \
+            -n mainnet \
             -c "$CLIENT" \
             -r 1 \
             -i '${{ env.INPUT_IMAGES }}' \
             -o "${{ env.INPUT_OPCODES_WARMUP }}" \
             -f "${{ env.INPUT_FILTER }}" \
-            -W "warmup-repricing"
+            "${WARMUP_ARGS[@]}"
 
       - name: Dump latest Docker logs for ${{ matrix.client }}
         if: always()
