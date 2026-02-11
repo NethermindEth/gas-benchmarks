@@ -754,7 +754,24 @@ init_executions_file
 
 # Install dependencies
 python3 -m pip install --user --ignore-installed -r requirements.txt
-make prepare_tools
+prepare_tools_success=false
+for attempt in 1 2 3; do
+  echo "[INFO] Running make prepare_tools (attempt $attempt/3)"
+  if make prepare_tools; then
+    prepare_tools_success=true
+    break
+  fi
+  if [ "$attempt" -lt 3 ]; then
+    sleep_seconds=$((attempt * 30))
+    echo "[WARN] make prepare_tools failed, retrying in ${sleep_seconds}s..."
+    sleep "$sleep_seconds"
+  fi
+done
+
+if [ "$prepare_tools_success" != true ]; then
+  echo "[ERROR] make prepare_tools failed after 3 attempts"
+  exit 1
+fi
 
 # Find test files and their associated genesis paths
 TEST_FILES=()

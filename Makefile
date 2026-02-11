@@ -15,7 +15,36 @@ prepare_tools:
 	git lfs pull; \
 	cd ..; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
-		dotnet build "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" -c Release --property WarningLevel=0; \
+		restore_ok=false; \
+		for attempt in 1 2 3; do \
+			echo "Running dotnet restore for Kute (attempt $$attempt/3)"; \
+			if dotnet restore "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" --disable-parallel; then \
+				restore_ok=true; \
+				break; \
+			fi; \
+			if [ "$$attempt" -lt 3 ]; then \
+				sleep $$((attempt * 20)); \
+			fi; \
+		done; \
+		if [ "$$restore_ok" != true ]; then \
+			echo "ERROR: dotnet restore failed for Kute after 3 attempts."; \
+			exit 1; \
+		fi; \
+		build_ok=false; \
+		for attempt in 1 2 3; do \
+			echo "Running dotnet build for Kute (attempt $$attempt/3)"; \
+			if dotnet build "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" -c Release --no-restore --property WarningLevel=0; then \
+				build_ok=true; \
+				break; \
+			fi; \
+			if [ "$$attempt" -lt 3 ]; then \
+				sleep $$((attempt * 20)); \
+			fi; \
+		done; \
+		if [ "$$build_ok" != true ]; then \
+			echo "ERROR: dotnet build failed for Kute after 3 attempts."; \
+			exit 1; \
+		fi; \
 	fi; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
 		echo "ERROR: Kute binary not found at $(KUTE_BIN) after build."; \
