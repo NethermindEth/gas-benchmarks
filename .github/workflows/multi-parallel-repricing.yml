@@ -125,7 +125,11 @@ jobs:
     steps:
       - name: Ensure base tools are installed
         run: |
+          set -euo pipefail
           missing=()
+          docker_missing=false
+          compose_missing=false
+
           if ! command -v git-lfs >/dev/null 2>&1; then
             missing+=("git-lfs")
           fi
@@ -138,18 +142,50 @@ jobs:
           if ! command -v make >/dev/null 2>&1; then
             missing+=("make")
           fi
-          if [ ${#missing[@]} -eq 0 ]; then
-            exit 0
-          fi
-          if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+
+          if ! command -v docker >/dev/null 2>&1; then
+            docker_missing=true
+            compose_missing=true
           else
-            echo "Missing: ${missing[*]}. Install them on the runner or provide apt-get."
-            exit 1
+            if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+              compose_missing=true
+            fi
+          fi
+
+          packages=("${missing[@]}")
+          if [ "$docker_missing" = true ]; then
+            packages+=("docker.io")
+          fi
+          if [ "$compose_missing" = true ]; then
+            if command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+              packages+=("docker-compose-plugin")
+            elif ! command -v docker-compose >/dev/null 2>&1; then
+              packages+=("docker-compose")
+            fi
+          fi
+
+          if [ ${#packages[@]} -gt 0 ]; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+            else
+              echo "Missing packages: ${packages[*]}. Install them on the runner or provide apt-get."
+              exit 1
+            fi
+          fi
+
+          if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl start docker >/dev/null 2>&1 || true
+          elif command -v service >/dev/null 2>&1; then
+            sudo service docker start >/dev/null 2>&1 || true
           fi
 
           mkdir -p "$NUGET_PACKAGES"
+
+          echo "PATH=$PATH"
+          command -v docker || true
+          which -a docker || true
+          docker version --format 'CLIENT={{.Client.Version}} API={{.Client.APIVersion}} SERVER_MIN={{.Server.MinAPIVersion}}' || true
 
       - name: Ensure Docker client API compatibility
         run: |
