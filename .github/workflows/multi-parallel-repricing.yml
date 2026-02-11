@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       test:
-        description: 'Path to repricing test directory'
-        default: 'repricings_compute/mainnet'
+        description: "Path(s) to repricing test directories (comma-separated) or 'all'"
+        default: 'all'
       runs:
         description: 'Number of runs for the application'
         default: 1
@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  INPUT_TEST: ${{ github.event.inputs.test || 'repricings_compute/mainnet' }}
+  INPUT_TEST: ${{ github.event.inputs.test || 'all' }}
   INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
   INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
   INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
@@ -61,12 +61,39 @@ jobs:
           fi
           clients="geth,nethermind,erigon,besu,reth"
           IFS=',' read -ra client_array <<< "$clients"
+          tests_input="${{ env.INPUT_TEST }}"
+          targets=()
+
+          if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
+            targets+=("repricings_compute/mainnet|mainnet")
+            targets+=("repricings_compute/perf-devnet-2|perf-devnet-2")
+            targets+=("repricings_stateful/mainnet|mainnet")
+            targets+=("repricings_stateful/perf-devnet-2|perf-devnet-2")
+          else
+            IFS=',' read -ra requested_paths <<< "$tests_input"
+            for raw_path in "${requested_paths[@]}"; do
+              test_path="$(echo "$raw_path" | xargs)"
+              [ -z "$test_path" ] && continue
+              network="$(basename "$test_path")"
+              targets+=("${test_path}|${network}")
+            done
+          fi
+
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No test targets selected"
+            exit 1
+          fi
+
           matrix_elements=()
           
           for ((i=1; i<=runs; i++)); do
             for client in "${client_array[@]}"; do
-              element="{'run': '$i', 'client': '$client'}"
-              matrix_elements+=("$element")
+              for target in "${targets[@]}"; do
+                test_path="${target%%|*}"
+                network="${target##*|}"
+                element="{'run': '$i', 'client': '$client', 'test_path': '$test_path', 'network': '$network'}"
+                matrix_elements+=("$element")
+              done
             done
           done
           
@@ -129,7 +156,8 @@ jobs:
 
       - name: Run benchmarks for client=${{ matrix.client }}
         run: |
-          TEST_PATH="${{ env.INPUT_TEST }}"
+          TEST_PATH="${{ matrix.test_path }}"
+          NETWORK="${{ matrix.network }}"
           CLIENT="${{ matrix.client }}"
           WARMUP_PATH="${TEST_PATH}_warmup"
 
@@ -147,7 +175,9 @@ jobs:
 
           ./run.sh \
             -t "$TEST_PATH" \
-            -n mainnet \
+            -n "$NETWORK" \
+            -B "/data/snapshots/<<CLIENT>>" \
+            -O "/data/overlay-workspace" \
             -c "$CLIENT" \
             -r 1 \
             -i '${{ env.INPUT_IMAGES }}' \
@@ -179,15 +209,17 @@ jobs:
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
           CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
+          CLEANED_TEST_PATH=$(echo "${{ matrix.test_path }}" | tr -d '\n' | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
           echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
           echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
-          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
+          echo "CLEANED_TEST_PATH=$CLEANED_TEST_PATH" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}-${CLEANED_TEST_PATH}.zip results
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
-          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_TEST_PATH }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_TEST_PATH }}.zip
 
       - name: Docker full prune
         if: always()
@@ -261,16 +293,69 @@ jobs:
           mkdir -p reports
 
           RUNS="${{ env.INPUT_RUNS }}"
-          TESTS="${{ env.INPUT_TEST }}"
           IMAGES='${{ env.INPUT_IMAGES }}'
 
-          python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
-          python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+          TEST_PATHS=()
+          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
+            TEST_PATHS+=("repricings_compute/mainnet")
+            TEST_PATHS+=("repricings_compute/perf-devnet-2")
+            TEST_PATHS+=("repricings_stateful/mainnet")
+            TEST_PATHS+=("repricings_stateful/perf-devnet-2")
+          else
+            IFS=',' read -ra TEST_PATHS <<< "${{ env.INPUT_TEST }}"
+          fi
+
+          generated=false
+          for raw_test_path in "${TEST_PATHS[@]}"; do
+            TESTS="$(echo "$raw_test_path" | xargs)"
+            [ -z "$TESTS" ] && continue
+            if [ ! -d "$TESTS" ]; then
+              echo "Skipping missing tests path: $TESTS"
+              continue
+            fi
+            SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+
+            python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+            cp reports/tables_norm.txt "reports/tables_norm_${SAFE_TESTS}.txt"
+
+            python3 report_html.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+            cp reports/index.html "reports/index_${SAFE_TESTS}.html"
+            for csv in reports/output_*.csv reports/raw_results_*.csv; do
+              [ -f "$csv" ] || continue
+              cp "$csv" "${csv%.csv}_${SAFE_TESTS}.csv"
+            done
+            generated=true
+          done
+
+          if [ "$generated" = false ]; then
+            echo "No report generated: no valid tests paths were available"
+            exit 1
+          fi
 
       - name: Generate Report
         if: ${{ env.INPUT_TXT_REPORT == 'true' }}
         run: |
-          python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath "${{ env.INPUT_TEST }}"
+          TXT_TEST_PATHS=()
+          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
+            TXT_TEST_PATHS+=("repricings_compute/mainnet")
+            TXT_TEST_PATHS+=("repricings_compute/perf-devnet-2")
+            TXT_TEST_PATHS+=("repricings_stateful/mainnet")
+            TXT_TEST_PATHS+=("repricings_stateful/perf-devnet-2")
+          else
+            IFS=',' read -ra TXT_TEST_PATHS <<< "${{ env.INPUT_TEST }}"
+          fi
+
+          for raw_test_path in "${TXT_TEST_PATHS[@]}"; do
+            TESTS="$(echo "$raw_test_path" | xargs)"
+            [ -z "$TESTS" ] && continue
+            if [ ! -d "$TESTS" ]; then
+              echo "Skipping missing tests path for txt report: $TESTS"
+              continue
+            fi
+            SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+            python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath "$TESTS"
+            cp "extracted-results/results/transition_report_engine_newPayloadV4.txt" "reports/transition_report_engine_newPayloadV4_${SAFE_TESTS}.txt"
+          done
 
       - name: Zip the results folder
         run: |
