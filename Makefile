@@ -14,6 +14,18 @@ prepare_tools:
 	git checkout "$(NETHERMIND_COMMIT)"; \
 	git lfs pull; \
 	cd ..; \
+	if ! command -v dotnet >/dev/null 2>&1; then \
+		echo "dotnet not found; installing local .NET SDK 9.0 to $$HOME/.dotnet"; \
+		curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh; \
+		bash /tmp/dotnet-install.sh --channel 9.0 --quality ga --install-dir "$$HOME/.dotnet"; \
+		export PATH="$$HOME/.dotnet:$$PATH"; \
+	fi; \
+	if ! dotnet --list-sdks | grep -q '^9\.'; then \
+		echo ".NET SDK 9.x not found; installing local .NET SDK 9.0 to $$HOME/.dotnet"; \
+		curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh; \
+		bash /tmp/dotnet-install.sh --channel 9.0 --quality ga --install-dir "$$HOME/.dotnet"; \
+		export PATH="$$HOME/.dotnet:$$PATH"; \
+	fi; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
 		restore_args=""; \
 		if [ -n "$$NUGET_PACKAGES" ]; then \

@@ -131,6 +131,9 @@ jobs:
           if ! command -v zip >/dev/null 2>&1; then
             missing+=("zip")
           fi
+          if ! command -v curl >/dev/null 2>&1; then
+            missing+=("curl")
+          fi
           if ! command -v make >/dev/null 2>&1; then
             missing+=("make")
           fi
