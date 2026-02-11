@@ -3,7 +3,7 @@ name: Run Parallel Benchmarks (Repricing)
 on:
   push:
     branches:
-      - repricing
+      - main
   workflow_dispatch:
     inputs:
       test:
@@ -39,7 +39,7 @@ env:
 
 jobs:
   set-matrix:
-    if: github.ref == 'refs/heads/repricing'
+    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -411,7 +411,7 @@ jobs:
   retrigger:
     needs: populate-db
     runs-on: ubuntu-latest
-    if: ${{ github.ref == 'refs/heads/repricing' && needs.populate-db.result == 'success' }}
+    if: ${{ github.ref == 'refs/heads/main' && needs.populate-db.result == 'success' }}
     steps:
       - name: Retrigger workflow
         uses: benc-uk/workflow-dispatch@v1
