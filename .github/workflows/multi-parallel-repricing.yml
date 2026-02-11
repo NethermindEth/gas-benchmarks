@@ -116,6 +116,7 @@ jobs:
 
     env:
       PIP_BREAK_SYSTEM_PACKAGES: "1"
+      MIN_DOCKER_API_VERSION: "1.44"
       NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT: "12"
       NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS: "5000"
       NUGET_ENHANCED_NETWORK_TIMEOUT_MILLISECONDS: "300000"
@@ -149,6 +150,50 @@ jobs:
           fi
 
           mkdir -p "$NUGET_PACKAGES"
+
+      - name: Ensure Docker client API compatibility
+        run: |
+          set -euo pipefail
+
+          version_ge() {
+            local lhs="$1"
+            local rhs="$2"
+            [ "$lhs" = "$rhs" ] && return 0
+            [ "$(printf '%s\n%s\n' "$lhs" "$rhs" | sort -V | tail -n 1)" = "$lhs" ]
+          }
+
+          required="${MIN_DOCKER_API_VERSION:-1.44}"
+
+          if [ -n "${DOCKER_API_VERSION:-}" ] && ! version_ge "${DOCKER_API_VERSION}" "$required"; then
+            echo "DOCKER_API_VERSION=${DOCKER_API_VERSION} is below required API ${required}; unsetting."
+            echo "DOCKER_API_VERSION=" >> "$GITHUB_ENV"
+            unset DOCKER_API_VERSION
+          fi
+
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "docker CLI is missing on runner."
+            exit 1
+          fi
+
+          client_api="$(docker version --format '{{.Client.APIVersion}}' 2>/dev/null || true)"
+          daemon_min="$(docker version --format '{{.Server.MinAPIVersion}}' 2>/dev/null || true)"
+
+          if [ -n "$daemon_min" ] && version_ge "$daemon_min" "$required"; then
+            required="$daemon_min"
+          fi
+
+          if [ -z "$client_api" ]; then
+            echo "Unable to read Docker client API version. Diagnostic output:"
+            docker version || true
+            exit 1
+          fi
+
+          echo "Docker client API=${client_api}, required>=${required}"
+          if ! version_ge "$client_api" "$required"; then
+            echo "ERROR: Docker client API ${client_api} is too old for this daemon (requires >= ${required})."
+            echo "ERROR: Upgrade docker CLI on the self-hosted runner."
+            exit 1
+          fi
 
       - name: Checkout code
         uses: actions/checkout@v4

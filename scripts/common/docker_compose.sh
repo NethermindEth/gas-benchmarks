@@ -1,8 +1,42 @@
 #!/bin/bash
 
+version_ge() {
+  local lhs="$1"
+  local rhs="$2"
+  [ "$lhs" = "$rhs" ] && return 0
+  [ "$(printf '%s\n%s\n' "$lhs" "$rhs" | sort -V | tail -n 1)" = "$lhs" ]
+}
+
+normalize_docker_api_env() {
+  local required="${MIN_DOCKER_API_VERSION:-1.44}"
+  if [ -n "${DOCKER_API_VERSION:-}" ] && ! version_ge "${DOCKER_API_VERSION}" "$required"; then
+    echo "WARN: DOCKER_API_VERSION=${DOCKER_API_VERSION} is below required API ${required}; unsetting it." >&2
+    unset DOCKER_API_VERSION
+  fi
+}
+
+check_docker_client_api() {
+  local docker_bin="$1"
+  local required="${MIN_DOCKER_API_VERSION:-1.44}"
+  local client_api=""
+  client_api="$("$docker_bin" version --format '{{.Client.APIVersion}}' 2>/dev/null || true)"
+
+  # If client API cannot be read here, let the actual docker call report details.
+  if [ -z "$client_api" ]; then
+    return 0
+  fi
+
+  if ! version_ge "$client_api" "$required"; then
+    echo "ERROR: Docker client API version ${client_api} is older than required ${required}." >&2
+    echo "ERROR: Upgrade docker CLI on the runner or point DOCKER_BIN to a newer binary." >&2
+    return 1
+  fi
+}
+
 # Resolve docker CLI path. Prefer real system docker when a local wrapper is first in PATH.
 resolve_docker_bin() {
   local docker_bin="${DOCKER_BIN:-}"
+  normalize_docker_api_env
   if [ -z "$docker_bin" ]; then
     docker_bin="$(command -v docker 2>/dev/null || true)"
   fi
@@ -21,6 +55,7 @@ docker_cmd() {
     echo "ERROR: docker is not available in PATH." >&2
     return 1
   fi
+  check_docker_client_api "$docker_bin" || return 1
   "$docker_bin" "$@"
 }
 
@@ -31,7 +66,7 @@ compose_detect() {
 
   local docker_bin
   docker_bin="$(resolve_docker_bin)"
-  if [ -n "$docker_bin" ] && "$docker_bin" compose version >/dev/null 2>&1; then
+  if [ -n "$docker_bin" ] && check_docker_client_api "$docker_bin" && "$docker_bin" compose version >/dev/null 2>&1; then
     COMPOSE_BACKEND="docker"
     COMPOSE_DOCKER_BIN="$docker_bin"
     COMPOSE_CMD_INITIALIZED=1
