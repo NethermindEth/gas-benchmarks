@@ -115,7 +115,6 @@ jobs:
       max-parallel: 5
 
     env:
-      DOTNET_INSTALL_DIR: "~/.dotnet"
       PIP_BREAK_SYSTEM_PACKAGES: "1"
       NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT: "12"
       NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS: "5000"
@@ -187,6 +186,27 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '9.0.x'
+
+      - name: Ensure .NET SDK is available (self-hosted)
+        run: |
+          set -euo pipefail
+          if ! command -v dotnet >/dev/null 2>&1; then
+            echo "dotnet not found after setup-dotnet; installing fallback SDK 9.0"
+            curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+            bash /tmp/dotnet-install.sh --channel 9.0 --quality ga --install-dir "$HOME/.dotnet"
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+            export PATH="$HOME/.dotnet:$PATH"
+          fi
+
+          if ! dotnet --list-sdks | grep -q '^9\.'; then
+            echo "No .NET 9 SDK found; installing fallback SDK 9.0"
+            curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+            bash /tmp/dotnet-install.sh --channel 9.0 --quality ga --install-dir "$HOME/.dotnet"
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+            export PATH="$HOME/.dotnet:$PATH"
+          fi
+
+          dotnet --info
 
       - name: Install Python dependencies
         run: |
