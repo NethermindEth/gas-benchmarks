@@ -1,8 +1,9 @@
 .PHONY: prepare_tools clean
 
 NETHERMIND_DIR := nethermind
-NETHERMIND_COMMIT := e1857d7ca6613ccdc40973899290f565f367e235
 KUTE_BIN := $(NETHERMIND_DIR)/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute
+DOTNET_CHANNEL ?= 10.0
+DOTNET_REQUIRED_MAJOR ?= 10
 
 prepare_tools:
 	@set -e; \
@@ -11,21 +12,31 @@ prepare_tools:
 	fi; \
 	cd "$(NETHERMIND_DIR)"; \
 	git fetch --all --prune; \
-	git checkout "$(NETHERMIND_COMMIT)"; \
+	default_branch=$$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##'); \
+	if [ -z "$$default_branch" ]; then default_branch=main; fi; \
+	git checkout "$$default_branch"; \
+	git pull --ff-only origin "$$default_branch"; \
 	git lfs pull; \
 	cd ..; \
-	if ! command -v dotnet >/dev/null 2>&1; then \
-		echo "dotnet not found; installing local .NET SDK 9.0 to $$HOME/.dotnet"; \
-		curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh; \
-		bash /tmp/dotnet-install.sh --channel 9.0 --quality ga --install-dir "$$HOME/.dotnet"; \
-		export PATH="$$HOME/.dotnet:$$PATH"; \
+	required_major="$(DOTNET_REQUIRED_MAJOR)"; \
+	if [ -f "$(NETHERMIND_DIR)/global.json" ]; then \
+		global_major=$$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9][0-9]*\)\..*/\1/p' "$(NETHERMIND_DIR)/global.json" | head -n 1); \
+		if [ -n "$$global_major" ]; then \
+			required_major="$$global_major"; \
+		fi; \
 	fi; \
-	if ! dotnet --list-sdks | grep -q '^9\.'; then \
-		echo ".NET SDK 9.x not found; installing local .NET SDK 9.0 to $$HOME/.dotnet"; \
-		curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh; \
-		bash /tmp/dotnet-install.sh --channel 9.0 --quality ga --install-dir "$$HOME/.dotnet"; \
-		export PATH="$$HOME/.dotnet:$$PATH"; \
+	echo "Required .NET SDK major for Nethermind: $$required_major"; \
+	curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh; \
+	echo "Installing latest .NET SDK channel $(DOTNET_CHANNEL) to $$HOME/.dotnet"; \
+	bash /tmp/dotnet-install.sh --channel "$(DOTNET_CHANNEL)" --quality ga --install-dir "$$HOME/.dotnet"; \
+	export DOTNET_ROOT="$$HOME/.dotnet"; \
+	export PATH="$$HOME/.dotnet:$$PATH"; \
+	if ! dotnet --list-sdks | grep -q "^$$required_major\\."; then \
+		echo ".NET SDK $$required_major.x not found; installing local .NET SDK $$required_major.0 to $$HOME/.dotnet"; \
+		bash /tmp/dotnet-install.sh --channel "$$required_major.0" --quality ga --install-dir "$$HOME/.dotnet"; \
 	fi; \
+	echo "Installed SDKs:"; \
+	dotnet --list-sdks; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
 		restore_args=""; \
 		if [ -n "$$NUGET_PACKAGES" ]; then \

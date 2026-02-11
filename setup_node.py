@@ -162,9 +162,16 @@ def sanitize_volume_name(name: str) -> str:
 def run_command(client, run_path):
     command = f"{run_path}/run.sh"
     print(
-        f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'"
+        f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'",
+        flush=True,
     )
-    subprocess.run(command, shell=True, text=True)
+    completed = subprocess.run(command, shell=True, text=True, check=False)
+    if completed.returncode != 0:
+        print(
+            f"ERROR: Client startup script failed with exit code {completed.returncode}",
+            flush=True,
+        )
+        raise SystemExit(completed.returncode)
 
 
 def get_metadata(client: str) -> Dict[str, Any]:

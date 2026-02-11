@@ -188,23 +188,23 @@ jobs:
           pip --version
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Ensure .NET SDK is available (self-hosted)
         run: |
           set -euo pipefail
           if ! command -v dotnet >/dev/null 2>&1; then
-            echo "dotnet not found after setup-dotnet; installing fallback SDK 9.0"
+            echo "dotnet not found after setup-dotnet; installing fallback SDK 10.0"
             curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-            bash /tmp/dotnet-install.sh --channel 9.0 --quality ga --install-dir "$HOME/.dotnet"
+            bash /tmp/dotnet-install.sh --channel 10.0 --quality ga --install-dir "$HOME/.dotnet"
             echo "$HOME/.dotnet" >> "$GITHUB_PATH"
             export PATH="$HOME/.dotnet:$PATH"
           fi
 
-          if ! dotnet --list-sdks | grep -q '^9\.'; then
-            echo "No .NET 9 SDK found; installing fallback SDK 9.0"
+          if ! dotnet --list-sdks | grep -q '^10\.'; then
+            echo "No .NET 10 SDK found; installing fallback SDK 10.0"
             curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-            bash /tmp/dotnet-install.sh --channel 9.0 --quality ga --install-dir "$HOME/.dotnet"
+            bash /tmp/dotnet-install.sh --channel 10.0 --quality ga --install-dir "$HOME/.dotnet"
             echo "$HOME/.dotnet" >> "$GITHUB_PATH"
             export PATH="$HOME/.dotnet:$PATH"
           fi

@@ -24,6 +24,23 @@ if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
   source "scripts/common/wait_for_rpc.sh"
 fi
+if [ -f "scripts/common/docker_compose.sh" ]; then
+  # shellcheck source=/dev/null
+  source "scripts/common/docker_compose.sh"
+fi
+
+if ! declare -f compose_cmd >/dev/null 2>&1; then
+  compose_cmd() { docker compose "$@"; }
+fi
+if ! declare -f docker_cmd >/dev/null 2>&1; then
+  docker_cmd() { docker "$@"; }
+fi
+if ! declare -f resolve_docker_bin >/dev/null 2>&1; then
+  resolve_docker_bin() { command -v docker 2>/dev/null || true; }
+fi
+if ! declare -f compose_detect >/dev/null 2>&1; then
+  compose_detect() { command -v docker >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; }
+fi
 
 declare -A ACTIVE_OVERLAY_MOUNTS
 declare -A ACTIVE_OVERLAY_UPPERS
@@ -155,15 +172,15 @@ restart_client_containers() {
   fi
 
   if [ -f "$env_file" ]; then
-    if ! docker compose -f "$compose_file" --env-file "$env_file" restart >/dev/null 2>&1; then
-      if ! docker compose -f "$compose_file" --env-file "$env_file" restart; then
+    if ! compose_cmd -f "$compose_file" --env-file "$env_file" restart >/dev/null 2>&1; then
+      if ! compose_cmd -f "$compose_file" --env-file "$env_file" restart; then
         echo "âťŚ Failed to restart services for $client_base" >&2
         return 1
       fi
     fi
   else
     if ! (
-      cd "$compose_dir" && docker compose restart
+      cd "$compose_dir" && compose_cmd restart
     ); then
       echo "âťŚ Failed to restart services for $client_base" >&2
       return 1
@@ -554,37 +571,37 @@ docker_compose_down_for_client() {
   local client_base="$1"
   local compose_dir="scripts/$client_base"
 
-  if ! command -v docker >/dev/null 2>&1; then
+  if ! compose_detect >/dev/null 2>&1; then
     return
   fi
 
   if [ -f "$compose_dir/docker-compose.yaml" ]; then
-    docker compose -f "$compose_dir/docker-compose.yaml" down --volumes >/dev/null 2>&1 || \
-      docker compose -f "$compose_dir/docker-compose.yaml" down --volumes
+    compose_cmd -f "$compose_dir/docker-compose.yaml" down --volumes >/dev/null 2>&1 || \
+      compose_cmd -f "$compose_dir/docker-compose.yaml" down --volumes
   elif [ -d "$compose_dir" ]; then
     (
-      cd "$compose_dir" && docker compose down --volumes >/dev/null 2>&1 || docker compose down --volumes
+      cd "$compose_dir" && compose_cmd down --volumes >/dev/null 2>&1 || compose_cmd down --volumes
     )
   fi
 }
 
 docker_container_exists() {
   local name="$1"
-  docker ps -a --format '{{.Names}}' | grep -Fxq "$name"
+  docker_cmd ps -a --format '{{.Names}}' | grep -Fxq "$name"
 }
 
 dump_client_logs() {
   local client_base="$1"
-  if ! command -v docker >/dev/null 2>&1; then
+  if [ -z "$(resolve_docker_bin)" ]; then
     return
   fi
   mkdir -p logs
   local ts=$(date +%s)
   if docker_container_exists "gas-execution-client"; then
-    docker logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
+    docker_cmd logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
   fi
   if docker_container_exists "gas-execution-client-sync"; then
-    docker logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
+    docker_cmd logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
   fi
 }
 
@@ -592,7 +609,7 @@ cleanup_on_exit() {
   local exit_status=$?
   trap - EXIT INT TERM
 
-  if command -v docker >/dev/null 2>&1; then
+  if [ -n "$(resolve_docker_bin)" ]; then
     local client_base client_spec
     if [ "${#RUNNING_CLIENTS[@]}" -gt 0 ]; then
       for client_base in "${!RUNNING_CLIENTS[@]}"; do

@@ -7,9 +7,10 @@ cd scripts/besu
 cp jwtsecret /tmp/jwtsecret
 
 source ../common/wait_for_rpc.sh
+source ../common/docker_compose.sh
 
-docker compose up -d
+compose_cmd up --detach
 
 wait_for_rpc "http://127.0.0.1:8545"
 
-docker compose logs
+compose_cmd logs
