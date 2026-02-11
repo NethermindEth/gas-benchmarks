@@ -754,7 +754,11 @@ init_executions_file
 
 # Install dependencies
 pip install -r requirements.txt
-make prepare_tools
+if [ "${SKIP_PREPARE_TOOLS:-false}" = "true" ]; then
+  echo "[INFO] SKIP_PREPARE_TOOLS=true, skipping make prepare_tools"
+else
+  make prepare_tools
+fi
 
 # Find test files and their associated genesis paths
 TEST_FILES=()
@@ -1086,7 +1090,9 @@ fi
 
 # Prepare and zip the results
 mkdir -p reports/docker
-cp -r results/docker_* reports/docker
+if ls results/docker_* >/dev/null 2>&1; then
+  cp -r results/docker_* reports/docker
+fi
 zip -r reports.zip reports
 
 # Print timing summary at the end

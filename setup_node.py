@@ -160,6 +160,15 @@ def sanitize_volume_name(name: str) -> str:
 
 
 def run_command(client, run_path):
+    native_clients = {
+        item.strip().lower()
+        for item in os.environ.get("GB_NATIVE_SKIP_RUN_FOR_CLIENTS", "").split(",")
+        if item.strip()
+    }
+    if client.split("_")[0].lower() in native_clients:
+        print(f"[info] Skipping launcher script for native client mode: {client}")
+        return
+
     command = f"{run_path}/run.sh"
     print(
         f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'"

@@ -1,6 +1,7 @@
 # Create argument parser
 import argparse
 import os
+import platform
 import subprocess
 import tempfile
 import time
@@ -10,8 +11,12 @@ PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
 PROMETHEUS_USERNAME_ENV_VAR = "PROMETHEUS_USERNAME"
 PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
 
+_kute_path = "./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute"
+if platform.system() == "Windows":
+    _kute_path += ".exe"
+
 executables = {
-    "kute": "./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute"
+    "kute": _kute_path
 }
 
 def get_command_env(
