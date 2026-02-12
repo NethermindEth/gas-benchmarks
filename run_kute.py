@@ -100,6 +100,14 @@ def run_command(
             return False
         return "syncing" in payload.lower()
 
+    def stderr_looks_like_syncing_payload(stderr_text: str) -> bool:
+        lowered = (stderr_text or "").lower()
+        if "syncing" in lowered:
+            return True
+        # Erigon can briefly return non-JSON payloads (for example plain "syncing")
+        # that Kute fails to parse as JSON.
+        return "jsonreaderexception" in lowered and "invalid start of a value" in lowered
+
     input_path = test_case_file
     temp_path = None
     if skip_forkchoice:
@@ -137,12 +145,16 @@ def run_command(
         results = subprocess.run(
             command, shell=True, capture_output=True, text=True, env=command_env
         )
+        syncing_from_response = response_contains_syncing(response)
+        syncing_from_stderr = stderr_looks_like_syncing_payload(results.stderr)
         if rerun_syncing and \
                 attempts < max_attempts and \
-                response_contains_syncing(response):
+                (syncing_from_response or syncing_from_stderr):
             attempts += 1
-            print(f"Rerunning syncing response {attempts} times out of {max_attempts} max with {retry_backoff_sec} seconds backoff")
-            os.remove(response)
+            retry_reason = "syncing response" if syncing_from_response else "non-JSON syncing-like response"
+            print(f"Rerunning {retry_reason} {attempts} times out of {max_attempts} max with {retry_backoff_sec} seconds backoff")
+            if os.path.exists(response):
+                os.remove(response)
             time.sleep(retry_backoff_sec)
         else:
             break
@@ -152,6 +164,8 @@ def run_command(
         except OSError:
             pass
     print(results.stderr, end="")
+    if results.returncode != 0:
+        raise SystemExit(results.returncode)
     return results.stdout
 
 def save_to(output_folder, file_name, content):
