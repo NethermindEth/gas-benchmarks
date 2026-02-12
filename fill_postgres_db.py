@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup, Tag # For parsing HTML if computer_specs.txt is n
 import logging
 from typing import Any, Dict, List, Optional, Tuple # Added for type hinting
 from io import StringIO # Add this for bulk copy operations
+from generate_postgres_schema import get_sql_for_benchmark_table
 
 # --- Constants ---
 SPEC_MAPPING: Dict[str, str] = {
@@ -54,6 +55,71 @@ def get_db_connection(db_params: Dict[str, Any]) -> Optional[psycopg2.extensions
         logging.error(f"An unexpected error occurred during database connection: {error}")
         return None
     return conn
+
+def ensure_table_schema(conn: psycopg2.extensions.connection, table_name: str) -> None:
+    """
+    Ensures the target table exists and has all required columns.
+    If the table doesn't exist, it will be created.
+    If the table exists but is missing columns, they will be added.
+
+    Args:
+        conn: The database connection object.
+        table_name: The name of the target table.
+    """
+    # Columns to ensure exist (for schema migration of pre-existing tables)
+    columns_to_ensure: List[Tuple[str, str]] = [
+        ("client_version", "TEXT NULL"),
+        ("start_time", "TIMESTAMP WITH TIME ZONE NULL"),
+        ("raw_run_duration_ms", "REAL NULL"),
+        ("end_time", "TIMESTAMP WITH TIME ZONE NULL"),
+        ("test_duration", "REAL NULL"),
+        ("fcu_duration", "REAL NULL"),
+        ("np_duration", "REAL NULL"),
+        ("opcount", "BIGINT NULL"),
+    ]
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = %s);",
+                (table_name,),
+            )
+            table_exists = cur.fetchone()
+            if table_exists is None or not table_exists[0]:
+                logging.info(f"Table '{table_name}' does not exist. Creating it now.")
+                create_table_sql = get_sql_for_benchmark_table(table_name)
+                cur.execute(create_table_sql)
+                logging.info(f"Table '{table_name}' created successfully.")
+            else:
+                logging.info(f"Table '{table_name}' already exists. Checking for missing columns...")
+                for col_name, col_definition in columns_to_ensure:
+                    cur.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.columns
+                            WHERE table_schema = 'public' AND table_name = %s AND column_name = %s
+                        );
+                        """,
+                        (table_name, col_name),
+                    )
+                    column_exists_result = cur.fetchone()
+                    column_exists = column_exists_result[0] if column_exists_result else False
+
+                    if not column_exists:
+                        logging.info(f"Column '{col_name}' does not exist in table '{table_name}'. Adding it.")
+                        alter_sql = f"ALTER TABLE public.{table_name} ADD COLUMN {col_name} {col_definition};"
+                        cur.execute(alter_sql)
+                        logging.info(f"Column '{col_name}' added to table '{table_name}'.")
+                    else:
+                        logging.debug(f"Column '{col_name}' already exists in table '{table_name}'.")
+
+        conn.commit()
+        logging.info(f"Database schema for table '{table_name}' is up to date.")
+    except psycopg2.Error as error:
+        logging.error(f"Error ensuring table schema: {error}", exc_info=True)
+        conn.rollback()
+        raise
+
 
 def bulk_insert_records(cursor: psycopg2.extensions.cursor, table_name: str, records: List[Dict[str, Any]]) -> None:
     """
@@ -617,6 +683,9 @@ def main() -> None:
     if not conn:
         logging.critical("Failed to establish database connection. Exiting.")
         sys.exit(1)
+
+    # Ensure the table schema is up to date before inserting data
+    ensure_table_schema(conn, args.table_name)
 
     total_records_inserted = 0
     main_page_text_content: Optional[str] = None
