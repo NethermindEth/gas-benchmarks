@@ -501,15 +501,27 @@ jobs:
               continue
             fi
             SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+            PER_TEST_REPORT_DIR="reports/by_test/${SAFE_TESTS}"
 
             python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
             cp reports/tables_norm.txt "reports/tables_norm_${SAFE_TESTS}.txt"
 
             python3 report_html.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
             cp reports/index.html "reports/index_${SAFE_TESTS}.html"
-            for csv in reports/output_*.csv reports/raw_results_*.csv; do
+
+            rm -rf "$PER_TEST_REPORT_DIR"
+            mkdir -p "$PER_TEST_REPORT_DIR"
+            cp reports/tables_norm.txt "$PER_TEST_REPORT_DIR/tables_norm.txt"
+            cp reports/index.html "$PER_TEST_REPORT_DIR/index.html"
+            if [ -f "$RESULTS_ROOT/computer_specs.txt" ]; then
+              cp "$RESULTS_ROOT/computer_specs.txt" "$PER_TEST_REPORT_DIR/computer_specs.txt"
+            fi
+
+            mapfile -t BASE_CSVS < <(find reports -maxdepth 1 -type f \( -regex '.*/output_[^_]+\.csv' -o -regex '.*/raw_results_[^_]+\.csv' \) | sort)
+            for csv in "${BASE_CSVS[@]}"; do
               [ -f "$csv" ] || continue
               cp "$csv" "${csv%.csv}_${SAFE_TESTS}.csv"
+              cp "$csv" "$PER_TEST_REPORT_DIR/$(basename "$csv")"
             done
             generated=true
           done
@@ -558,10 +570,14 @@ jobs:
     needs: combine-results
     runs-on: ubuntu-latest
     env:
-      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
-      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
-      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
-      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+      PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      PERFNET_DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      PERFNET_DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      PERFNET_DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+      MAINNET_DB_HOST: ${{ secrets.MAINNET_0_DB_HOST }}
+      MAINNET_DB_PORT: ${{ secrets.MAINNET_0_DB_PORT || '5432' }}
+      MAINNET_DB_USER: ${{ secrets.MAINNET_0_DB_USER }}
+      MAINNET_DB_PASSWORD: ${{ secrets.MAINNET_0_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       
@@ -585,15 +601,68 @@ jobs:
 
       - name: Populate Benchmark DB
         run: |
-          python fill_postgres_db.py \
-            --db-host ${{ env.DB_HOST }} \
-            --db-port ${{ env.DB_PORT }} \
-            --db-user ${{ env.DB_USER }} \
-            --db-name monitoring \
-            --table-name repricings_new \
-            --db-password "${{ env.DB_PASSWORD }}" \
-            --log-level DEBUG \
-            --reports-dir 'extracted-results/reports/'
+          set -euo pipefail
+
+          TEST_PATHS=()
+          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
+            TEST_PATHS+=("repricings_compute/mainnet")
+            TEST_PATHS+=("repricings_compute/perf-devnet-2")
+            TEST_PATHS+=("repricings_stateful/mainnet")
+            TEST_PATHS+=("repricings_stateful/perf-devnet-2")
+          else
+            IFS=',' read -ra TEST_PATHS <<< "${{ env.INPUT_TEST }}"
+          fi
+
+          uploads=0
+          for raw_test_path in "${TEST_PATHS[@]}"; do
+            TESTS="$(echo "$raw_test_path" | xargs)"
+            [ -z "$TESTS" ] && continue
+            SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+            REPORTS_DIR="extracted-results/reports/by_test/${SAFE_TESTS}"
+            if [ ! -d "$REPORTS_DIR" ]; then
+              echo "Skipping DB upload: missing per-test report dir ${REPORTS_DIR}"
+              continue
+            fi
+
+            NETWORK="$(basename "$TESTS")"
+            if [ "$NETWORK" = "mainnet" ] && [ -n "${{ env.MAINNET_DB_HOST }}" ] && [ -n "${{ env.MAINNET_DB_USER }}" ] && [ -n "${{ env.MAINNET_DB_PASSWORD }}" ]; then
+              DB_HOST="${{ env.MAINNET_DB_HOST }}"
+              DB_PORT="${{ env.MAINNET_DB_PORT }}"
+              DB_USER="${{ env.MAINNET_DB_USER }}"
+              DB_PASSWORD="${{ env.MAINNET_DB_PASSWORD }}"
+              TARGET="mainnet"
+            elif [ -n "${{ env.PERFNET_DB_HOST }}" ] && [ -n "${{ env.PERFNET_DB_USER }}" ] && [ -n "${{ env.PERFNET_DB_PASSWORD }}" ]; then
+              DB_HOST="${{ env.PERFNET_DB_HOST }}"
+              DB_PORT="${{ env.PERFNET_DB_PORT }}"
+              DB_USER="${{ env.PERFNET_DB_USER }}"
+              DB_PASSWORD="${{ env.PERFNET_DB_PASSWORD }}"
+              TARGET="perfnet"
+              if [ "$NETWORK" = "mainnet" ]; then
+                echo "MAINNET_0_DB_* secrets not set; falling back to PERFNET_0_DB_* for $TESTS"
+              fi
+            else
+              echo "No DB credentials available for $TESTS (network=$NETWORK)."
+              echo "Expected MAINNET_0_DB_* for mainnet or PERFNET_0_DB_* as fallback."
+              exit 1
+            fi
+
+            echo "Uploading ${TESTS} reports to ${TARGET} DB (${DB_HOST}:${DB_PORT}) from ${REPORTS_DIR}"
+            python fill_postgres_db.py \
+              --db-host "$DB_HOST" \
+              --db-port "$DB_PORT" \
+              --db-user "$DB_USER" \
+              --db-name monitoring \
+              --table-name repricings_new \
+              --db-password "$DB_PASSWORD" \
+              --log-level DEBUG \
+              --reports-dir "$REPORTS_DIR"
+            uploads=$((uploads + 1))
+          done
+
+          if [ "$uploads" -eq 0 ]; then
+            echo "No DB uploads were performed."
+            exit 1
+          fi
 
   retrigger:
     needs: populate-db
