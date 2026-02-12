@@ -310,7 +310,7 @@ prepare_overlay_for_client() {
 
   local abs_lower
   abs_lower=$(abspath "$lower")
-  echo "[INFO] Overlay snapshot source for $client (network=${network:-none}): $abs_lower"
+  echo "[INFO] Overlay snapshot source for $client (network=${network:-none}): $abs_lower" >&2
   local overlay_base
   overlay_base=$(overlay_base_from_lower "$abs_lower")
 

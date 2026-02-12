@@ -87,8 +87,8 @@ jobs:
           matrix_elements=()
           
           for ((i=1; i<=runs; i++)); do
-            for client in "${client_array[@]}"; do
-              for target in "${targets[@]}"; do
+            for target in "${targets[@]}"; do
+              for client in "${client_array[@]}"; do
                 test_path="${target%%|*}"
                 network="${target##*|}"
                 element="{'run': '$i', 'client': '$client', 'test_path': '$test_path', 'network': '$network'}"
