@@ -88,16 +88,23 @@ compose_detect() {
     return 0
   fi
 
-  if [ "${ALLOW_DOCKER_COMPOSE_V1:-0}" = "1" ] && command -v docker-compose >/dev/null 2>&1; then
-    echo "WARN: Falling back to legacy docker-compose v1. This can cause API compatibility issues." >&2
-    COMPOSE_BACKEND="docker-compose"
-    COMPOSE_DOCKER_COMPOSE_BIN="$(command -v docker-compose)"
-    COMPOSE_CMD_INITIALIZED=1
-    return 0
+  if command -v docker-compose >/dev/null 2>&1; then
+    local compose_bin compose_version
+    compose_bin="$(command -v docker-compose)"
+    compose_version="$("$compose_bin" version --short 2>/dev/null || true)"
+    compose_version="${compose_version#v}"
+    if [[ "$compose_version" =~ ^2\. ]]; then
+      COMPOSE_BACKEND="docker-compose"
+      COMPOSE_DOCKER_COMPOSE_BIN="$compose_bin"
+      COMPOSE_CMD_INITIALIZED=1
+      return 0
+    fi
+    echo "ERROR: Found docker-compose at $compose_bin but it is not v2 (detected: ${compose_version:-unknown})." >&2
+    echo "ERROR: docker-compose v1 is not supported; install Docker Compose v2 plugin." >&2
   fi
 
   echo "ERROR: Docker Compose plugin is required but unavailable for docker binary: ${docker_bin:-<none>}." >&2
-  echo "ERROR: Install docker compose plugin and ensure 'docker compose version' works." >&2
+  echo "ERROR: Install Docker Compose v2 and ensure 'docker compose version' works." >&2
   return 1
 }
 

@@ -159,6 +159,8 @@ jobs:
           if [ "$compose_missing" = true ]; then
             if command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-plugin >/dev/null 2>&1; then
               packages+=("docker-compose-plugin")
+            elif command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+              packages+=("docker-compose-v2")
             fi
           fi
 
@@ -178,16 +180,43 @@ jobs:
             sudo service docker start >/dev/null 2>&1 || true
           fi
 
+          if ! docker compose version >/dev/null 2>&1; then
+            echo "docker compose plugin is still unavailable; installing Compose v2 binary plugin..."
+            arch="$(uname -m)"
+            case "$arch" in
+              x86_64|amd64) arch="x86_64" ;;
+              aarch64|arm64) arch="aarch64" ;;
+              *)
+                echo "Unsupported architecture for Compose v2 bootstrap: $arch"
+                exit 1
+                ;;
+            esac
+            os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+            compose_version="${COMPOSE_VERSION:-v2.29.7}"
+            plugin_dir="$HOME/.docker/cli-plugins"
+            mkdir -p "$plugin_dir"
+            curl -fsSL "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-${os}-${arch}" -o "$plugin_dir/docker-compose"
+            chmod +x "$plugin_dir/docker-compose"
+            mkdir -p "$HOME/.local/bin"
+            ln -sf "$plugin_dir/docker-compose" "$HOME/.local/bin/docker-compose"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
           mkdir -p "$NUGET_PACKAGES"
 
           echo "PATH=$PATH"
           command -v docker || true
           which -a docker || true
           docker version --format 'CLIENT={{.Client.Version}} API={{.Client.APIVersion}} SERVER_MIN={{.Server.MinAPIVersion}}' || true
-          docker compose version || {
-            echo "ERROR: docker compose plugin is missing on this self-hosted runner."
-            exit 1
-          }
+          docker compose version || true
+          if ! docker compose version >/dev/null 2>&1; then
+            if command -v docker-compose >/dev/null 2>&1 && docker-compose version --short 2>/dev/null | grep -q '^v\?2\.'; then
+              echo "Using docker-compose v2 standalone fallback: $(command -v docker-compose)"
+            else
+              echo "ERROR: Docker Compose v2 is not available (plugin missing and no docker-compose v2 fallback)."
+              exit 1
+            fi
+          fi
 
       - name: Ensure Docker client API compatibility
         run: |
