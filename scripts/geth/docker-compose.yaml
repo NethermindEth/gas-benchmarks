@@ -32,7 +32,7 @@ services:
       - --datadir=/var/lib/goethereum
       - --port=0
       - --http.port=8545
-      - ${GETH_NETWORK_FLAG:---networkid=1337}
+      - ${GETH_NETWORK_FLAG:---verbosity=3}
       - --maxpeers=0
       - --nodiscover
       - --bootnodes=
@@ -46,8 +46,6 @@ services:
       - --authrpc.vhosts=*
       - --metrics
       - --metrics.port=8008
-      - --verbosity=3
-      - --networkid=12159
     logging:
       driver: json-file
       options:
