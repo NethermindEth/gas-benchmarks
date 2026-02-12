@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup, Tag # For parsing HTML if computer_specs.txt is n
 import logging
 from typing import Any, Dict, List, Optional, Tuple # Added for type hinting
 from io import StringIO # Add this for bulk copy operations
+from generate_postgres_schema import get_sql_for_benchmark_table
 
 # --- Constants ---
 SPEC_MAPPING: Dict[str, str] = {
@@ -65,8 +66,6 @@ def ensure_table_schema(conn: psycopg2.extensions.connection, table_name: str) -
         conn: The database connection object.
         table_name: The name of the target table.
     """
-    from generate_postgres_schema import get_sql_for_benchmark_table
-
     # Columns to ensure exist (for schema migration of pre-existing tables)
     columns_to_ensure: List[Tuple[str, str]] = [
         ("client_version", "TEXT NULL"),
