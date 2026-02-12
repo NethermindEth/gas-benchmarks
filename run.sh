@@ -143,6 +143,7 @@ resolve_snapshot_root_for_client() {
   local client="$1"
   local network="$2"
   local root_template="$SNAPSHOT_ROOT"
+  local original_template="$SNAPSHOT_ROOT"
 
   if [[ -z "$root_template" ]]; then
     echo ""
@@ -159,6 +160,11 @@ resolve_snapshot_root_for_client() {
   root_template="${root_template//<<NETWORK>>/$network}"
   root_template="${root_template//<<network>>/$network_lower}"
   root_template="${root_template//<<Network>>/$network}"
+
+  # Enforce per-network snapshot selection even if caller omitted <<NETWORK>>.
+  if [ -n "$network_lower" ] && [[ "$original_template" != *"<<NETWORK>>"* ]] && [[ "$original_template" != *"<<network>>"* ]] && [[ "$original_template" != *"<<Network>>"* ]]; then
+    root_template="${root_template%/}/$network_lower"
+  fi
 
   echo "$root_template"
 }
@@ -269,45 +275,12 @@ prepare_overlay_for_client() {
   local network="$2"
   local snapshot_root="$3"
 
-  local lower=""
-  local candidates=()
-  local seen=()
-  local candidate
-
-  add_candidate() {
-    local path="$1"
-    local existing
-    [ -n "$path" ] || return
-    for existing in "${seen[@]}"; do
-      if [ "$existing" = "$path" ]; then
-        return
-      fi
-    done
-    seen+=("$path")
-    candidates+=("$path")
-  }
-
-  # Prefer network-aware snapshot layouts first.
-  if [ -n "$network" ]; then
-    add_candidate "$snapshot_root/$client/$network"
-    add_candidate "$snapshot_root/$network/$client"
-    add_candidate "$snapshot_root/$network"
-  fi
-  add_candidate "$snapshot_root/$client"
-  add_candidate "$snapshot_root"
-
-  for candidate in "${candidates[@]}"; do
-    if dir_has_content "$candidate"; then
-      lower="$candidate"
-      break
-    fi
-  done
-
-  if [ -z "$lower" ]; then
-    echo "âťŚ Unable to locate snapshot directory for $client under $snapshot_root" >&2
+  if ! dir_has_content "$snapshot_root"; then
+    echo "âťŚ Snapshot directory for $client is missing or empty: $snapshot_root" >&2
     return 1
   fi
 
+  local lower="$snapshot_root"
   local abs_lower
   abs_lower=$(abspath "$lower")
   echo "[INFO] Overlay snapshot source for $client (network=${network:-none}): $abs_lower" >&2

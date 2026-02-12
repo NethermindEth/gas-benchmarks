@@ -363,7 +363,7 @@ jobs:
           ./run.sh \
             -t "$TEST_PATH" \
             -n "$NETWORK" \
-            -B "/data/snapshots/<<CLIENT>>" \
+            -B "/data/snapshots/<<CLIENT>>/<<NETWORK>>" \
             -O "/data/overlay-workspace" \
             -c "$CLIENT" \
             -r 1 \
