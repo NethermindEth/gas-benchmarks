@@ -270,22 +270,38 @@ prepare_overlay_for_client() {
   local snapshot_root="$3"
 
   local lower=""
+  local candidates=()
+  local seen=()
+  local candidate
 
-  if dir_has_content "$snapshot_root"; then
-    lower="$snapshot_root"
-  fi
+  add_candidate() {
+    local path="$1"
+    local existing
+    [ -n "$path" ] || return
+    for existing in "${seen[@]}"; do
+      if [ "$existing" = "$path" ]; then
+        return
+      fi
+    done
+    seen+=("$path")
+    candidates+=("$path")
+  }
 
-  if [ -z "$lower" ] && [ -n "$network" ] && dir_has_content "$snapshot_root/$network/$client"; then
-    lower="$snapshot_root/$network/$client"
+  # Prefer network-aware snapshot layouts first.
+  if [ -n "$network" ]; then
+    add_candidate "$snapshot_root/$client/$network"
+    add_candidate "$snapshot_root/$network/$client"
+    add_candidate "$snapshot_root/$network"
   fi
+  add_candidate "$snapshot_root/$client"
+  add_candidate "$snapshot_root"
 
-  if [ -z "$lower" ] && [ -n "$network" ] && dir_has_content "$snapshot_root/$network" && [ ! -d "$snapshot_root/$network/$client" ]; then
-    lower="$snapshot_root/$network"
-  fi
-
-  if [ -z "$lower" ] && dir_has_content "$snapshot_root/$client"; then
-    lower="$snapshot_root/$client"
-  fi
+  for candidate in "${candidates[@]}"; do
+    if dir_has_content "$candidate"; then
+      lower="$candidate"
+      break
+    fi
+  done
 
   if [ -z "$lower" ]; then
     echo "âťŚ Unable to locate snapshot directory for $client under $snapshot_root" >&2
@@ -294,6 +310,7 @@ prepare_overlay_for_client() {
 
   local abs_lower
   abs_lower=$(abspath "$lower")
+  echo "[INFO] Overlay snapshot source for $client (network=${network:-none}): $abs_lower"
   local overlay_base
   overlay_base=$(overlay_base_from_lower "$abs_lower")
 

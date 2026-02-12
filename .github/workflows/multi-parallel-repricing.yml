@@ -614,9 +614,22 @@ jobs:
           fi
 
           uploads=0
+          skipped=0
           for raw_test_path in "${TEST_PATHS[@]}"; do
             TESTS="$(echo "$raw_test_path" | xargs)"
             [ -z "$TESTS" ] && continue
+
+            if [[ "$TESTS" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2)$ ]]; then
+              SUITE="${BASH_REMATCH[1]}"
+              NETWORK="${BASH_REMATCH[2]}"
+              DB_NETWORK="${NETWORK//-/_}"
+              DB_NAME="repricings_${SUITE}_${DB_NETWORK}"
+            else
+              echo "Skipping DB upload for non-repricing path: $TESTS"
+              skipped=$((skipped + 1))
+              continue
+            fi
+
             SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
             REPORTS_DIR="extracted-results/reports/by_test/${SAFE_TESTS}"
             if [ ! -d "$REPORTS_DIR" ]; then
@@ -624,34 +637,30 @@ jobs:
               continue
             fi
 
-            NETWORK="$(basename "$TESTS")"
             if [ "$NETWORK" = "mainnet" ] && [ -n "${{ env.MAINNET_DB_HOST }}" ] && [ -n "${{ env.MAINNET_DB_USER }}" ] && [ -n "${{ env.MAINNET_DB_PASSWORD }}" ]; then
               DB_HOST="${{ env.MAINNET_DB_HOST }}"
               DB_PORT="${{ env.MAINNET_DB_PORT }}"
               DB_USER="${{ env.MAINNET_DB_USER }}"
               DB_PASSWORD="${{ env.MAINNET_DB_PASSWORD }}"
               TARGET="mainnet"
-            elif [ -n "${{ env.PERFNET_DB_HOST }}" ] && [ -n "${{ env.PERFNET_DB_USER }}" ] && [ -n "${{ env.PERFNET_DB_PASSWORD }}" ]; then
+            elif [ "$NETWORK" = "perf-devnet-2" ] && [ -n "${{ env.PERFNET_DB_HOST }}" ] && [ -n "${{ env.PERFNET_DB_USER }}" ] && [ -n "${{ env.PERFNET_DB_PASSWORD }}" ]; then
               DB_HOST="${{ env.PERFNET_DB_HOST }}"
               DB_PORT="${{ env.PERFNET_DB_PORT }}"
               DB_USER="${{ env.PERFNET_DB_USER }}"
               DB_PASSWORD="${{ env.PERFNET_DB_PASSWORD }}"
               TARGET="perfnet"
-              if [ "$NETWORK" = "mainnet" ]; then
-                echo "MAINNET_0_DB_* secrets not set; falling back to PERFNET_0_DB_* for $TESTS"
-              fi
             else
               echo "No DB credentials available for $TESTS (network=$NETWORK)."
-              echo "Expected MAINNET_0_DB_* for mainnet or PERFNET_0_DB_* as fallback."
+              echo "Expected MAINNET_0_DB_* for mainnet or PERFNET_0_DB_* for perf-devnet-2."
               exit 1
             fi
 
-            echo "Uploading ${TESTS} reports to ${TARGET} DB (${DB_HOST}:${DB_PORT}) from ${REPORTS_DIR}"
+            echo "Uploading ${TESTS} reports to ${TARGET} DB (${DB_HOST}:${DB_PORT}), db=${DB_NAME}, from ${REPORTS_DIR}"
             python fill_postgres_db.py \
               --db-host "$DB_HOST" \
               --db-port "$DB_PORT" \
               --db-user "$DB_USER" \
-              --db-name monitoring \
+              --db-name "$DB_NAME" \
               --table-name repricings_new \
               --db-password "$DB_PASSWORD" \
               --log-level DEBUG \
@@ -660,8 +669,8 @@ jobs:
           done
 
           if [ "$uploads" -eq 0 ]; then
-            echo "No DB uploads were performed."
-            exit 1
+            echo "No DB uploads were performed. skipped_non_matching=$skipped"
+            exit 0
           fi
 
   retrigger:
