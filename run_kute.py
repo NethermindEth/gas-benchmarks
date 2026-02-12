@@ -90,6 +90,16 @@ def run_command(
     skip_forkchoice=False,
     rerun_syncing=False,
 ):
+    def response_contains_syncing(response_path: str) -> bool:
+        if not os.path.exists(response_path):
+            return False
+        try:
+            with open(response_path, "r", encoding="utf-8") as handle:
+                payload = handle.read()
+        except OSError:
+            return False
+        return "syncing" in payload.lower()
+
     input_path = test_case_file
     temp_path = None
     if skip_forkchoice:
@@ -129,8 +139,7 @@ def run_command(
         )
         if rerun_syncing and \
                 attempts < max_attempts and \
-                os.path.exists(response) and \
-                "SYNCING" in open(response, "r").read().split("\n")[0]:
+                response_contains_syncing(response):
             attempts += 1
             print(f"Rerunning syncing response {attempts} times out of {max_attempts} max with {retry_backoff_sec} seconds backoff")
             os.remove(response)
@@ -271,6 +280,7 @@ def main():
                 execution_url,
                 kute_arguments,
                 skip_forkchoice=args.skipForkchoice,
+                rerun_syncing=args.rerunSyncing,
             )
             save_to(output_folder, f"{client}_results_{run}_{name}.txt", response)
         return
