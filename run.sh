@@ -20,6 +20,9 @@ RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
 SKIP_EMPTY=true
 
+# Prevent inherited low API pin from older docker clients/wrappers.
+unset DOCKER_API_VERSION
+
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
   source "scripts/common/wait_for_rpc.sh"
@@ -39,7 +42,7 @@ if ! declare -f resolve_docker_bin >/dev/null 2>&1; then
   resolve_docker_bin() { command -v docker 2>/dev/null || true; }
 fi
 if ! declare -f compose_detect >/dev/null 2>&1; then
-  compose_detect() { command -v docker >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1; }
+  compose_detect() { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; }
 fi
 
 declare -A ACTIVE_OVERLAY_MOUNTS

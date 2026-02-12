@@ -88,14 +88,16 @@ compose_detect() {
     return 0
   fi
 
-  if command -v docker-compose >/dev/null 2>&1; then
+  if [ "${ALLOW_DOCKER_COMPOSE_V1:-0}" = "1" ] && command -v docker-compose >/dev/null 2>&1; then
+    echo "WARN: Falling back to legacy docker-compose v1. This can cause API compatibility issues." >&2
     COMPOSE_BACKEND="docker-compose"
     COMPOSE_DOCKER_COMPOSE_BIN="$(command -v docker-compose)"
     COMPOSE_CMD_INITIALIZED=1
     return 0
   fi
 
-  echo "ERROR: Docker Compose is not available (neither 'docker compose' nor 'docker-compose')." >&2
+  echo "ERROR: Docker Compose plugin is required but unavailable for docker binary: ${docker_bin:-<none>}." >&2
+  echo "ERROR: Install docker compose plugin and ensure 'docker compose version' works." >&2
   return 1
 }
 

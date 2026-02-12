@@ -159,8 +159,6 @@ jobs:
           if [ "$compose_missing" = true ]; then
             if command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-plugin >/dev/null 2>&1; then
               packages+=("docker-compose-plugin")
-            elif ! command -v docker-compose >/dev/null 2>&1; then
-              packages+=("docker-compose")
             fi
           fi
 
@@ -186,6 +184,10 @@ jobs:
           command -v docker || true
           which -a docker || true
           docker version --format 'CLIENT={{.Client.Version}} API={{.Client.APIVersion}} SERVER_MIN={{.Server.MinAPIVersion}}' || true
+          docker compose version || {
+            echo "ERROR: docker compose plugin is missing on this self-hosted runner."
+            exit 1
+          }
 
       - name: Ensure Docker client API compatibility
         run: |
