@@ -110,13 +110,21 @@ def extract_response_and_result(
         if len(text) == 0:
             print("text len 0")
             return False, 0, 0, 0, 0, 0
+        found_status_line = False
         # Get latest line
         for line in text.split('\n'):
             if len(line) < 1:
                 continue
-            if not check_sync_status(line):
+            status = check_sync_status(line)
+            if status is None:
+                continue
+            found_status_line = True
+            if not status:
                 print("Invalid sync status")
                 return False, 0, 0, 0, 0, 0
+        if not found_status_line:
+            print("No status-bearing JSON response line found")
+            return False, 0, 0, 0, 0, 0
     # Get the results from the files
     with open(result_file, 'r') as file:
         sections = read_results(file.read())
@@ -264,15 +272,28 @@ def calculate_percentiles(values, percentiles):
 
 
 def check_sync_status(json_data):
-    data = json.loads(json_data)
-    if 'result' not in data:
-        return False
-    if 'status' in data['result']:
-        return data['result']['status'] == 'VALID'
-    elif 'payloadStatus' in data['result']:
-        return data['result']['payloadStatus']['status'] == 'VALID'
-    else:
-        return False
+    """
+    Parse a single response line and return:
+      - True/False when a JSON-RPC payload status is present
+      - None when the line is not a status-bearing JSON payload
+    """
+    try:
+        data = json.loads(json_data)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    result = data.get('result')
+    if not isinstance(result, dict):
+        return None
+
+    if 'status' in result:
+        return str(result['status']).upper() == 'VALID'
+    if 'payloadStatus' in result and isinstance(result['payloadStatus'], dict):
+        return str(result['payloadStatus'].get('status', '')).upper() == 'VALID'
+    return None
 
 
 def check_client_response_is_valid(results_paths, client, test_case, length):
@@ -284,12 +305,19 @@ def check_client_response_is_valid(results_paths, client, test_case, length):
             text = file.read()
             if len(text) == 0:
                 return False
+            found_status_line = False
             # Get latest line
             for line in text.split('\n'):
                 if len(line) < 1:
                     continue
-                if not check_sync_status(line):
+                status = check_sync_status(line)
+                if status is None:
+                    continue
+                found_status_line = True
+                if not status:
                     return False
+            if not found_status_line:
+                return False
     return True
 
 
