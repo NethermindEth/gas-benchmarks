@@ -29,7 +29,7 @@ services:
       - --http.corsdomain=*
       - --http.api
       - web3,eth,net
-      - --datadir=/var/lib/goethereum
+      - --datadir=/var/lib/goethereum/geth
       - --port=0
       - --http.port=8545
       - --maxpeers=0
