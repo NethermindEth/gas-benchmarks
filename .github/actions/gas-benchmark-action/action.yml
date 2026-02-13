@@ -139,7 +139,7 @@ runs:
 
         ./run.sh \
           -T "$TEST_PATHS_JSON" \
-          -w "$WARMUP_FILE" \
+          -W "$WARMUP_FILE" \
           -c "$CLIENTS" \
           -r "$RUNS" \
           -i "$IMAGES" \
