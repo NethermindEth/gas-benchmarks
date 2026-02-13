@@ -19,6 +19,9 @@ PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
 SKIP_EMPTY=true
+RPC_READINESS_MAX_ATTEMPTS="${RPC_READINESS_MAX_ATTEMPTS:-50}"
+OVERLAY_MOUNT_EXTRA_OPTS="${OVERLAY_MOUNT_EXTRA_OPTS:-}"
+OVERLAY_USE_VOLATILE="${OVERLAY_USE_VOLATILE:-false}"
 
 # Prevent inherited low API pin from older docker clients/wrappers.
 unset DOCKER_API_VERSION
@@ -197,7 +200,7 @@ restart_client_containers() {
   fi
 
   if declare -f wait_for_rpc >/dev/null 2>&1; then
-    wait_for_rpc "http://127.0.0.1:8545" 300
+    wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
   else
     sleep 5
   fi
@@ -270,6 +273,45 @@ overlay_base_from_lower() {
   echo "$lower_parent/$OVERLAY_TMP_ROOT"
 }
 
+overlay_mount_with_fallback() {
+  local client="$1"
+  local abs_lower="$2"
+  local abs_upper="$3"
+  local abs_work="$4"
+  local merged="$5"
+
+  local base_opts="lowerdir=$abs_lower,upperdir=$abs_upper,workdir=$abs_work"
+  local volatile_suffix=""
+  if [ "${OVERLAY_USE_VOLATILE,,}" = "true" ]; then
+    volatile_suffix=",volatile"
+  fi
+
+  local candidate_opts=()
+  if [ -n "$OVERLAY_MOUNT_EXTRA_OPTS" ]; then
+    candidate_opts+=("$base_opts,$OVERLAY_MOUNT_EXTRA_OPTS")
+  fi
+  candidate_opts+=("$base_opts,metacopy=on,xino=auto,index=off,redirect_dir=off$volatile_suffix")
+  candidate_opts+=("$base_opts,metacopy=on,xino=auto,redirect_dir=off$volatile_suffix")
+  candidate_opts+=("$base_opts,xino=auto,redirect_dir=off$volatile_suffix")
+  candidate_opts+=("$base_opts,redirect_dir=on$volatile_suffix")
+  candidate_opts+=("$base_opts")
+
+  local mount_opts
+  for mount_opts in "${candidate_opts[@]}"; do
+    if mount -t overlay overlay -o "$mount_opts" "$merged" 2>/dev/null; then
+      echo "[INFO] Overlay mount options for $client: $mount_opts" >&2
+      return 0
+    fi
+
+    if command -v sudo >/dev/null 2>&1 && sudo mount -t overlay overlay -o "$mount_opts" "$merged" >/dev/null 2>&1; then
+      echo "[INFO] Overlay mount options for $client: $mount_opts (via sudo)" >&2
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 prepare_overlay_for_client() {
   local client="$1"
   local network="$2"
@@ -319,15 +361,9 @@ prepare_overlay_for_client() {
   local abs_upper abs_work
   abs_upper=$(abspath "$upper")
   abs_work=$(abspath "$work")
-  local mount_opts="lowerdir=$abs_lower,upperdir=$abs_upper,workdir=$abs_work,redirect_dir=on"
-
-  if ! mount -t overlay overlay -o "$mount_opts" "$merged" 2>/dev/null; then
-    if command -v sudo >/dev/null 2>&1; then
-      sudo mount -t overlay overlay -o "$mount_opts" "$merged"
-    else
-      echo "âťŚ Failed to mount overlay for $client (need elevated permissions)" >&2
-      return 1
-    fi
+  if ! overlay_mount_with_fallback "$client" "$abs_lower" "$abs_upper" "$abs_work" "$merged"; then
+    echo "[ERROR] Failed to mount overlay for $client (all mount option profiles failed)" >&2
+    return 1
   fi
 
   ACTIVE_OVERLAY_MOUNTS["$client"]="$merged"
@@ -894,7 +930,7 @@ for run in $(seq 1 $RUNS); do
     "${setup_cmd[@]}"
 
     if declare -f wait_for_rpc >/dev/null 2>&1; then
-      wait_for_rpc "http://127.0.0.1:8545" 300
+      wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
     else
       sleep 5
     fi

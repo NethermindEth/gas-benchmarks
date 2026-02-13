@@ -218,6 +218,61 @@ jobs:
             fi
           fi
 
+      - name: Check alternative snapshot tooling
+        run: |
+          set -euo pipefail
+
+          has_cmd() {
+            command -v "$1" >/dev/null 2>&1
+          }
+
+          overlay_tools_ok=true
+          for cmd in mount umount findmnt; do
+            if ! has_cmd "$cmd"; then
+              overlay_tools_ok=false
+            fi
+          done
+
+          zfs_tools_ok=true
+          for cmd in zfs; do
+            if ! has_cmd "$cmd"; then
+              zfs_tools_ok=false
+            fi
+          done
+
+          lvm_tools_ok=true
+          for cmd in lvs lvcreate lvremove; do
+            if ! has_cmd "$cmd"; then
+              lvm_tools_ok=false
+            fi
+          done
+
+          reflink_supported=no
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          printf 'x' > "$tmp_dir/src"
+          if cp --reflink=always "$tmp_dir/src" "$tmp_dir/dst" >/dev/null 2>&1; then
+            reflink_supported=yes
+          fi
+
+          echo "Overlay tools available: $overlay_tools_ok"
+          echo "ZFS tools available: $zfs_tools_ok"
+          echo "LVM snapshot tools available: $lvm_tools_ok"
+          echo "Filesystem reflink supported: $reflink_supported"
+
+          if [ "$zfs_tools_ok" = false ] && [ "$lvm_tools_ok" = false ] && [ "$reflink_supported" = no ]; then
+            echo "::warning::No alternative snapshot backend tooling detected (zfs/lvm/reflink)."
+          fi
+
+          {
+            echo "| Capability | Status |"
+            echo "| --- | --- |"
+            echo "| Overlay tools (mount/umount/findmnt) | $overlay_tools_ok |"
+            echo "| ZFS tooling (zfs) | $zfs_tools_ok |"
+            echo "| LVM snapshot tooling (lvs/lvcreate/lvremove) | $lvm_tools_ok |"
+            echo "| Reflink copy support (cp --reflink=always) | $reflink_supported |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Ensure Docker client API compatibility
         run: |
           set -euo pipefail
