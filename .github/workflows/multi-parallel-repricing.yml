@@ -27,6 +27,18 @@ on:
       genesis:
         description: 'Genesis filename (used for all clients)'
         default: 'zkevmgenesis.json'
+      snapshot_backend:
+        description: 'Snapshot backend mode (direct keeps current behavior)'
+        default: 'direct'
+      snapshot_root:
+        description: 'Snapshot root path (required for overlay/zfs backends)'
+        default: ''
+      snapshot_runtime_root:
+        description: 'Runtime root path for overlay/zfs writable data'
+        default: ''
+      network:
+        description: 'Optional network name passed to run.sh for snapshot path resolution'
+        default: ''
 
 concurrency:
   group: repricing-${{ github.ref }}
@@ -40,6 +52,10 @@ env:
   INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
   INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
   INPUT_GENESIS: ${{ github.event.inputs.genesis || 'zkevmgenesis.json' }}
+  INPUT_SNAPSHOT_BACKEND: ${{ github.event.inputs.snapshot_backend || 'direct' }}
+  INPUT_SNAPSHOT_ROOT: ${{ github.event.inputs.snapshot_root || '' }}
+  INPUT_SNAPSHOT_RUNTIME_ROOT: ${{ github.event.inputs.snapshot_runtime_root || '' }}
+  INPUT_NETWORK: ${{ github.event.inputs.network || '' }}
 
 jobs:
   set-matrix:
@@ -134,15 +150,39 @@ jobs:
           TEST_PATH="${{ env.INPUT_TEST }}"
           CLIENT="${{ matrix.client }}"
           TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
-      
-          ./run.sh \
-            -T "$TEST_PATHS_JSON" \
-            -c "$CLIENT" \
-            -r 1 \
-            -i '${{ env.INPUT_IMAGES }}' \
-            -o "${{ env.INPUT_OPCODES_WARMUP }}" \
-            -f "${{ env.INPUT_FILTER }}" \
+
+          SNAPSHOT_BACKEND="${{ env.INPUT_SNAPSHOT_BACKEND }}"
+          SNAPSHOT_ROOT="${{ env.INPUT_SNAPSHOT_ROOT }}"
+          SNAPSHOT_RUNTIME_ROOT="${{ env.INPUT_SNAPSHOT_RUNTIME_ROOT }}"
+          NETWORK_NAME="${{ env.INPUT_NETWORK }}"
+
+          if [ "$SNAPSHOT_BACKEND" != "direct" ] && [ -z "$SNAPSHOT_ROOT" ]; then
+            echo "snapshot_root is required when snapshot_backend is '$SNAPSHOT_BACKEND'" >&2
+            exit 1
+          fi
+
+          RUN_ARGS=(
+            -T "$TEST_PATHS_JSON"
+            -c "$CLIENT"
+            -r 1
+            -i '${{ env.INPUT_IMAGES }}'
+            -o "${{ env.INPUT_OPCODES_WARMUP }}"
+            -f "${{ env.INPUT_FILTER }}"
             -W "warmup-repricing"
+          )
+
+          if [ "$SNAPSHOT_BACKEND" = "overlay" ] || [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
+            RUN_ARGS+=(-S "$SNAPSHOT_BACKEND")
+            RUN_ARGS+=(-B "$SNAPSHOT_ROOT")
+            if [ -n "$NETWORK_NAME" ]; then
+              RUN_ARGS+=(-n "$NETWORK_NAME")
+            fi
+            if [ -n "$SNAPSHOT_RUNTIME_ROOT" ]; then
+              RUN_ARGS+=(-O "$SNAPSHOT_RUNTIME_ROOT")
+            fi
+          fi
+
+          ./run.sh "${RUN_ARGS[@]}"
 
       - name: Dump latest Docker logs for ${{ matrix.client }}
         if: always()

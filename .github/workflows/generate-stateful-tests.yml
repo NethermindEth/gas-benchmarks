@@ -62,6 +62,14 @@ on:
           - warmup_only
           - stateful_only
         default: "full"
+      warmup_snapshot_backend:
+        description: "Snapshot backend for warmup generation"
+        required: true
+        type: choice
+        options:
+          - overlay
+          - zfs
+        default: "overlay"
 
 permissions:
   contents: write
@@ -90,6 +98,7 @@ jobs:
       CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
       CFG_RPC_ADDRESS: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
       CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
+      CFG_WARMUP_SNAPSHOT_BACKEND: ${{ github.event.inputs.warmup_snapshot_backend || 'overlay' }}
 
     steps:
       - name: Checkout gas-benchmarks repository from triggering branch
@@ -264,6 +273,7 @@ jobs:
             "${GENESIS_ARGS[@]}" \
             --snapshotRoot "$SNAPSHOT_DIR_WARMUP" \
             --overlayRoot "$OVERLAY_ROOT" \
+            --snapshotBackend "$CFG_WARMUP_SNAPSHOT_BACKEND" \
             --network "mainnet"
 
       - name: Print warmup nethermind log
@@ -392,21 +402,33 @@ jobs:
           docker ps -q | xargs -r docker rm -f
           docker system prune -af --volumes || true
 
-      - name: Purge stale overlay mounts and dirs
+      - name: Purge stale snapshot runtime mounts and dirs
         if: always()
         shell: bash
         run: |
           set +e
 
-          # Warmup overlays: /mnt/sda/overlay-workspace/<client>/<overlay_id>/{merged,upper,work}
-          for client in nethermind geth; do
-            if [ -d "$OVERLAY_ROOT/$client" ]; then
-              find "$OVERLAY_ROOT/$client" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
-                mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+          if [ "$CFG_WARMUP_SNAPSHOT_BACKEND" = "zfs" ]; then
+            if command -v zfs >/dev/null 2>&1; then
+              zfs list -H -o name -t filesystem 2>/dev/null | grep '/gasbench-runtime/' | sort -r | while read -r ds; do
+                [ -n "$ds" ] && (zfs destroy -r -f "$ds" || sudo zfs destroy -r -f "$ds" || true)
               done
-              rm -rf "$OVERLAY_ROOT/$client" || true
+              zfs list -H -o name -t snapshot 2>/dev/null | grep '@gasbench_tmp_' | while read -r snap; do
+                [ -n "$snap" ] && (zfs destroy "$snap" || sudo zfs destroy "$snap" || true)
+              done
             fi
-          done
+            rm -rf "$OVERLAY_ROOT"/nethermind "$OVERLAY_ROOT"/geth || true
+          else
+            # Warmup overlays: /mnt/sda/overlay-workspace/<client>/<overlay_id>/{merged,upper,work}
+            for client in nethermind geth; do
+              if [ -d "$OVERLAY_ROOT/$client" ]; then
+                find "$OVERLAY_ROOT/$client" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
+                  mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+                done
+                rm -rf "$OVERLAY_ROOT/$client" || true
+              fi
+            done
+          fi
 
           # Stateful generator primary overlay mountpoints if a run was interrupted
           for mp in "$OVERLAY_ROOT/overlay-merged" "$OVERLAY_ROOT/scenario-merged"; do

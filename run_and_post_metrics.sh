@@ -10,9 +10,10 @@
 #   --prometheus-username   The Prometheus basic auth username.
 #   --prometheus-password   The Prometheus basic auth password.
 #   --network      Network name forwarded to run.sh (e.g. mainnet)
-#   --snapshot-root Base directory for overlay snapshots (can include placeholders)
+#   --snapshot-root Base directory for snapshot data (can include placeholders)
 #   --snapshot-template Optional template appended to snapshot root (supports <<CLIENT>> / <<NETWORK>>)
-#   --overlay-root  Absolute path for overlay runtime directory (passed to run.sh -O)
+#   --overlay-root  Runtime root path for snapshot backend data (passed to run.sh -O)
+#   --snapshot-backend Snapshot backend: overlay (default) or zfs (passed to run.sh -S)
 #   --clients      Comma-separated client list forwarded to run.sh
 #   --restarts     true/false to control client restarts (-R flag for run.sh)
 #   --debug        Enable debug logging for this script
@@ -32,6 +33,7 @@ NETWORK_LABEL="all"
 SNAPSHOT_ROOT=""
 SNAPSHOT_TEMPLATE=""
 OVERLAY_ROOT=""
+SNAPSHOT_BACKEND=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
@@ -104,7 +106,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 usage() {
-  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --overlay-root <path> --clients <client_list> --restarts <true|false> --max-loops <N>]"
+  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --overlay-root <path> --snapshot-backend <overlay|zfs> --clients <client_list> --restarts <true|false> --max-loops <N>]"
 }
 
 # Debug logging function
@@ -178,6 +180,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --overlay-root)
       OVERLAY_ROOT="$2"
+      shift 2
+      ;;
+    --snapshot-backend)
+      SNAPSHOT_BACKEND=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+      if [ "$SNAPSHOT_BACKEND" != "overlay" ] && [ "$SNAPSHOT_BACKEND" != "zfs" ]; then
+        echo "Invalid value for --snapshot-backend: $2 (expected overlay|zfs)"
+        exit 1
+      fi
       shift 2
       ;;
     --snapshot-template)
@@ -293,6 +303,9 @@ while true; do
 
   if [ -n "$OVERLAY_ROOT" ]; then
     RUN_CMD+=(-O "$OVERLAY_ROOT")
+  fi
+  if [ -n "$SNAPSHOT_BACKEND" ]; then
+    RUN_CMD+=(-S "$SNAPSHOT_BACKEND")
   fi
 
   if [ -n "$CLIENTS" ]; then

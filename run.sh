@@ -14,7 +14,10 @@ LEGACY_GENESIS_PATH="zkevmgenesis.json"
 NETWORK=""
 SNAPSHOT_ROOT="snapshots"
 OVERLAY_TMP_ROOT="overlay-runtime"
-USE_OVERLAY=false
+USE_SNAPSHOT_BACKEND=false
+SNAPSHOT_BACKEND="overlay"
+ZFS_RUNTIME_DATASET_ROOT="gasbench-runtime"
+ZFS_SNAPSHOT_PREFIX="gasbench_tmp"
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
@@ -30,6 +33,10 @@ declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
 declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
+declare -A ACTIVE_ZFS_DATASETS
+declare -A ACTIVE_ZFS_SNAPSHOTS
+declare -A ACTIVE_ZFS_MOUNTS
+declare -A ACTIVE_ZFS_CLIENTS
 declare -A RUNNING_CLIENTS
 
 abspath() {
@@ -150,14 +157,14 @@ restart_client_containers() {
   local env_file="$compose_dir/.env"
 
   if [ ! -f "$compose_file" ]; then
-    echo "âš ď¸Ź  Compose file not found for $client_base" >&2
+    echo "[WARN] Compose file not found for $client_base" >&2
     return 1
   fi
 
   if [ -f "$env_file" ]; then
     if ! docker compose -f "$compose_file" --env-file "$env_file" restart >/dev/null 2>&1; then
       if ! docker compose -f "$compose_file" --env-file "$env_file" restart; then
-        echo "âťŚ Failed to restart services for $client_base" >&2
+        echo "[ERROR] Failed to restart services for $client_base" >&2
         return 1
       fi
     fi
@@ -165,7 +172,7 @@ restart_client_containers() {
     if ! (
       cd "$compose_dir" && docker compose restart
     ); then
-      echo "âťŚ Failed to restart services for $client_base" >&2
+      echo "[ERROR] Failed to restart services for $client_base" >&2
       return 1
     fi
   fi
@@ -223,7 +230,7 @@ append_tests_for_path() {
     return
   fi
 
-  echo "âš ď¸Ź  Test path not found: $base_path" >&2
+  echo "[WARN] Test path not found: $base_path" >&2
 }
 
 is_mounted() {
@@ -231,6 +238,37 @@ is_mounted() {
   local abs_path
   abs_path=$(abspath "$mount_point")
   grep -q " $abs_path " /proc/mounts 2>/dev/null
+}
+
+resolve_snapshot_lower_for_client() {
+  local client="$1"
+  local network="$2"
+  local snapshot_root="$3"
+
+  local lower=""
+
+  if [ -n "$network" ] && dir_has_content "$snapshot_root/$network/$client"; then
+    lower="$snapshot_root/$network/$client"
+  fi
+
+  if [ -z "$lower" ] && [ -n "$network" ] && dir_has_content "$snapshot_root/$network" && [ ! -d "$snapshot_root/$network/$client" ]; then
+    lower="$snapshot_root/$network"
+  fi
+
+  if [ -z "$lower" ] && dir_has_content "$snapshot_root/$client"; then
+    lower="$snapshot_root/$client"
+  fi
+
+  if [ -z "$lower" ] && dir_has_content "$snapshot_root"; then
+    lower="$snapshot_root"
+  fi
+
+  if [ -z "$lower" ]; then
+    echo "Unable to locate snapshot directory for $client under $snapshot_root" >&2
+    return 1
+  fi
+
+  echo "$lower"
 }
 
 overlay_base_from_lower() {
@@ -244,33 +282,59 @@ overlay_base_from_lower() {
   echo "$lower_parent/$OVERLAY_TMP_ROOT"
 }
 
+run_zfs() {
+  if zfs "$@" 2>/dev/null; then
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo zfs "$@"
+    return $?
+  fi
+
+  return 1
+}
+
+resolve_zfs_dataset_for_path() {
+  local target_path="$1"
+  local target_abs
+  target_abs=$(abspath "$target_path")
+
+  local best_dataset=""
+  local best_mount=""
+  local best_len=0
+  local dataset mountpoint
+
+  while IFS=$'\t' read -r dataset mountpoint; do
+    if [ -z "$dataset" ] || [ -z "$mountpoint" ] || [ "$mountpoint" = "-" ]; then
+      continue
+    fi
+
+    case "$target_abs" in
+      "$mountpoint"|"$mountpoint"/*)
+        if [ "${#mountpoint}" -gt "$best_len" ]; then
+          best_dataset="$dataset"
+          best_mount="$mountpoint"
+          best_len=${#mountpoint}
+        fi
+        ;;
+    esac
+  done < <(run_zfs list -H -o name,mountpoint -t filesystem 2>/dev/null)
+
+  if [ -z "$best_dataset" ] || [ -z "$best_mount" ]; then
+    return 1
+  fi
+
+  echo "$best_dataset|$best_mount"
+}
+
 prepare_overlay_for_client() {
   local client="$1"
   local network="$2"
   local snapshot_root="$3"
 
   local lower=""
-
-  if dir_has_content "$snapshot_root"; then
-    lower="$snapshot_root"
-  fi
-
-  if [ -z "$lower" ] && [ -n "$network" ] && dir_has_content "$snapshot_root/$network/$client"; then
-    lower="$snapshot_root/$network/$client"
-  fi
-
-  if [ -z "$lower" ] && [ -n "$network" ] && dir_has_content "$snapshot_root/$network" && [ ! -d "$snapshot_root/$network/$client" ]; then
-    lower="$snapshot_root/$network"
-  fi
-
-  if [ -z "$lower" ] && dir_has_content "$snapshot_root/$client"; then
-    lower="$snapshot_root/$client"
-  fi
-
-  if [ -z "$lower" ]; then
-    echo "âťŚ Unable to locate snapshot directory for $client under $snapshot_root" >&2
-    return 1
-  fi
+  lower=$(resolve_snapshot_lower_for_client "$client" "$network" "$snapshot_root") || return 1
 
   local abs_lower
   abs_lower=$(abspath "$lower")
@@ -297,7 +361,7 @@ prepare_overlay_for_client() {
       if command -v sudo >/dev/null 2>&1; then
         sudo umount "$merged"
       else
-        echo "âťŚ Failed to unmount previous overlay for $client" >&2
+        echo "[ERROR] Failed to unmount previous overlay for $client" >&2
         return 1
       fi
     fi
@@ -315,7 +379,7 @@ prepare_overlay_for_client() {
     if command -v sudo >/dev/null 2>&1; then
       sudo mount -t overlay overlay -o "$mount_opts" "$merged"
     else
-      echo "âťŚ Failed to mount overlay for $client (need elevated permissions)" >&2
+      echo "[ERROR] Failed to mount overlay for $client (need elevated permissions)" >&2
       return 1
     fi
   fi
@@ -372,7 +436,7 @@ cleanup_overlay_for_client() {
     fi
 
     if is_mounted "$merged"; then
-      echo "⚠️  Unable to unmount overlay for $client ($merged); leaving mount in place" >&2
+      echo "[WARN] Unable to unmount overlay for $client ($merged); leaving mount in place" >&2
       unmounted=false
     fi
   fi
@@ -408,6 +472,147 @@ cleanup_all_overlays() {
   for client in "${!ACTIVE_OVERLAY_CLIENTS[@]}"; do
     cleanup_overlay_for_client "$client"
   done
+}
+
+ensure_zfs_runtime_parent_datasets() {
+  local pool_name="$1"
+  local client="$2"
+  local base_dataset="$pool_name/$ZFS_RUNTIME_DATASET_ROOT"
+  local client_dataset="$base_dataset/$client"
+
+  if ! run_zfs list -H -o name "$base_dataset" >/dev/null 2>&1; then
+    run_zfs create -o mountpoint=none "$base_dataset" >/dev/null 2>&1 || true
+  fi
+  if ! run_zfs list -H -o name "$client_dataset" >/dev/null 2>&1; then
+    run_zfs create -o mountpoint=none "$client_dataset" >/dev/null 2>&1 || true
+  fi
+}
+
+prepare_zfs_clone_for_client() {
+  local client="$1"
+  local network="$2"
+  local snapshot_root="$3"
+
+  local lower=""
+  lower=$(resolve_snapshot_lower_for_client "$client" "$network" "$snapshot_root") || return 1
+
+  if ! command -v zfs >/dev/null 2>&1; then
+    echo "[ERROR] zfs command is not available but zfs backend was requested" >&2
+    return 1
+  fi
+
+  local abs_lower
+  abs_lower=$(abspath "$lower")
+
+  local dataset_info=""
+  dataset_info=$(resolve_zfs_dataset_for_path "$abs_lower") || {
+    echo "[ERROR] Could not resolve ZFS dataset for snapshot path: $abs_lower" >&2
+    return 1
+  }
+
+  local source_dataset="${dataset_info%%|*}"
+  local source_mount="${dataset_info#*|}"
+  local lower_suffix=""
+  if [ "$abs_lower" != "$source_mount" ]; then
+    lower_suffix="${abs_lower#"$source_mount"/}"
+  fi
+
+  local runtime_base
+  runtime_base=$(overlay_base_from_lower "$abs_lower")
+  local clone_id
+  clone_id="$(date +%s%N)_$RANDOM"
+
+  local zfs_mount_root="$runtime_base/$client/$clone_id"
+  mkdir -p "$zfs_mount_root"
+
+  local pool_name="${source_dataset%%/*}"
+  ensure_zfs_runtime_parent_datasets "$pool_name" "$client"
+
+  local clone_dataset="$pool_name/$ZFS_RUNTIME_DATASET_ROOT/$client/$clone_id"
+  local snapshot_name="${source_dataset}@${ZFS_SNAPSHOT_PREFIX}_${client}_${clone_id}"
+
+  if ! run_zfs snapshot "$snapshot_name"; then
+    echo "[ERROR] Failed to create ZFS snapshot $snapshot_name" >&2
+    return 1
+  fi
+
+  if ! run_zfs clone -o "mountpoint=$zfs_mount_root" "$snapshot_name" "$clone_dataset"; then
+    echo "[ERROR] Failed to create ZFS clone $clone_dataset from $snapshot_name" >&2
+    run_zfs destroy "$snapshot_name" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  local data_dir="$zfs_mount_root"
+  if [ -n "$lower_suffix" ]; then
+    data_dir="$zfs_mount_root/$lower_suffix"
+  fi
+
+  if [ ! -d "$data_dir" ]; then
+    echo "[ERROR] ZFS clone data directory not found: $data_dir" >&2
+    run_zfs destroy -r -f "$clone_dataset" >/dev/null 2>&1 || true
+    run_zfs destroy "$snapshot_name" >/dev/null 2>&1 || true
+    return 1
+  fi
+
+  ACTIVE_ZFS_DATASETS["$client"]="$clone_dataset"
+  ACTIVE_ZFS_SNAPSHOTS["$client"]="$snapshot_name"
+  ACTIVE_ZFS_MOUNTS["$client"]="$zfs_mount_root"
+  ACTIVE_ZFS_CLIENTS["$client"]=1
+
+  echo "$data_dir"
+}
+
+cleanup_zfs_clone_for_client() {
+  local client="$1"
+  local clone_dataset="${ACTIVE_ZFS_DATASETS[$client]}"
+  local snapshot_name="${ACTIVE_ZFS_SNAPSHOTS[$client]}"
+  local mount_root="${ACTIVE_ZFS_MOUNTS[$client]}"
+
+  if [ -n "$clone_dataset" ]; then
+    run_zfs destroy -r -f "$clone_dataset" >/dev/null 2>&1 || true
+  fi
+
+  if [ -n "$snapshot_name" ]; then
+    run_zfs destroy "$snapshot_name" >/dev/null 2>&1 || true
+  fi
+
+  if [ -n "$mount_root" ] && [ -d "$mount_root" ]; then
+    rm -rf "$mount_root" >/dev/null 2>&1 || true
+  fi
+
+  unset ACTIVE_ZFS_DATASETS["$client"]
+  unset ACTIVE_ZFS_SNAPSHOTS["$client"]
+  unset ACTIVE_ZFS_MOUNTS["$client"]
+  unset ACTIVE_ZFS_CLIENTS["$client"]
+}
+
+cleanup_all_zfs_clones() {
+  local client
+  for client in "${!ACTIVE_ZFS_CLIENTS[@]}"; do
+    cleanup_zfs_clone_for_client "$client"
+  done
+}
+
+cleanup_all_stale_zfs_clones() {
+  if ! command -v zfs >/dev/null 2>&1; then
+    return
+  fi
+
+  local stale_dataset
+  while IFS= read -r stale_dataset; do
+    if [ -z "$stale_dataset" ]; then
+      continue
+    fi
+    run_zfs destroy -r -f "$stale_dataset" >/dev/null 2>&1 || true
+  done < <(run_zfs list -H -o name -t filesystem 2>/dev/null | grep "/$ZFS_RUNTIME_DATASET_ROOT/" | sort -r)
+
+  local stale_snapshot
+  while IFS= read -r stale_snapshot; do
+    if [ -z "$stale_snapshot" ]; then
+      continue
+    fi
+    run_zfs destroy "$stale_snapshot" >/dev/null 2>&1 || true
+  done < <(run_zfs list -H -o name -t snapshot 2>/dev/null | grep "@${ZFS_SNAPSHOT_PREFIX}_" || true)
 }
 
 cleanup_stale_overlay_mounts() {
@@ -465,7 +670,7 @@ cleanup_stale_overlay_mounts() {
     fi
 
     if is_mounted "$mount_point"; then
-      echo "⚠️  Unable to unmount stale overlay mount $mount_point" >&2
+      echo "[WARN] Unable to unmount stale overlay mount $mount_point" >&2
       continue
     fi
 
@@ -608,12 +813,22 @@ cleanup_on_exit() {
     fi
   fi
 
-  if declare -F cleanup_all_overlays >/dev/null 2>&1; then
-    cleanup_all_overlays
-  fi
-
-  if declare -F cleanup_all_stale_overlay_mounts >/dev/null 2>&1; then
-    cleanup_all_stale_overlay_mounts
+  if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
+    if [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
+      if declare -F cleanup_all_zfs_clones >/dev/null 2>&1; then
+        cleanup_all_zfs_clones
+      fi
+      if declare -F cleanup_all_stale_zfs_clones >/dev/null 2>&1; then
+        cleanup_all_stale_zfs_clones
+      fi
+    else
+      if declare -F cleanup_all_overlays >/dev/null 2>&1; then
+        cleanup_all_overlays
+      fi
+      if declare -F cleanup_all_stale_overlay_mounts >/dev/null 2>&1; then
+        cleanup_all_stale_overlay_mounts
+      fi
+    fi
   fi
 
   exit $exit_status
@@ -645,7 +860,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:c:r:i:o:f:n:B:O:R:FW:" opt; do
+while getopts "T:t:g:c:r:i:o:f:n:B:O:S:R:FW:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -655,17 +870,32 @@ while getopts "T:t:g:c:r:i:o:f:n:B:O:R:FW:" opt; do
     i) IMAGES="$OPTARG" ;;
     o) OPCODES_WARMUP_COUNT="$OPTARG" ;;
     f) FILTER="$OPTARG" ;;  # comma-separated exclude patterns
-    n) NETWORK="$OPTARG"; USE_OVERLAY=true ;;
-    B) SNAPSHOT_ROOT="$OPTARG"; USE_OVERLAY=true ;;
-    O) OVERLAY_TMP_ROOT="$OPTARG"; USE_OVERLAY=true ;;
+    n) NETWORK="$OPTARG"; USE_SNAPSHOT_BACKEND=true ;;
+    B) SNAPSHOT_ROOT="$OPTARG"; USE_SNAPSHOT_BACKEND=true ;;
+    O) OVERLAY_TMP_ROOT="$OPTARG"; USE_SNAPSHOT_BACKEND=true ;;
+    S) SNAPSHOT_BACKEND="${OPTARG,,}"; USE_SNAPSHOT_BACKEND=true ;;
     R) RESTART_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
     W) WARMUP_OPCODES_PATH="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O overlay_root] [-F skipForkchoice] [-W warmup_opcodes_path]" >&2
+    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-F skipForkchoice] [-W warmup_opcodes_path]" >&2
        exit 1 ;;
   esac
 done
 
+if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
+  case "$SNAPSHOT_BACKEND" in
+    overlay|zfs) ;;
+    *)
+      echo "[ERROR] Invalid snapshot backend '$SNAPSHOT_BACKEND'. Expected one of: overlay, zfs." >&2
+      exit 1
+      ;;
+  esac
+
+  if [ "$SNAPSHOT_BACKEND" = "zfs" ] && ! command -v zfs >/dev/null 2>&1; then
+    echo "[ERROR] zfs backend requested but 'zfs' command is not available." >&2
+    exit 1
+  fi
+fi
 
 
 # Allow passing a file path for -T to avoid long argument lists.
@@ -682,7 +912,7 @@ fi
 # Fallback to legacy -t/-g if -T not provided
 if [ -z "$TEST_PATHS_JSON" ]; then
   if [ -z "$LEGACY_TEST_PATH" ]; then
-    echo "âťŚ You must provide either -T <json> or -t <test_path>"
+    echo "[ERROR] You must provide either -T <json> or -t <test_path>"
     exit 1
   fi
 
@@ -734,8 +964,13 @@ else
   SKIP_FORKCHOICE_OPT=""
 fi
 
-if [ "$USE_OVERLAY" = true ]; then
-  cleanup_all_stale_overlay_mounts
+if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
+  if [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
+    cleanup_all_stale_zfs_clones
+  else
+    cleanup_all_stale_overlay_mounts
+  fi
+
   if [[ "$OVERLAY_TMP_ROOT" = /* ]]; then
     mkdir -p "$OVERLAY_TMP_ROOT"
   fi
@@ -798,29 +1033,46 @@ for run in $(seq 1 $RUNS); do
     fi
 
     data_dir=""
-    if [ "$USE_OVERLAY" = true ]; then
+    if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
       snapshot_root_for_client=$(resolve_snapshot_root_for_client "$client_base" "$NETWORK")
       if [ -z "$snapshot_root_for_client" ]; then
-        echo "âťŚ Snapshot root not specified for $client" >&2
-        cleanup_overlay_for_client "$client_base"
+        echo "[ERROR] Snapshot root not specified for $client" >&2
+        if [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
+          cleanup_zfs_clone_for_client "$client_base"
+        else
+          cleanup_overlay_for_client "$client_base"
+        fi
         continue
       fi
-      data_dir=$(prepare_overlay_for_client "$client_base" "$NETWORK" "$snapshot_root_for_client") || {
-        echo "âťŚ Skipping $client - overlay setup failed" >&2
-        cleanup_overlay_for_client "$client_base"
-        continue
-      }
+      if [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
+        data_dir=$(prepare_zfs_clone_for_client "$client_base" "$NETWORK" "$snapshot_root_for_client") || {
+          echo "[ERROR] Skipping $client - ZFS clone setup failed" >&2
+          cleanup_zfs_clone_for_client "$client_base"
+          continue
+        }
+      else
+        data_dir=$(prepare_overlay_for_client "$client_base" "$NETWORK" "$snapshot_root_for_client") || {
+          echo "[ERROR] Skipping $client - overlay setup failed" >&2
+          cleanup_overlay_for_client "$client_base"
+          continue
+        }
+      fi
     else
       data_dir=$(abspath "scripts/$client_base/execution-data")
       mkdir -p "$data_dir"
     fi
 
     volume_name="${client_base}_$(date +%s)_$RANDOM"
-    if [ "$USE_OVERLAY" = true ]; then
-      overlay_root="${ACTIVE_OVERLAY_ROOTS[$client_base]}"
-      if [ -n "$overlay_root" ]; then
-        overlay_token=$(basename "$overlay_root")
-        volume_name="${client_base}_${overlay_token}_$(date +%s)_$RANDOM"
+    if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
+      runtime_root=""
+      if [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
+        runtime_root="${ACTIVE_ZFS_MOUNTS[$client_base]}"
+      else
+        runtime_root="${ACTIVE_OVERLAY_ROOTS[$client_base]}"
+      fi
+      if [ -n "$runtime_root" ]; then
+        runtime_token=$(basename "$runtime_root")
+        volume_name="${client_base}_${runtime_token}_$(date +%s)_$RANDOM"
       fi
     fi
     volume_name=$(echo "$volume_name" | tr -cd '[:alnum:]._-')
@@ -830,6 +1082,11 @@ for run in $(seq 1 $RUNS); do
 
 
     setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
+    if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
+      setup_cmd+=(--dataBackend "$SNAPSHOT_BACKEND")
+    else
+      setup_cmd+=(--dataBackend "direct")
+    fi
     if [ -n "$NETWORK" ]; then
       setup_cmd+=(--network "$NETWORK")
     fi
@@ -908,7 +1165,7 @@ for run in $(seq 1 $RUNS); do
 
       if [ "$RESTART_BEFORE_TESTING" = true ]; then
         if ! restart_client_containers "$client_base"; then
-          echo "âš ď¸Ź  Skipping $filename for $client - restart failed" >&2
+          echo "[WARN] Skipping $filename for $client - restart failed" >&2
           continue
         fi
       fi
@@ -1053,9 +1310,14 @@ EOF
 
     rm -rf "scripts/$client_base/execution-data"
 
-    if [ "$USE_OVERLAY" = true ]; then
-      cleanup_overlay_for_client "$client_base"
-      cleanup_all_stale_overlay_mounts
+    if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
+      if [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
+        cleanup_zfs_clone_for_client "$client_base"
+        cleanup_all_stale_zfs_clones
+      else
+        cleanup_overlay_for_client "$client_base"
+        cleanup_all_stale_overlay_mounts
+      fi
     fi
 
     unset RUNNING_CLIENTS["$client_base"]
