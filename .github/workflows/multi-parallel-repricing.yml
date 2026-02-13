@@ -360,6 +360,15 @@ jobs:
             echo "Warmup path not found: $WARMUP_PATH; continuing without explicit warmup path"
           fi
 
+          TEST_PATH_LC=$(echo "$TEST_PATH" | tr '[:upper:]' '[:lower:]')
+          EFFECTIVE_FILTER="${{ env.INPUT_FILTER }}"
+          if [[ "$TEST_PATH_LC" == *"compute"* ]]; then
+            EFFECTIVE_FILTER="not_op"
+          elif [[ "$TEST_PATH_LC" == *"stateful"* ]]; then
+            EFFECTIVE_FILTER="XEN"
+          fi
+          echo "Using filter: '${EFFECTIVE_FILTER}' for test path: $TEST_PATH"
+
           ./run.sh \
             -t "$TEST_PATH" \
             -n "$NETWORK" \
@@ -369,7 +378,7 @@ jobs:
             -r 1 \
             -i '${{ env.INPUT_IMAGES }}' \
             -o "${{ env.INPUT_OPCODES_WARMUP }}" \
-            -f "${{ env.INPUT_FILTER }}" \
+            -f "$EFFECTIVE_FILTER" \
             "${WARMUP_ARGS[@]}"
 
       - name: Dump latest Docker logs for ${{ matrix.client }}

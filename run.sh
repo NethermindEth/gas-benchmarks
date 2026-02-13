@@ -857,12 +857,11 @@ for run in $(seq 1 $RUNS); do
 
 
     setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
-    if [ -n "$NETWORK" ]; then
-      setup_cmd+=(--network "$NETWORK")
-    fi
-    if [ -z "$NETWORK" ] && [ -n "$genesis_path" ]; then
+    if [ -n "$genesis_path" ]; then
       echo "Using custom genesis for $client: $genesis_path"
       setup_cmd+=(--genesisPath "$genesis_path")
+    elif [ -n "$NETWORK" ]; then
+      setup_cmd+=(--network "$NETWORK")
     fi
     setup_cmd+=(--volumeName "$volume_name")
 
