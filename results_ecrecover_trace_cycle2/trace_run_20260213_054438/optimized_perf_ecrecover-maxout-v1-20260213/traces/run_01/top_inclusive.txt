@@ -1,0 +1,58 @@
+Top 40 Functions (Inclusive)                                                  Inclusive           Exclusive           
+1.  (Non-Activities)                                                          100%                0%                  
+2.  Threads                                                                   100%                0%                  
+3.  Thread.StartCallback()                                                    97.39%              0%                  
+4.  ManualResetEventSlim.Wait(int32,value class System.Threading.Cancellat    54.87%              7.84%               
+    ionToken)                                            
+5.  Monitor.Wait(class System.Object,int32)                                   52.26%              52.26%              
+6.  ExecutionContext.RunInternal(class System.Threading.ExecutionContext,c    47.18%              0%                  
+    lass System.Threading.ContextCallback,class System.Object)                                            
+7.  Task.ExecuteWithThreadLocal(class System.Threading.Tasks.Task&,class S    47.03%              0%                  
+    ystem.Threading.Thread)                                            
+8.  Task.ScheduleAndStart(bool)                                               44.42%              0%                  
+9.  SingleThreadEventExecutor.Loop()                                          44.42%              0%                  
+10. Task.ExecuteEntry()                                                       44.42%              0%                  
+11. SingleThreadEventExecutor.<Loop>b__33_0()                                 44.42%              0%                  
+12. SingleThreadEventExecutor.RunAllTasks(value class DotNetty.Common.Prec    44.42%              0%                  
+    iseTimeSpan)                                            
+13. SingleThreadEventExecutor.PollTask()                                      44.42%              0%                  
+14. ManualResetEventSlim.Wait()                                               44.42%              0%                  
+15. TaskFactory.StartNew(class System.Action,value class System.Threading.    44.42%              0%                  
+    CancellationToken,value class System.Threading.Tasks.TaskCreationOptio                                            
+    ns,class System.Threading.Tasks.TaskScheduler)                                            
+16. ExecutorTaskScheduler.QueueTask(class System.Threading.Tasks.Task)        44.42%              0%                  
+17. PortableThreadPool+WorkerThread.WorkerThreadStart()                       24.23%              0%                  
+18. LowLevelLifoSemaphore.Wait(int32,bool)                                    24.08%              0%                  
+19. LowLevelLifoSemaphore.WaitForSignal(int32)                                24.07%              24.07%              
+20. SemaphoreSlim.WaitUntilCountOrTimeout(int64,int64,value class System.T    5.23%               0%                  
+    hreading.CancellationToken)                                            
+21. SemaphoreSlim.WaitCore(int64,value class System.Threading.Cancellation    5.23%               0%                  
+    Token)                                            
+22. PortableThreadPool+IOCompletionPoller.Poll()                              5.23%               5.23%               
+23. Heartbeat.TimerLoop()                                                     5.23%               0%                  
+24. __Canon].TryTakeWithNoTimeValidation(!0&,int32,value class System.Thre    5.23%               0%                  
+    ading.CancellationToken,class System.Threading.CancellationTokenSource                                            
+    )                                            
+25. __Canon].MoveNext()                                                       5.23%               0%                  
+26. WaitHandle.WaitOneNoCheck(int32,bool,class System.Object,value class W    5.22%               5.22%               
+    aitHandleWaitSourceMap)                                            
+27. AsyncMethodBuilderCore.Start(!!0&)                                        2.76%               0%                  
+28. AsyncTaskMethodBuilder.Start(!!0&)                                        2.75%               0%                  
+29. __Canon].InnerInvoke()                                                    2.61%               0%                  
+30. Int32].GetResult()                                                        2.61%               0%                  
+31. nethermind!Program.<Main>(class System.String[])                          2.61%               0%                  
+32. Task.InternalWait(int32,value class System.Threading.CancellationToken    2.61%               0%                  
+    )                                            
+33. Task.InternalWaitCore(int32,value class System.Threading.CancellationT    2.61%               0%                  
+    oken)                                            
+34. TaskAwaiter.HandleNonSuccessAndDebuggerNotification(class System.Threa    2.61%               0%                  
+    ding.Tasks.Task,value class System.Threading.Tasks.ConfigureAwaitOptio                                            
+    ns)                                            
+35. Task.SpinThenBlockingWait(int32,value class System.Threading.Cancellat    2.61%               0%                  
+    ionToken)                                            
+36. PeerManager.RunPeerUpdateLoop()                                           2.61%               0%                  
+37. PeerManager+<RunPeerUpdateLoop>d__47.MoveNext()                           2.61%               0%                  
+38. TimerQueue.TimerThread()                                                  2.61%               0%                  
+39. PortableThreadPool+WaitThread.WaitThreadStart()                           2.61%               0%                  
+40. WaitHandle.WaitAnyMultiple(value class System.ReadOnlySpan`1<class Mic    2.61%               2.61%               
+    rosoft.Win32.SafeHandles.SafeWaitHandle>,int32)                                            

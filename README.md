@@ -71,6 +71,53 @@ Flags:
 - `--r` it's used to define the number of iterations that you want to run the benchmarks. It's a numeric value.
 - `--i` it's used to define the images that you want to use to run the benchmarks. Separate the images with a comma, and match the clients. Use `default` if you want to ignore the values.
 
+### Script: Compare two Nethermind branches (PowerShell)
+
+Use `run-native-compare.ps1` to execute baseline and optimized branches with `run-native.ps1`.
+
+```powershell
+.\run-native-compare.ps1 `
+  -BaselineBranch master `
+  -OptimizedBranch feature/my-optimization `
+  -ResultsDir results\identity_compare `
+  -Filter "identity,ecrecover"
+```
+
+Trace-only example (optimized branch only, no baseline run):
+
+```powershell
+.\run-native-compare.ps1 `
+  -TraceMode `
+  -OptimizedBranch feature/my-optimization `
+  -ResultsDir results\identity_trace `
+  -Filter "identity" `
+  -DotnetTraceProfile cpu-sampling
+```
+
+Compare script defaults and behavior:
+- Defaults to `-Runs 3` and `-WarmupCount 1`.
+- Always calls `run-native.ps1` with `-ForceRebuild`.
+- Accepts `-NethermindRepo` to point to a specific Nethermind repository.
+- On first run for a given `-ResultsDir`, it runs both baseline and optimized.
+- On later runs for the same `-ResultsDir`, it reuses baseline cache for known filters and runs baseline only for newly added filters.
+- `-TraceMode` skips baseline/cache logic and runs only the optimized branch.
+- `-EnableDotnetTrace` enables `dotnet-trace` capture per run (also implied by `-TraceMode`).
+- `-DotnetTraceProfile` sets trace profile (default `cpu-sampling`).
+- `-DotnetTraceDuration` sets collection window per run (default `00:05:00`).
+- Keeps console output concise by default. Use `-ShowChildLogs` to stream full `run-native.ps1` output.
+- Prints a friendly end-of-run table with baseline vs optimized `engine_newPayload` p95 time (ms).
+
+Output layout:
+- `<ResultsDir>/baseline-cache.json` (cached filter state)
+- `<ResultsDir>/compare_run_yyyyMMdd_HHmmss/baseline_<branch>/...` (when baseline executes)
+- `<ResultsDir>/compare_run_yyyyMMdd_HHmmss/optimized_<branch>/...`
+- `<ResultsDir>/compare_run_yyyyMMdd_HHmmss/newpayload_comparison_p95_ms.csv`
+- `<ResultsDir>/compare_run_yyyyMMdd_HHmmss/newpayload_comparison_p95_ms.md`
+- `<ResultsDir>/trace_run_yyyyMMdd_HHmmss/optimized_<branch>/traces/run_XX/*.nettrace`
+- `<ResultsDir>/trace_run_yyyyMMdd_HHmmss/optimized_<branch>/traces/run_XX/top_inclusive.txt`
+- `<ResultsDir>/trace_run_yyyyMMdd_HHmmss/optimized_<branch>/traces/run_XX/top_exclusive.txt`
+- `<ResultsDir>/trace_run_yyyyMMdd_HHmmss/optimized_<branch>/traces/run_XX/trace.speedscope.json`
+
 Now you're ready to run the benchmarks locally!
 
 ## Populating the PostgreSQL Database with Benchmark Data

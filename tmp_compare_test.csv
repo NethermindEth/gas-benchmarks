@@ -1,0 +1,5 @@
+test,master_runs,branch_runs,master_min_mgas,branch_min_mgas,delta_min_mgas,ratio_min_mgas_branch_over_master,master_p95_np_ms,branch_p95_np_ms,delta_p95_np_ms,ratio_p95_np_ms_master_over_branch
+tests_benchmark_compute_instruction_test_arithmetic.py__test_arithmetic[fork_Prague-benchmark-blockchain_test_engine_x-opcode_MUL-],5,5,100.478,100.478,0.0,1.0,995.238,995.238,0.0,1.0
+tests_benchmark_compute_instruction_test_arithmetic.py__test_arithmetic[fork_Prague-benchmark-blockchain_test_engine_x-opcode_SUB-],5,5,420.533,420.533,0.0,1.0,237.793,237.793,0.0,1.0
+tests_benchmark_compute_instruction_test_comparison.py__test_comparison[fork_Prague-benchmark-blockchain_test_engine_x-opcode_LT-],5,5,448.723,448.723,0.0,1.0,222.854,222.854,0.0,1.0
+tests_benchmark_compute_instruction_test_comparison.py__test_comparison[fork_Prague-benchmark-blockchain_test_engine_x-opcode_SLT-],5,5,399.643,399.643,0.0,1.0,250.223,250.223,0.0,1.0

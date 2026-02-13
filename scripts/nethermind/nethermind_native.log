@@ -1,0 +1,172 @@
+[97m[37m12 Feb 16:51:57[97m | [95mNethermind[97m is starting up [0m
+[97m[37m12 Feb 16:51:57[97m[37m | [97mVersion: 1.37.0-unstable+[93m68007456[97m [0m
+[97m[37m12 Feb 16:51:59[97m[37m | [97mLoading embedded plugins [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Consensus.AuRa.AuRaPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Consensus.Clique.CliquePlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Consensus.Ethash.EthashPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Consensus.Ethash.NethDevPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.EthStats.EthStatsPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Flashbots.Flashbots [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.HealthChecks.HealthChecksPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Hive.HivePlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Init.Snapshot.SnapshotPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Merge.AuRa.AuRaMergePlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Merge.Plugin.MergePlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Optimism.OptimismPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Shutter.ShutterPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Taiko.TaikoPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.UPnP.Plugin.UPnPPlugin [0m
+[97m[37m12 Feb 16:51:59[97m |   Found plugin type Nethermind.Xdc.XdcPlugin [0m
+[97m[37m12 Feb 16:51:59[97m[37m | [97mLoading 14 assemblies from C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Runner\release\plugins [0m
+[97m[37m12 Feb 16:51:59[97m[37m | [97mLoading assembly Nethermind.Api [0m
+[97m[37m12 Feb 16:51:59[97m[37m | [97mLoading assembly Nethermind.Consensus.AuRa [0m
+[97m[37m12 Feb 16:52:01[97m[37m | [97mLoading assembly Nethermind.EthStats [0m
+[97m[37m12 Feb 16:52:01[97m[37m | [97mLoading assembly Nethermind.ExternalSigner.Plugin [0m
+[97m[37m12 Feb 16:52:01[97m |   Found plugin type Nethermind.ExternalSigner.Plugin [0m
+[97m[37m12 Feb 16:52:01[97m[37m | [97mLoading assembly Nethermind.Flashbots [0m
+[97m[37m12 Feb 16:52:01[97m[37m | [97mLoading assembly Nethermind.HealthChecks [0m
+[97m[37m12 Feb 16:52:01[97m[37m | [97mLoading assembly Nethermind.Init [0m
+[97m[37m12 Feb 16:52:02[97m[37m | [97mLoading assembly Nethermind.Init.Snapshot [0m
+[97m[37m12 Feb 16:52:02[97m[37m | [97mLoading assembly Nethermind.JsonRpc.TraceStore [0m
+[97m[37m12 Feb 16:52:02[97m |   Found plugin type Nethermind.JsonRpc.TraceStore [0m
+[97m[37m12 Feb 16:52:02[97m[37m | [97mLoading assembly Nethermind.Merge.AuRa [0m
+[97m[37m12 Feb 16:52:02[97m[37m | [97mLoading assembly Nethermind.Merge.Plugin [0m
+[97m[37m12 Feb 16:52:02[97m[37m | [97mLoading assembly Nethermind.Optimism [0m
+[97m[37m12 Feb 16:52:03[97m[37m | [97mLoading assembly Nethermind.Shutter [0m
+[97m[37m12 Feb 16:52:03[97m[37m | [97mLoading assembly Nethermind.Taiko [0m
+[97m[37m12 Feb 16:52:05[97m[37m | [97mLoading configuration from C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Runner\release\configs\none.json [0m
+[97m[37m12 Feb 16:52:05[97m[37m | [97mBaseDbPath: C:\Users\kamil\source\repos\gas-benchmarks\scripts\nethermind\execution-data\db [0m
+[97m[37m12 Feb 16:52:05[97m[37m | [97mLogDirectory: C:\Users\kamil\source\repos\gas-benchmarks\scripts\nethermind\execution-data\logs [0m
+[97m[37m12 Feb 16:52:05[97m[37m | [97mKeyStoreDirectory: C:\Users\kamil\source\repos\gas-benchmarks\scripts\nethermind\execution-data\keystore [0m
+[97m[37m12 Feb 16:52:05[97m[37m | [97mConfiguration complete [0m
+[97m[37m12 Feb 16:52:05[97m | [95mRocksDB[97m: v10.4.2 [0m
+[97m[37m12 Feb 16:52:05[97m[37m | [97mDid not find ChainSpec in embedded resources: C:/Users/kamil/source/repos/gas-benchmarks/scripts/genesisfiles/nethermind/zkevmgenesis.json [0m
+[97m[37m12 Feb 16:52:05[97m[37m | [97mLoading ChainSpec from file: C:/Users/kamil/source/repos/gas-benchmarks/scripts/genesisfiles/nethermind/zkevmgenesis.json [0m
+[97m[37m12 Feb 16:52:06[97m[37m | [97mDetected 18 plugins [0m
+[97m[37m12 Feb 16:52:06[97m |   HealthChecks by [95mNethermind[97m     Enabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Clique by [95mNethermind[97m           Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   AuRa by [95mNethermind[97m             Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Ethash by [95mNethermind[97m           Enabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Optimism by [95mNethermind[97m         Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Shutter by [95mNethermind[97m          Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Taiko by [95mNethermind[97m            Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   AuRaMerge by [95mNethermind[97m        Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Merge by [95mNethermind[97m            Enabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Hive by [95mNethermind[97m             Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Clef signer by [95mNethermind[97m      Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   EthStats by [95mNethermind[97m         Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Flashbots by [95mNethermind[97m        Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   NethDev by [95mNethermind[97m          Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Snapshot by [95mNethermind[97m         Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   TraceStore by [95mNethermind[97m       Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   UPnP by [95mNethermind[97m             Disabled [0m
+[97m[37m12 Feb 16:52:06[97m |   Xdc by [95mNethermind[97m              Disabled [0m
+[97m[37m12 Feb 16:52:06[97m[37m | [97mLoading Ckzg trusted setup from file C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Runner\release\kzg_trusted_setup.txt [0m
+[97m[37m12 Feb 16:52:06[97m[37m | [97mCPU: 12th Gen [95mIntel[97m(R) Core(TM) i7-12700H (14C20T) [0m
+[97m[37m12 Feb 16:52:06[97m[37m | [97mUsing [96mhttp://ipv4.icanhazip.com[97m to get external ip [0m
+[97m[37m12 Feb 16:52:07[97m[37m | [97mInitializing 3 plugins [0m
+[97m[37m12 Feb 16:52:07[97m |   HealthChecks by [95mNethermind[97m [0m
+[97m[37m12 Feb 16:52:07[97m |   HealthChecks by [95mNethermind[97m initialized in 9ms [0m
+[97m[37m12 Feb 16:52:07[97m |   Ethash by [95mNethermind[97m [0m
+[97m[37m12 Feb 16:52:07[97m |   Ethash by [95mNethermind[97m initialized in 0ms [0m
+[97m[37m12 Feb 16:52:07[97m |   Merge by [95mNethermind[97m [0m
+[97m[37m12 Feb 16:52:08[97m[37m | [97mStart block loaded from reorg boundary - 0 - 0 ([37m0x58b068...ade187[97m) [0m
+[97m[37m12 Feb 16:52:08[97m[37m | [97mNumbers resolved, level = 1, header = 1, body = 1 [0m
+[97m[37m12 Feb 16:52:08[97m[37m | [97mBeacon Numbers resolved, level = 0, header = 0, body = 0 [0m
+[97m[37m12 Feb 16:52:08[97m[37m | [97mLoading fork choice info [0m
+[97m[37m12 Feb 16:52:08[97m[37m | [97mBlock tree initialized, last processed is 0 ([37m0x58b068...ade187[97m), best queued is 1, best known is 1, lowest inserted header , lowest sync inserted block number  [0m
+[97m[37m12 Feb 16:52:08[97m[37m | [97mClient started with TTD: 0, TTD reached: True, Terminal Block Number , FinalTotalDifficulty: 0 [0m
+[97m[37m12 Feb 16:52:08[97m |   Merge by [95mNethermind[97m initialized in 1,168ms [0m
+[97m[37m12 Feb 16:52:08[97m[37m | [97mStarted monitoring for the group: [95mnethermind[97m, instance: [95mNethermind[97m [0m
+[97m[37m12 Feb 16:52:08[97m[37m | [97mSystem.Diagnostics.Metrics [96mdisabled[97m [0m
+[97m[37m12 Feb 16:52:11[97m[37m | [97mDetected 31 GB of available memory. Applying large memory State Db config. [0m
+[97m[37m12 Feb 16:52:11[97m[37m | [97mDetected HalfPath key scheme. [0m
+[97m[37m12 Feb 16:52:11[97m | [96mSnap[97m serving enabled, but PruningBoundary is less than 128. Setting to 128. [0m
+[97m[37m12 Feb 16:52:12[97m[37m | [97mBlockchainProcessor started. [0m
+[97m[37m12 Feb 16:52:12[97m[37m | [97mFound no blocks to load from DB [0m
+[97m[37m12 Feb 16:52:12[97m | [35mRerunning[97m block after reorg or pruning: 1 ([37m0xec9c9a...758922[97m) [0m
+[93m[37m12 Feb 16:52:12[93m[37m | [93mLow [37mtxs[93m, caches Rlp are not empty. Clearing them. [0m
+[97m[37m12 Feb 16:52:13[97m | [36mProcessed[97m                   1         | [38;5;208m   1,447.4[37m [37mms[97m  | slot          1,462 [37mms[97m |⛽ [97mGas gwei: 0.000 .. [97m0.000[37m (0.000) .. 0.000 [0m
+[97m[37m12 Feb 16:52:13[97m |  Block    0.0000 ETH[94m   100.00[37m [37mMGas[97m    |        1   [37mtxs[97m[37m | [97mcalls [38;5;196m   746,085[37m [37m(  0)[37m | [37msload       8[97m | [37msstore     10[97m[37m | [37mcreate   0[97m[37m [0m
+[97m[37m12 Feb 16:52:13[97m |  Block throughput [38;5;196m      69.09[37m [37mMGas/s[97m  |        0.7 [37mtps[97m |             0.69 [37mBlk/s[97m[37m | [97mexec code[37m cache 746,085 |[37m new      1[37m | [97mops   5,969,766 [0m
+[97m[37m12 Feb 16:52:13[97m | [35mRerunning[97m block after reorg or pruning: 1 ([37m0x3ffceb...f0e1db[97m) [0m
+[93m[37m12 Feb 16:52:13[93m[37m | [93mLow [37mtxs[93m, caches Rlp are not empty. Clearing them. [0m
+[97m[37m12 Feb 16:52:14[97m[37m | [97mNon consecutive block commit. This is likely a reorg. Last block commit: 1. New block commit: 1. [0m
+[97m[37m12 Feb 16:52:14[97m | [35mRerunning[97m block after reorg or pruning: 1 ([37m0x611610...2c6f40[97m) [0m
+[93m[37m12 Feb 16:52:14[93m[37m | [93mLow [37mtxs[93m, caches Rlp are not empty. Clearing them. [0m
+[97m[37m12 Feb 16:52:14[97m[37m | [97mNon consecutive block commit. This is likely a reorg. Last block commit: 1. New block commit: 1. [0m
+[97m[37m12 Feb 16:52:14[97m | [35mRerunning[97m block after reorg or pruning: 1 ([37m0xcc45aa...4b6f67[97m) [0m
+[93m[37m12 Feb 16:52:14[93m[37m | [93mLow [37mtxs[93m, caches Rlp are not empty. Clearing them. [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mNon consecutive block commit. This is likely a reorg. Last block commit: 1. New block commit: 1. [0m
+[97m[37m12 Feb 16:52:15[97m | [35mRerunning[97m block after reorg or pruning: 1 ([37m0x87dce3...5bbda7[97m) [0m
+[97m[37m12 Feb 16:52:15[97m | [36mProcessed[97m            -1...        1   |    1,194.7 [37mms[97m  | slot          1,219 [37mms[97m |⛽ [97mGas gwei: 0.000 .. [97m0.000[37m (0.000) .. 0.000 [0m
+[97m[37m12 Feb 16:52:15[97m |  Blocks  x3            300.00[37m [37mMGas[97m    |        3   [37mtxs[97m | [37mcalls  1,208,925[97m[37m [37m(  0)[37m | [37msload      24[97m | [37msstore     30[97m[37m | [37mcreate   0[97m[37m [0m
+[97m[37m12 Feb 16:52:15[97m |  Block throughput [38;5;196m     251.11[37m [37mMGas/s[97m  |        2.5 [37mtps[97m |             2.51 [37mBlk/s[97m[37m | [97mexec code[37m cache 1,208,934 |[37m new      0[37m | [97mops   9,673,465 [0m
+[93m[37m12 Feb 16:52:15[93m[37m | [93mLow [37mtxs[93m, caches Rlp are not empty. Clearing them. [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mNon consecutive block commit. This is likely a reorg. Last block commit: 1. New block commit: 1. [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mNumbers resolved, level = 1, header = 1, body = 1 [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mBeacon Numbers resolved, level = 0, header = 0, body = 0 [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mLoading fork choice info [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mLoaded 0 nodes from C:\Users\kamil\source\repos\gas-benchmarks\scripts\nethermind\execution-data\static-nodes.json [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mLoaded 0 nodes from C:\Users\kamil\source\repos\gas-benchmarks\scripts\nethermind\execution-data\trusted-nodes.json [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mAdding eth/69 capability [0m
+[93m[37m12 Feb 16:52:15[93m[37m | [93mSkipping discovery init due to DiscoveryEnabled set to false [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mStarting Merge block producer & sealer [0m
+[97m[37m12 Feb 16:52:15[97m[37m | [97mStarting Ethash block producer & sealer [0m
+[97m[37m12 Feb 16:52:16[97m[37m | [97mHealth RPC Module has been enabled [0m
+[97m[37m12 Feb 16:52:16[97m[37m | [97mReading authentication secret from 'C:\Users\kamil\AppData\Local\Temp\jwtsecret' [0m
+[97m[37m12 Feb 16:52:16[97m | [0m
+
+[97m[36m        ------             [38;5;208m   ~~~~~~~~        [37m[0m
+[97m[36m     --------- ----        [38;5;208m~~~~~~~~~~~~~~     [37m[0m
+[97m[36m   -  -------  ------      [38;5;208m  ~~~~~~~~~~~~~~   [37m[0m
+[97m[36m -----  -      ----        [38;5;208m   ~~~    ~~~~~~~~ [37m       ++   ++   +++++  ++++++  ++   ++   +++++  ++++++    ++    ++    ++   ++   ++   +++++ [0m
+[97m[36m ------         -          [38;5;208m            ~~~    [37m       +++  ++  ++        ++    ++   ++  ++      ++   ++  ++++   +++   ++   +++  ++   ++  ++ [0m
+[97m[36m-------                                   ----[37m       ++ + ++  ++++++    ++    +++++++  ++++++  ++++++   ++ +  + ++   ++   ++ + ++   ++  ++[0m
+[97m[36m----                                   -------[37m       ++  +++  ++        ++    ++   ++  ++      ++  ++   ++ ++++ ++   ++   ++  +++   ++  ++[0m
+[97m[38;5;208m    ~~~                  [36m    -         ------ [37m       ++   ++   +++++    ++    ++   ++   +++++  ++   ++  ++  ++  ++   ++   ++   ++   +++++ [0m
+[97m[38;5;208m ~~~~~~~~      ~         [36m  ----      -  ----- [37m[0m
+[97m[38;5;208m   ~~~~~~~~~~~~~~        [36m------  -------  -   [37m[0m
+[97m[38;5;208m     ~~~~~~~~~~~~~~      [36m  ---- ---------     [37m[0m
+[97m[38;5;208m        ~~~~~~~~         [36m       ------        [37m                                                                  [96mhttps://www.nethermind.io[97m[0m
+[97m[0m
+[97m-----------------------------  Initialization Completed  -----------------------------[0m
+[97m[0m
+[97mThis node    : enode://78efd2c2c91bb937d78687f20cecdab24a82f89210856c3d0ab8387baf00fd69078ffdfba19339b7532cfdf5739fe821333142e0c73b6210c32950c20e02dbde@188.146.18.27:30303 [0m
+[97mRPC modules  : Debug, Eth, Health, Net, Parity, Personal, Proof, Rpc, Subscribe, Trace, TxPool, Web3[0m
+[97mPublic id    : Nethermind/v1.37.0-unstable+[93m68007456[97m/windows-x64/dotnet10.0.1[0m
+[97mNode address : [37m0xeba3d4269881b2e015c83bc14d71b1e12f378fec[97m (do not use as an account)[0m
+[97mJSON RPC     : [96mhttp://0.0.0.0:8545[97m ; [96mhttp://0.0.0.0:8551[97m[0m
+[97mGaslimit     : [0m
+[97mExtraData    : [95mNethermind[97m v1.37.0a[0m
+[97mExternal IP  : 188.146.18.27[0m
+[97mEthereum     : tcp://188.146.18.27:30303 [0m
+[97mClient id    : Nethermind/v1.37.0-unstable+[93m68007456[97m/windows-x64/dotnet10.0.1[0m
+[97mChainspec    : C:/Users/kamil/source/repos/gas-benchmarks/scripts/genesisfiles/nethermind/zkevmgenesis.json[0m
+[97mChain head   : 0 ([37m0x58b068...ade187[97m)[0m
+[97mChain ID     : Mainnet[0m
+[97m-------------------------------------------------------------------------------------- [0m
+[97m[37m12 Feb 16:52:25[97m | [35mPeers[97m: 0[37m | [97mwith best block: 0 | | [37mActive: None[97m | [37mSleeping: All[97m [0m
+[97m[37m12 Feb 16:52:25[97m[37m | [97mWaiting for peers... 10s [0m
+[97m[37m12 Feb 16:52:35[97m[37m | [97mWaiting for peers... 20s [0m
+[97m[37m12 Feb 16:52:45[97m[37m | [97mWaiting for peers... 30s [0m
+[93m[37m12 Feb 16:52:49[93m[37m | [93mSearching the tree of "all.mainnet.ethdisco.net" had an error: Unknown Error [0m
+[93m[37m12 Feb 16:52:49[93m[37m | [93mSearching the tree of "all.mainnet.ethdisco.net" had an error: Unknown Error [0m
+[97m[37m12 Feb 16:52:55[97m[37m | [97mWaiting for peers... 40s [0m
+[97m[37m12 Feb 16:53:05[97m[37m | [97mWaiting for peers... 50s [0m
+[97m[37m12 Feb 16:53:15[97m[37m | [97mWaiting for peers... 60s [0m
+[97m[37m12 Feb 16:53:25[97m[37m | [97mWaiting for peers... 70s [0m
+[97m[37m12 Feb 16:53:35[97m[37m | [97mWaiting for peers... 80s [0m
+[97m[37m12 Feb 16:53:45[97m[37m | [97mWaiting for peers... 90s [0m
+[97m[37m12 Feb 16:53:55[97m[37m | [97mWaiting for peers... 100s [0m
+[97m[37m12 Feb 16:54:05[97m[37m | [97mWaiting for peers... 110s [0m
+[97m[37m12 Feb 16:54:15[97m[37m | [97mWaiting for peers... 120s [0m
+[97m[37m12 Feb 16:54:25[97m[37m | [97mWaiting for peers... 130s [0m
+[97m[37m12 Feb 16:54:35[97m[37m | [97mWaiting for peers... 140s [0m
+[97m[37m12 Feb 16:54:45[97m[37m | [97mWaiting for peers... 150s [0m
+[97m[37m12 Feb 16:54:55[97m | [35mPeers[97m: 0[37m | [97mnode diversity :  [0m
+[97m[37m12 Feb 16:54:55[97m[37m | [97mWaiting for peers... 160s [0m
+[97m[37m12 Feb 16:55:05[97m[37m | [97mWaiting for peers... 170s [0m
+[97m[37m12 Feb 16:55:15[97m[37m | [97mWaiting for peers... 180s [0m
+[97m[37m12 Feb 16:55:25[97m[37m | [97mWaiting for peers... 190s [0m
+[97m[37m12 Feb 16:55:35[97m[37m | [97mWaiting for peers... 200s [0m

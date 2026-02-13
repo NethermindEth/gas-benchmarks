@@ -1,0 +1,65 @@
+Top 40 Functions (Exclusive)                                                  Inclusive           Exclusive           
+1.  Monitor.Wait(class System.Object,int32)                                   51.42%              51.42%              
+2.  LowLevelLifoSemaphore.WaitForSignal(int32)                                25.48%              25.48%              
+3.  ManualResetEventSlim.Wait(int32,value class System.Threading.Cancellat    53.77%              7.47%               
+    ionToken)                                            
+4.  PortableThreadPool+IOCompletionPoller.Poll()                              5.12%               5.12%               
+5.  WaitHandle.WaitOneNoCheck(int32,bool,class System.Object,value class W    5.11%               5.11%               
+    aitHandleWaitSourceMap)                                            
+6.  WaitHandle.WaitAnyMultiple(value class System.ReadOnlySpan`1<class Mic    2.56%               2.56%               
+    rosoft.Win32.SafeHandles.SafeWaitHandle>,int32)                                            
+7.  Thread.Sleep(int32)                                                       2.56%               2.56%               
+8.  GC.ReRegisterForFinalize(class System.Object)                             0.07%               0.07%               
+9.  EvmInstructions.InstructionCall(class Nethermind.Evm.VirtualMachine`1<    0.05%               0.03%               
+    !!0>,value class Nethermind.Evm.EvmStack&,!!0&,int32&)                                            
+10. Buffer.MemmoveInternal(unsigned int8&,unsigned int8&,unsigned int)        0.02%               0.02%               
+11. EthereumGasPolicy].RunPrecompile(class Nethermind.Evm.VmState`1<!0>)      0.04%               0.01%               
+12. EthereumGasPolicy].RunByteCode(value class Nethermind.Evm.EvmStack&,!0    0.06%               0.01%               
+    &)                                            
+13. EthereumGasPolicy].ExecuteTransaction(class Nethermind.Evm.VmState`1<!    0.13%               0.01%               
+    0>,class Nethermind.Evm.State.IWorldState,class Nethermind.Evm.Tracing                                            
+    .ITxTracer)                                            
+14. EthereumGasPolicy].Dispose()                                              0.01%               0.01%               
+15. SocketAsyncEventArgs.DoOperationSendToSingleBuffer(class System.Net.So    0.01%               0%                  
+    ckets.SafeSocketHandle,value class System.Threading.CancellationToken)                                            
+                                                
+16. Thread.<PollGC>g__PollGCWorker|70_0()                                     0%                  0%                  
+17. ExecutionEnvironment.Rent(class Nethermind.Evm.CodeAnalysis.CodeInfo,c    0%                  0%                  
+    lass Nethermind.Core.Address,class Nethermind.Core.Address,class Nethe                                            
+    rmind.Core.Address,int32,value class Nethermind.Int256.UInt256&,value                                             
+    class Nethermind.Int256.UInt256&,value class System.ReadOnlyMemory`1<u                                            
+    nsigned int8>&)                                            
+18. __Canon].GetValueRefOrNullRefCore(!0)                                     0%                  0%                  
+19. LowLevelLifoSemaphore.ReleaseCore(int32)                                  0%                  0%                  
+20. SpanExtensions.FastHashAesX64(unsigned int8&,int32,unsigned int32)        0%                  0%                  
+21. TimerQueue.get_TickCount64()                                              0%                  0%                  
+22. __Canon].TryDequeue(!0&)                                                  0%                  0%                  
+23. StreamWriter.Flush(bool,bool)                                             0%                  0%                  
+24. Byte].ToArray()                                                           0.02%               0%                  
+25. LowLevelLifoSemaphore.Wait(int32,bool)                                    25.48%              0%                  
+26. EthereumGasPolicy].HandleRegularReturn(value class CallResult<!0>&,cla    0%                  0%                  
+    ss Nethermind.Evm.VmState`1<!0>)                                            
+27. Monitor.Enter_Slowpath(class System.Object)                               0%                  0%                  
+28. SpanHelpers.Memmove(unsigned int8&,unsigned int8&,unsigned int)           0%                  0%                  
+29. __Canon].GetValueRefOrAddDefault(class System.Collections.Generic.Dict    0%                  0%                  
+    ionary`2<!0,!1>,!0,bool&)                                            
+30. VirtualDispatchHelpers.VirtualFunctionPointer(class System.Object,int,    0%                  0%                  
+    int)                                            
+31. il!Interop+Kernel32.GetSystemTimes(int64&,int64&,int64&)                  0%                  0%                  
+32. il!Interop+Winsock.WSASendTo(class System.Runtime.InteropServices.Safe    0%                  0%                  
+    Handle,value class System.Net.Sockets.WSABuffer*,int32,int32&,value cl                                            
+    ass System.Net.Sockets.SocketFlags,value class System.ReadOnlySpan`1<u                                            
+    nsigned int8>,int32,value class System.Threading.NativeOverlapped*,int                                            
+    )                                            
+33. __Canon].FindValue(!0)                                                    0%                  0%                  
+34. SafeSocketHandle.DoCloseHandle(bool)                                      0%                  0%                  
+35. EvmInstructions.InstructionPush(class Nethermind.Evm.VirtualMachine`1<    0%                  0%                  
+    !!0>,value class Nethermind.Evm.EvmStack&,!!0&,int32&)                                            
+36. SocketPal.CreateSocket(value class System.Net.Sockets.AddressFamily,va    0%                  0%                  
+    lue class System.Net.Sockets.SocketType,value class System.Net.Sockets                                            
+    .ProtocolType,class System.Net.Sockets.SafeSocketHandle&)                                            
+37. AddressAsKey.GetHashCode()                                                0%                  0%                  
+38. Address.op_Equality(class Nethermind.Core.Address,class Nethermind.Cor    0%                  0%                  
+    e.Address)                                            
+39. il!Interop+Winsock.closesocket(int)                                       0%                  0%                  
+40. __Canon].Enqueue(!0)                                                      0%                  0%                  

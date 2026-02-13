@@ -1,0 +1,72 @@
+# TIMESTAMP: 639065160018331517
+# MEASUREMENT: [Application] Failed
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 1
+--------------------------------------------------------------
+# TIMESTAMP: 639065160018331517
+# MEASUREMENT: [Application] Messages
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 1
+--------------------------------------------------------------
+# TIMESTAMP: 639065160018331517
+# MEASUREMENT: [Application] Total Running Time
+# TAGS:
+                  mtype = timer
+                   unit = none
+               unit_dur = ms
+              unit_rate = min
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 17.626056340572774
+                samples = 1
+                   last = 3385.1677999999997
+             count.hist = 1
+                    sum = 3385.1677999999997
+                    min = 3385.1677999999997
+                    max = 3385.1677999999997
+                   mean = 3385.1677999999997
+                 median = 3385.1677999999997
+                 stddev = 0
+                   p999 = 3385.1677999999997
+                    p99 = 3385.1677999999997
+                    p98 = 3385.1677999999997
+                    p95 = 3385.1677999999997
+                    p75 = 3385.1677999999997
+--------------------------------------------------------------
+# TIMESTAMP: 639065160018331517
+# MEASUREMENT: [Application] engine_newPayloadV4
+# TAGS:
+                  mtype = timer
+                   unit = req
+               unit_dur = ms
+              unit_rate = ms
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 0.00029809759184543306
+                samples = 1
+                   last = 3308.0629
+             count.hist = 1
+                    sum = 3308.0629
+                    min = 3308.0629
+                    max = 3308.0629
+                   mean = 3308.0629
+                 median = 3308.0629
+                 stddev = 0
+                   p999 = 3308.0629
+                    p99 = 3308.0629
+                    p98 = 3308.0629
+                    p95 = 3308.0629
+                    p75 = 3308.0629
+--------------------------------------------------------------

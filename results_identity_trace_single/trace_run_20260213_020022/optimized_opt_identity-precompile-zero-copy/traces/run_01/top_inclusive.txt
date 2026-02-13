@@ -1,0 +1,15 @@
+[ERROR] System.Exception: Read past end of stream.
+   at FastSerialization.IOStreamStreamReader.Fill(Int32 minimum)
+   at FastSerialization.MemoryStreamReader.ReadByte()
+   at FastSerialization.Deserializer.ReadTag()
+   at FastSerialization.Deserializer.ReadObject()
+   at Microsoft.Diagnostics.Tracing.EventPipeEventSource.Process()
+   at Microsoft.Diagnostics.Tracing.Etlx.TraceLog.CopyRawEvents(TraceEventDispatcher rawEvents, IStreamWriter writer)
+   at Microsoft.Diagnostics.Tracing.Etlx.TraceLog.<>c__DisplayClass120_0.<FastSerialization.IFastSerializable.ToStream>b__0()
+   at Microsoft.Diagnostics.Tracing.Etlx.TraceLog.FastSerialization.IFastSerializable.ToStream(Serializer serializer)
+   at FastSerialization.Serializer.WriteObjectData(IFastSerializable obj, Tags beginTag)
+   at FastSerialization.Serializer.WriteObjectRef(IFastSerializable obj, Boolean defered)
+   at FastSerialization.Serializer..ctor(IStreamWriter writer, IFastSerializable entryObject)
+   at Microsoft.Diagnostics.Tracing.Etlx.TraceLog.CreateFromEventPipeEventSources(TraceEventDispatcher source, String etlxFilePath, TraceLogOptions options)
+   at Microsoft.Diagnostics.Tracing.Etlx.TraceLog.CreateFromEventPipeDataFile(String filePath, String etlxFilePath, TraceLogOptions options)
+   at Microsoft.Diagnostics.Tools.Trace.ReportCommandHandler.TopNReport(CancellationToken ct, IConsole console, String traceFile, Int32 number, Boolean inclusive, Boolean verbose) in /_/src/Tools/dotnet-trace/CommandLine/Commands/ReportCommand.cs:line 42

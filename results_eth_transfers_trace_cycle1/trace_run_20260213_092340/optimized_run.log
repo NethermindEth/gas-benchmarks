@@ -1,0 +1,206 @@
+[run-native] dotnet-trace profile 'cpu-sampling' is Linux-only on this version. Using 'dotnet-sampled-thread-time'.
+[run-native] dotnet-trace enabled (profile 'dotnet-sampled-thread-time')
+[run-native] dotnet-trace duration: 00:01:00
+[run-native] Building Nethermind.Runner...
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Nethermind.Logging -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Logging\release\Nethermind.Logging.dll
+  Nethermind.Logging.NLog -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Logging.NLog\release\Nethermind.Logging.NLog.dll
+  Nethermind.Core -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Core\release\Nethermind.Core.dll
+  Nethermind.Serialization.Json -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Serialization.Json\release\Nethermind.Serialization.Json.dll
+  Nethermind.Serialization.Ssz -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Serialization.Ssz\release\Nethermind.Serialization.Ssz.dll
+  Nethermind.Abi -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Abi\release\Nethermind.Abi.dll
+  Nethermind.Config -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Config\release\Nethermind.Config.dll
+  Nethermind.Network.Contract -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Network.Contract\release\Nethermind.Network.Contract.dll
+  Nethermind.Serialization.Rlp -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Serialization.Rlp\release\Nethermind.Serialization.Rlp.dll
+  Nethermind.Merkleization -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Merkleization\release\Nethermind.Merkleization.dll
+  Nethermind.Seq -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Seq\release\Nethermind.Seq.dll
+  Nethermind.Monitoring -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Monitoring\release\Nethermind.Monitoring.dll
+  Nethermind.Sockets -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Sockets\release\Nethermind.Sockets.dll
+  Nethermind.Grpc -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Grpc\release\Nethermind.Grpc.dll
+  Nethermind.Db -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Db\release\Nethermind.Db.dll
+  Nethermind.Specs -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Specs\release\Nethermind.Specs.dll
+  Nethermind.Network.Stats -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Network.Stats\release\Nethermind.Network.Stats.dll
+  Nethermind.Crypto -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Crypto\release\Nethermind.Crypto.dll
+  Nethermind.KeyStore -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.KeyStore\release\Nethermind.KeyStore.dll
+  Nethermind.Trie -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Trie\release\Nethermind.Trie.dll
+  Nethermind.Evm -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Evm\release\Nethermind.Evm.dll
+  Nethermind.Evm.Precompiles -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Evm.Precompiles\release\Nethermind.Evm.Precompiles.dll
+  Nethermind.State -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.State\release\Nethermind.State.dll
+  Nethermind.TxPool -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.TxPool\release\Nethermind.TxPool.dll
+  Nethermind.Wallet -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Wallet\release\Nethermind.Wallet.dll
+  Nethermind.Blockchain -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Blockchain\release\Nethermind.Blockchain.dll
+  Nethermind.Consensus -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Consensus\release\Nethermind.Consensus.dll
+  Nethermind.History -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.History\release\Nethermind.History.dll
+  Nethermind.Synchronization -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Synchronization\release\Nethermind.Synchronization.dll
+  Nethermind.Network -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Network\release\Nethermind.Network.dll
+  Nethermind.Facade -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Facade\release\Nethermind.Facade.dll
+  Nethermind.Network.Enr -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Network.Enr\release\Nethermind.Network.Enr.dll
+  Nethermind.Network.Dns -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Network.Dns\release\Nethermind.Network.Dns.dll
+  Nethermind.JsonRpc -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.JsonRpc\release\Nethermind.JsonRpc.dll
+  Nethermind.Db.Rpc -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Db.Rpc\release\Nethermind.Db.Rpc.dll
+  Nethermind.Api -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Api\release\Nethermind.Api.dll
+  Nethermind.Consensus.Ethash -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Consensus.Ethash\release\Nethermind.Consensus.Ethash.dll
+  Nethermind.UPnP.Plugin -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.UPnP.Plugin\release\Nethermind.UPnP.Plugin.dll
+  Nethermind.Consensus.Clique -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Consensus.Clique\release\Nethermind.Consensus.Clique.dll
+  Nethermind.Network.Discovery -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Network.Discovery\release\Nethermind.Network.Discovery.dll
+  Nethermind.Db.Rocks -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Db.Rocks\release\Nethermind.Db.Rocks.dll
+  Nethermind.Merge.Plugin -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Merge.Plugin\release\Nethermind.Merge.Plugin.dll
+  Nethermind.Era1 -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Era1\release\Nethermind.Era1.dll
+  Nethermind.ExternalSigner.Plugin -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.ExternalSigner.Plugin\release\Nethermind.ExternalSigner.Plugin.dll
+  Nethermind.Flashbots -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Flashbots\release\Nethermind.Flashbots.dll
+  Nethermind.Init -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Init\release\Nethermind.Init.dll
+  Nethermind.HealthChecks -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.HealthChecks\release\Nethermind.HealthChecks.dll
+  Nethermind.Shutter -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Shutter\release\Nethermind.Shutter.dll
+  Nethermind.Init.Snapshot -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Init.Snapshot\release\Nethermind.Init.Snapshot.dll
+  Nethermind.Consensus.AuRa -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Consensus.AuRa\release\Nethermind.Consensus.AuRa.dll
+  Nethermind.Taiko -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Taiko\release\Nethermind.Taiko.dll
+  Nethermind.JsonRpc.TraceStore -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.JsonRpc.TraceStore\release\Nethermind.JsonRpc.TraceStore.dll
+  Nethermind.Hive -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Hive\release\Nethermind.Hive.dll
+  Nethermind.Optimism -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Optimism\release\Nethermind.Optimism.dll
+  Nethermind.Xdc -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Xdc\release\Nethermind.Xdc.dll
+  Nethermind.EthStats -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.EthStats\release\Nethermind.EthStats.dll
+  Nethermind.Merge.AuRa -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Merge.AuRa\release\Nethermind.Merge.AuRa.dll
+  Nethermind.Runner -> C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Runner\release\nethermind.dll
+  Copying plugins after build...
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:28.44
+[run-native] Found 942 test files
+
+=== Run 1 of 1 ===
+[run-native] Cleaning execution-data for fresh state
+[run-native] Starting Nethermind from C:\Users\kamil\source\repos\nethermind\src\Nethermind\artifacts\bin\Nethermind.Runner\release\nethermind.exe (run 1)
+[run-native] Nethermind PID: 43536
+[run-native] Waiting for RPC at http://127.0.0.1:8545
+[run-native] RPC ready (attempt 5/300)
+[run-native] Starting dotnet-trace for run 1 (PID 43536, profile 'dotnet-sampled-thread-time')
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_a]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_a]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000900/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_a]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000900/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_a]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_b]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_b]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000901/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_b]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000901/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_b]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_diff_acc]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_diff_acc]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000902/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_diff_acc]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000902/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_diff_acc]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_b]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_b]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000903/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_b]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000903/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_b]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_diff_acc]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_diff_acc]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000904/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_diff_acc]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000904/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_diff_acc]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_a]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_a]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000905/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_a]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000905/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_a]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_b]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_b]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000906/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_b]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000906/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_b]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_diff_acc]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_diff_acc]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000907/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_diff_acc]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000907/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_diff_acc]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_b]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_b]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000908/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_b]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000908/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_b]-gas-value_100M.txt
+
+[INFO] Warmup 1/1 : python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/warmupresults" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_diff_acc]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kuteArguments '-f engine_newPayload' --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/warmup-tests/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_diff_acc]-gas-value_100M.txt
+[INFO] Measured: python run_kute.py --output "C:/Users/kamil/source/repos/gas-benchmarks/results" --testsPath "C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000909/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_diff_acc]-gas-value_100M.txt" --jwtPath "C:/Users/kamil/source/repos/gas-benchmarks/scripts/nethermind/jwtsecret" --client nethermind --run 1 --kutePath "C:\Users\kamil\source\repos\gas-benchmarks\nethermind\tools\artifacts\bin\Nethermind.Tools.Kute\release\Nethermind.Tools.Kute.exe" --ecURL http://127.0.0.1:8551
+Running nethermind for the 1 time with test case C:/Users/kamil/source/repos/gas-benchmarks/eest_tests/testing/000909/tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_diff_acc]-gas-value_100M.txt
+
+[run-native] Stopping Nethermind (PID 43536)
+[run-native] Generating dotnet-trace reports for run 1
+
+=== Generating reports ===
+[run-native] Running: python report_tables.py --resultsPath C:\Users\kamil\source\repos\gas-benchmarks\results --clients nethermind --testsPath eest_tests --runs 1 --skipEmpty --filter block_full_of_ether_transfers
+Processor: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel
+System: Windows
+Release: 10
+Version: 10.0.26200
+Machine: AMD64
+Processor Architecture: 64bit
+RAM: 31.68 GB
+CPU: 12th Gen Intel(R) Core(TM) i7-12700H
+Numbers of CPU: 20
+CPU GHz: 2.3000 GHz
+Computer Specs:
+Processor: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel
+System: Windows
+Release: 10
+Version: 10.0.26200
+Machine: AMD64
+Processor Architecture: 64bit
+RAM: 31.68 GB
+CPU: 12th Gen Intel(R) Core(TM) i7-12700H
+Numbers of CPU: 20
+CPU GHz: 2.3000 GHz
+
+
+
+Nethermind - ethpandaops/nethermind:performance - Benchmarking Report
+                               Title                                | Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description | Start time | End time | Duration (ms) | FCU time (ms) | NP time (ms)
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_a]|    265.64    |    265.64    |    265.64    |    265.64    |    265.64    |   1   |Description not found on metadata file            |2026-02-13 08:24:41.915321+00|2026-02-13 08:24:42.407402+00|    492.08    |     15.78     |    376.38    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_b]|    346.12    |    346.12    |    346.12    |    346.12    |    346.12    |   1   |Description not found on metadata file            |2026-02-13 08:24:43.509308+00|2026-02-13 08:24:43.903923+00|    394.62    |     5.36      |    288.87    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_a_to_diff_acc]|    497.34    |    497.34    |    497.34    |    497.34    |    497.34    |   1   |Description not found on metadata file            |2026-02-13 08:24:45.011169+00|2026-02-13 08:24:45.311920+00|    300.75    |     18.88     |    201.03    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_b]|    476.24    |    476.24    |    476.24    |    476.24    |    476.24    |   1   |Description not found on metadata file            |2026-02-13 08:24:46.414787+00|2026-02-13 08:24:46.706062+00|    291.27    |     4.21      |    209.94    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_0-case_id_diff_acc_to_diff_acc]|    464.79    |    464.79    |    464.79    |    464.79    |    464.79    |   1   |Description not found on metadata file            |2026-02-13 08:24:47.856796+00|2026-02-13 08:24:48.155876+00|    299.08    |     5.30      |    215.11    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_a]|    570.12    |    570.12    |    570.12    |    570.12    |    570.12    |   1   |Description not found on metadata file            |2026-02-13 08:24:49.196861+00|2026-02-13 08:24:49.456161+00|    259.30    |     4.86      |    175.37    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_b]|    565.63    |    565.63    |    565.63    |    565.63    |    565.63    |   1   |Description not found on metadata file            |2026-02-13 08:24:50.540138+00|2026-02-13 08:24:50.798950+00|    258.81    |     4.16      |    176.76    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_a_to_diff_acc]|    486.60    |    486.60    |    486.60    |    486.60    |    486.60    |   1   |Description not found on metadata file            |2026-02-13 08:24:51.920174+00|2026-02-13 08:24:52.209595+00|    289.42    |     4.01      |    205.47    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_b]|    556.39    |    556.39    |    556.39    |    556.39    |    556.39    |   1   |Description not found on metadata file            |2026-02-13 08:24:53.257172+00|2026-02-13 08:24:53.520714+00|    263.54    |     3.69      |    179.70    
+tests_benchmark_compute_scenario_test_transaction_types.py__test_block_full_of_ether_transfers[fork_Prague-benchmark-blockchain_test_engine_x-balance_1-case_id_diff_acc_to_diff_acc]|    431.73    |    431.73    |    431.73    |    431.73    |    431.73    |   1   |Description not found on metadata file            |2026-02-13 08:24:54.715080+00|2026-02-13 08:24:55.035126+00|    320.05    |     6.18      |    231.58    
+
+
+Nethermind - ethpandaops/nethermind:performance - Benchmarking Report
+                               Title                                | Min (MGas/s) | Max (MGas/s) | p50 (MGas/s) | p95 (MGas/s) | p99 (MGas/s) |   N   |    Description | Start time | End time | Duration (ms) | FCU time (ms) | NP time (ms)
+
+
+Done!
+
+=== Done ===
+[run-native] Logs: C:\Users\kamil\source\repos\gas-benchmarks\logs
+[run-native] Results: C:\Users\kamil\source\repos\gas-benchmarks\results
+[run-native] Trace output: C:\Users\kamil\source\repos\gas-benchmarks\results_eth_transfers_trace_cycle1\trace_run_20260213_092340\optimized_perf_eth-transfers-maxout-v1-20260213\traces
+[run-native] Trace run 1: C:\Users\kamil\source\repos\gas-benchmarks\results_eth_transfers_trace_cycle1\trace_run_20260213_092340\optimized_perf_eth-transfers-maxout-v1-20260213\traces\run_01\dotnet-sampled-thread-time.nettrace
+[run-native]   top inclusive: C:\Users\kamil\source\repos\gas-benchmarks\results_eth_transfers_trace_cycle1\trace_run_20260213_092340\optimized_perf_eth-transfers-maxout-v1-20260213\traces\run_01\top_inclusive.txt
+[run-native]   top exclusive: C:\Users\kamil\source\repos\gas-benchmarks\results_eth_transfers_trace_cycle1\trace_run_20260213_092340\optimized_perf_eth-transfers-maxout-v1-20260213\traces\run_01\top_exclusive.txt
+[run-native]   topN status: ok
+[run-native]   convert log: C:\Users\kamil\source\repos\gas-benchmarks\results_eth_transfers_trace_cycle1\trace_run_20260213_092340\optimized_perf_eth-transfers-maxout-v1-20260213\traces\run_01\convert.log
+
+=== STDERR ===
+WARNING: Ignoring invalid distribution - (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution -p (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution -p (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution -ip (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution -ocutils (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution - (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution -p (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution -p (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution -ip (c:\python310\lib\site-packages)
+WARNING: Ignoring invalid distribution -ocutils (c:\python310\lib\site-packages)
+  WARNING: Failed to write executable - trying to use .deleteme logic
+ERROR: Could not install packages due to an OSError: [WinError 2] The system cannot find the file specified: 'C:\\Python310\\Scripts\\f2py.exe' -> 'C:\\Python310\\Scripts\\f2py.exe.deleteme'
+
+
+[notice] A new release of pip is available: 24.0 -> 26.0.1
+[notice] To update, run: python.exe -m pip install --upgrade pip

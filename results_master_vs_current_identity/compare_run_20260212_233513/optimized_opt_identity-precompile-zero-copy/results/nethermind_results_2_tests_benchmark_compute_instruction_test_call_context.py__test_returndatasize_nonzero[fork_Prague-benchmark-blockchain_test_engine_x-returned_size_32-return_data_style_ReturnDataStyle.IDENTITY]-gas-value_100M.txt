@@ -1,0 +1,100 @@
+# TIMESTAMP: 639065325816288021
+# MEASUREMENT: [Application] Messages
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 2
+--------------------------------------------------------------
+# TIMESTAMP: 639065325816288021
+# MEASUREMENT: [Application] Succeeded
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 2
+--------------------------------------------------------------
+# TIMESTAMP: 639065325816288021
+# MEASUREMENT: [Application] Total Running Time
+# TAGS:
+                  mtype = timer
+                   unit = none
+               unit_dur = ms
+              unit_rate = min
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 256.8413987240119
+                samples = 1
+                   last = 218.831
+             count.hist = 1
+                    sum = 218.831
+                    min = 218.831
+                    max = 218.831
+                   mean = 218.831
+                 median = 218.831
+                 stddev = 0
+                   p999 = 218.831
+                    p99 = 218.831
+                    p98 = 218.831
+                    p95 = 218.831
+                    p75 = 218.831
+--------------------------------------------------------------
+# TIMESTAMP: 639065325816288021
+# MEASUREMENT: [Application] engine_forkchoiceUpdatedV3
+# TAGS:
+                  mtype = timer
+                   unit = req
+               unit_dur = ms
+              unit_rate = ms
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 0.03752317055781946
+                samples = 1
+                   last = 0.749
+             count.hist = 1
+                    sum = 0.749
+                    min = 0.749
+                    max = 0.749
+                   mean = 0.749
+                 median = 0.749
+                 stddev = 0
+                   p999 = 0.749
+                    p99 = 0.749
+                    p98 = 0.749
+                    p95 = 0.749
+                    p75 = 0.749
+--------------------------------------------------------------
+# TIMESTAMP: 639065325816288021
+# MEASUREMENT: [Application] engine_newPayloadV4
+# TAGS:
+                  mtype = timer
+                   unit = req
+               unit_dur = ms
+              unit_rate = ms
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 0.005753428755867059
+                samples = 1
+                   last = 141.9722
+             count.hist = 1
+                    sum = 141.9722
+                    min = 141.9722
+                    max = 141.9722
+                   mean = 141.9722
+                 median = 141.9722
+                 stddev = 0
+                   p999 = 141.9722
+                    p99 = 141.9722
+                    p98 = 141.9722
+                    p95 = 141.9722
+                    p75 = 141.9722
+--------------------------------------------------------------

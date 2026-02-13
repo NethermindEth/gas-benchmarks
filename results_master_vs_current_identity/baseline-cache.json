@@ -1,0 +1,87 @@
+{
+    "warmupCount":  1,
+    "warmupTestsPath":  "warmup-tests",
+    "baselinedFilters":  [
+                             "ecrecover",
+                             "identity"
+                         ],
+    "allFiltersBaselined":  false,
+    "createdAtUtc":  "2026-02-12T22:19:18.1667837Z",
+    "updatedAtUtc":  "2026-02-12T22:55:02.3764760Z",
+    "runs":  3,
+    "baselineBranch":  "master",
+    "testsPath":  "eest_tests",
+    "schemaVersion":  1,
+    "runHistory":  [
+                       {
+                           "baselineExecuted":  true,
+                           "runDirectory":  "results_master_vs_current_identity\\compare_run_20260212_231918",
+                           "baselineFilterExecuted":  "identity",
+                           "optimizedExecuted":  true,
+                           "timestampUtc":  "2026-02-12T22:24:33.5135448Z",
+                           "requestedFilter":  "identity",
+                           "baselineBranch":  "master",
+                           "optimizedBranch":  "opt/identity-precompile-zero-copy"
+                       },
+                       {
+                           "timestampUtc":  "2026-02-12T22:27:22.1534834Z",
+                           "runDirectory":  "results_master_vs_current_identity\\compare_run_20260212_232527",
+                           "baselineExecuted":  false,
+                           "baselineFilterExecuted":  "",
+                           "requestedFilter":  "identity",
+                           "optimizedExecuted":  true,
+                           "optimizedBranch":  "opt/identity-precompile-zero-copy",
+                           "baselineBranch":  "master"
+                       },
+                       {
+                           "baselineExecuted":  false,
+                           "runDirectory":  "results_master_vs_current_identity\\compare_run_20260212_233310",
+                           "baselineFilterExecuted":  "",
+                           "optimizedExecuted":  true,
+                           "timestampUtc":  "2026-02-12T22:34:49.8412639Z",
+                           "requestedFilter":  "identity",
+                           "baselineBranch":  "master",
+                           "optimizedBranch":  "opt/identity-precompile-zero-copy"
+                       },
+                       {
+                           "timestampUtc":  "2026-02-12T22:36:55.5990225Z",
+                           "runDirectory":  "results_master_vs_current_identity\\compare_run_20260212_233513",
+                           "baselineExecuted":  false,
+                           "baselineFilterExecuted":  "",
+                           "requestedFilter":  "identity",
+                           "optimizedExecuted":  true,
+                           "optimizedBranch":  "opt/identity-precompile-zero-copy",
+                           "baselineBranch":  "master"
+                       },
+                       {
+                           "baselineExecuted":  true,
+                           "runDirectory":  "results_master_vs_current_identity\\compare_run_20260212_233851",
+                           "baselineFilterExecuted":  "ecrecover",
+                           "optimizedExecuted":  true,
+                           "timestampUtc":  "2026-02-12T22:42:01.2545921Z",
+                           "requestedFilter":  "identity,ecrecover",
+                           "baselineBranch":  "master",
+                           "optimizedBranch":  "opt/identity-precompile-zero-copy"
+                       },
+                       {
+                           "baselineExecuted":  false,
+                           "runDirectory":  "results_master_vs_current_identity\\compare_run_20260212_234542",
+                           "baselineFilterExecuted":  "",
+                           "timestampUtc":  "2026-02-12T22:47:29.5817637Z",
+                           "requestedFilter":  "identity,ecrecover",
+                           "optimizedExecuted":  true,
+                           "optimizedBranch":  "opt/identity-precompile-zero-copy",
+                           "baselineBranch":  "master"
+                       },
+                       {
+                           "optimizedBranch":  "opt/identity-precompile-zero-copy",
+                           "runDirectory":  "results_master_vs_current_identity\\compare_run_20260212_235113",
+                           "baselineBranch":  "master",
+                           "baselineExecuted":  true,
+                           "optimizedExecuted":  true,
+                           "timestampUtc":  "2026-02-12T22:55:02.3800049Z",
+                           "baselineFilterExecuted":  "identity,ecrecover",
+                           "requestedFilter":  "identity,ecrecover"
+                       }
+                   ]
+}

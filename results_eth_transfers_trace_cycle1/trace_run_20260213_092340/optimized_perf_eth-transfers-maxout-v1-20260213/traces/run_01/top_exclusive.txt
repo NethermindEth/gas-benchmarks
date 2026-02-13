@@ -1,0 +1,72 @@
+Top 40 Functions (Exclusive)                                                  Inclusive           Exclusive           
+1.  Monitor.Wait(class System.Object,int32)                                   41.79%              41.79%              
+2.  LowLevelLifoSemaphore.WaitForSignal(int32)                                38.88%              38.88%              
+3.  ManualResetEventSlim.Wait(int32,value class System.Threading.Cancellat    43.82%              6.22%               
+    ionToken)                                            
+4.  PortableThreadPool+IOCompletionPoller.Poll()                              4.17%               4.17%               
+5.  WaitHandle.WaitOneNoCheck(int32,bool,class System.Object,value class W    4.16%               4.16%               
+    aitHandleWaitSourceMap)                                            
+6.  WaitHandle.WaitAnyMultiple(value class System.ReadOnlySpan`1<class Mic    2.09%               2.09%               
+    rosoft.Win32.SafeHandles.SafeWaitHandle>,int32)                                            
+7.  Thread.Sleep(int32)                                                       2.09%               2.09%               
+8.  SecP256k1.RecoverKeyFromCompact(value class System.Span`1<unsigned int    0.35%               0.35%               
+    8>,value class System.ReadOnlySpan`1<unsigned int8>,value class System                                            
+    .ReadOnlySpan`1<unsigned int8>,int32,bool)                                            
+9.  Buffer.ZeroMemoryInternal(unsigned int8&,unsigned int)                    0.09%               0.09%               
+10. Monitor.Enter_Slowpath(class System.Object)                               0.03%               0.03%               
+11. Thread.<PollGC>g__PollGCWorker|70_0()                                     0.03%               0.03%               
+12. NodeStorage.Get(class Nethermind.Core.Crypto.Hash256,value class Nethe    0.02%               0.02%               
+    rmind.Trie.TreePath&,value class Nethermind.Core.Crypto.ValueHash256&,                                            
+    value class Nethermind.Core.ReadFlags)                                            
+13. LowLevelLifoSemaphore.Wait(int32,bool)                                    38.9%               0.02%               
+14. TxPool.UpdateGasBottleneckAndMarkForEviction(class Nethermind.Core.Col    0.02%               0.01%               
+    lections.EnhancedSortedSet`1<class Nethermind.Core.Transaction>,int64,                                            
+    value class Nethermind.Int256.UInt256,class Nethermind.Core.Transactio                                            
+    n,class UpdateTransactionDelegate)                                            
+15. LowLevelLifoSemaphore.ReleaseCore(int32)                                  0.01%               0.01%               
+16. TransactionExtensions.IsOverflowWhenAddingTxCostToCumulative(class Net    0.01%               0.01%               
+    hermind.Core.Transaction,value class Nethermind.Int256.UInt256,value c                                            
+    lass Nethermind.Int256.UInt256&)                                            
+17. StreamWriter.Flush(bool,bool)                                             0.01%               0.01%               
+18. KeccakHash.KeccakF1600(value class System.Span`1<unsigned int64>)         0%                  0%                  
+19. TimerQueue.get_TickCount64()                                              0%                  0%                  
+20. SocketAsyncEventArgs.DoOperationSendToSingleBuffer(class System.Net.So    0%                  0%                  
+    ckets.SafeSocketHandle,value class System.Threading.CancellationToken)                                            
+                                                
+21. SemaphoreSlim.WaitUntilCountOrTimeout(int64,int64,value class System.T    4.18%               0%                  
+    hreading.CancellationToken)                                            
+22. GC.Collect(int32,value class System.GCCollectionMode,bool,bool,bool)      0%                  0%                  
+23. PortableThreadPool+WorkerThread.WorkerThreadStart()                       39.53%              0%                  
+24. PortableThreadPool+CpuUtilizationReader.get_CurrentUtilization()          0%                  0%                  
+25. SystemIPv4InterfaceProperties.GetPerAdapterInfo(unsigned int32)           0%                  0%                  
+26. DbOnTheRocks.SetWithColumnFamily(value class System.ReadOnlySpan`1<uns    0%                  0%                  
+    igned int8>,class RocksDbSharp.ColumnFamilyHandle,value class System.R                                            
+    eadOnlySpan`1<unsigned int8>,value class Nethermind.Core.WriteFlags)                                            
+27. TrieStore.FindCachedOrUnknown(class Nethermind.Core.Crypto.Hash256,val    0%                  0%                  
+    ue class Nethermind.Trie.TreePath&,class Nethermind.Core.Crypto.Hash25                                            
+    6,bool)                                            
+28. BalanceTooLowFilter.Accept(class Nethermind.Core.Transaction,value cla    0%                  0%                  
+    ss Nethermind.TxPool.TxFilteringState&,value class Nethermind.TxPool.T                                            
+    xHandlingOptions)                                            
+29. SemaphoreSlim.WaitCore(int64,value class System.Threading.Cancellation    4.18%               0%                  
+    Token)                                            
+30. TransactionExtensions.CalculateEffectiveGasPrice(class Nethermind.Core    0%                  0%                  
+    .Transaction,bool,value class Nethermind.Int256.UInt256&)                                            
+31. il!Interop+Kernel32.GetSystemTimes(int64&,int64&,int64&)                  0%                  0%                  
+32. TrieNode+TrieNodeDecoder.GetChildrenRlpLengthForBranchRlp(class Nether    0.01%               0%                  
+    mind.Trie.Pruning.ITrieNodeResolver,value class Nethermind.Trie.TreePa                                            
+    th&,class Nethermind.Trie.TrieNode,class Nethermind.Core.Buffers.ICapp                                            
+    edArrayPool)                                            
+33. Native.rocksdb_write(int,int,int)                                         0%                  0%                  
+34. TrieNode+TrieNodeDecoder.EncodeLeaf(class Nethermind.Trie.TrieNode,cla    0.01%               0%                  
+    ss Nethermind.Core.Buffers.ICappedArrayPool)                                            
+35. TransactionExtensions.CheckForNotEnoughBalance(class Nethermind.Core.T    0%                  0%                  
+    ransaction,value class Nethermind.Int256.UInt256,value class Nethermin                                            
+    d.Int256.UInt256,value class Nethermind.Int256.UInt256&)                                            
+36. ExecutionPayload.TryGetTransactions()                                     0%                  0%                  
+37. SocketPal.CreateSocket(value class System.Net.Sockets.AddressFamily,va    0%                  0%                  
+    lue class System.Net.Sockets.SocketType,value class System.Net.Sockets                                            
+    .ProtocolType,class System.Net.Sockets.SafeSocketHandle&)                                            
+38. .ctor(int32)                                                              0%                  0%                  
+39. __Canon].FindValue(!0)                                                    0%                  0%                  
+40. SpinWait.SpinOnceCore(int32)                                              0%                  0%                  
