@@ -5,6 +5,7 @@
 
 # Default results folder
 /results/
+/results*/
 /prepresults/
 /reports/
 /reports.zip
@@ -16,6 +17,21 @@
 /generationresults/
 /tmp/
 /opcode-tracing/
+/compare_run_*/
+/jitasm_*/
+/tmp_compare_*/
+/tmp_setup_*/
+/compare_*.csv
+/compare_*.md
+/master_results.txt
+/optimized_results.txt
+/mstore_*report*.md
+/reth_over_nethermind_top40.csv
+/tmp_*.csv
+/tmp_*.asm
+/newpayload_comparison_*.csv
+/newpayload_comparison_*.md
+/scripts/nethermind/nethermind_native.log
 
 # Others
 .idea/
