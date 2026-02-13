@@ -815,6 +815,22 @@ for run in $(seq 1 $RUNS); do
     raw_genesis="$DEFAULT_GENESIS"
     genesis_client="$client_base"
 
+    if [ "$NETWORK" = "perf-devnet-2" ]; then
+      case "$client_base" in
+        besu)
+          raw_genesis="bloatnet-osaka.json"
+          genesis_client="besu"
+          ;;
+        geth|reth|erigon|nimbus|ethrex)
+          raw_genesis="bloatnet-osaka.json"
+          genesis_client="geth"
+          ;;
+        nethermind)
+          raw_genesis=""
+          ;;
+      esac
+    fi
+
     if [ -n "$raw_genesis" ]; then
       if [ "$genesis_client" != "besu" ] && [ "$genesis_client" != "nethermind" ]; then
         genesis_client="geth"
@@ -861,7 +877,11 @@ for run in $(seq 1 $RUNS); do
       echo "Using custom genesis for $client: $genesis_path"
       setup_cmd+=(--genesisPath "$genesis_path")
     elif [ -n "$NETWORK" ]; then
-      setup_cmd+=(--network "$NETWORK")
+      if [ "$NETWORK" = "perf-devnet-2" ] && [ "$client_base" = "nethermind" ]; then
+        echo "Skipping --network for nethermind on perf-devnet-2 (no custom genesis required)"
+      else
+        setup_cmd+=(--network "$NETWORK")
+      fi
     fi
     setup_cmd+=(--volumeName "$volume_name")
 
