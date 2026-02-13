@@ -874,7 +874,9 @@ for run in $(seq 1 $RUNS); do
 
     setup_cmd=(python3 setup_node.py --client "$client" --imageBulk "$IMAGES" --dataDir "$data_dir")
     if [ -n "$NETWORK" ]; then
-      if [ "$NETWORK" = "perf-devnet-2" ] && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
+      if [ "$NETWORK" = "perf-devnet-2" ] && [ "$client_base" = "nethermind" ]; then
+        echo "Not passing --network to nethermind on perf-devnet-2"
+      elif [ "$NETWORK" = "perf-devnet-2" ] && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
         echo "Using custom genesis for $client: $genesis_path"
         setup_cmd+=(--genesisPath "$genesis_path")
       else
