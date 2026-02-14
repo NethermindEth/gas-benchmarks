@@ -641,6 +641,15 @@ jobs:
               echo "Skipping DB upload: missing per-test report dir ${REPORTS_DIR}"
               continue
             fi
+            echo "DB upload source dir: ${REPORTS_DIR}"
+            find "$REPORTS_DIR" -maxdepth 1 -type f \( -name 'output_*.csv' -o -name 'raw_results_*.csv' -o -name 'computer_specs.txt' -o -name 'index.html' \) -print | sort || true
+            mapfile -t OUTPUT_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'output_*.csv' | sort)
+            mapfile -t RAW_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'raw_results_*.csv' | sort)
+            echo "output_csv_count=${#OUTPUT_CSFS[@]} raw_csv_count=${#RAW_CSFS[@]}"
+            for csv in "${OUTPUT_CSFS[@]}" "${RAW_CSFS[@]}"; do
+              [ -f "$csv" ] || continue
+              echo "$(basename "$csv"): lines=$(wc -l < "$csv")"
+            done
 
             DB_HOST="${{ env.PERFNET_DB_HOST }}"
             DB_PORT="${{ env.PERFNET_DB_PORT }}"
@@ -667,7 +676,6 @@ jobs:
   retrigger:
     needs: populate-db
     runs-on: ubuntu-latest
-    if: ${{ false }} # temporarily disabled
     steps:
       - name: Retrigger workflow
         uses: benc-uk/workflow-dispatch@v1

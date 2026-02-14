@@ -567,6 +567,9 @@ def populate_data_for_client(
                     if run_value is None:
                         logging.debug(f"Skipping empty run value for {test_case_name_raw}.")
                         continue
+                    if run_value <= 0:
+                        # Zero/negative values represent missing or invalid measurements.
+                        continue
 
                     raw_run_duration_ms: Optional[float] = None
                     raw_run_mgas_s: Optional[float] = None
@@ -753,8 +756,10 @@ def main() -> None:
                 aggregated_stats_map = load_aggregated_stats(output_csv_path)
 
                 if not aggregated_stats_map:
-                    logging.warning(f"No aggregated stats loaded for client {client_name}, skipping raw data processing for this client.")
-                    continue
+                    logging.warning(
+                        f"No aggregated stats loaded for client {client_name}; "
+                        "continuing with raw_results_* ingestion only."
+                    )
 
                 inserted_for_client = populate_data_for_client(
                     cursor, args.table_name, client_name, client_version, # Added client_version
