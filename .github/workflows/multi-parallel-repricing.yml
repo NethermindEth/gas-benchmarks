@@ -43,7 +43,7 @@ env:
 
 jobs:
   set-matrix:
-    if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && env.INPUT_REPLAY_RUN_ID == '' }}
+    if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && (github.event_name != 'workflow_dispatch' || github.event.inputs.replay_run_id == '') }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -107,7 +107,7 @@ jobs:
 
   build:
     needs: set-matrix
-    if: ${{ env.INPUT_REPLAY_RUN_ID == '' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.replay_run_id == '' }}
     runs-on:
       - self-hosted
       - repricing
@@ -424,7 +424,7 @@ jobs:
           docker system prune -af --volumes || true
   combine-results:
     needs: build
-    if: ${{ needs.build.result == 'success' || env.INPUT_REPLAY_RUN_ID != '' }}
+    if: ${{ needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && github.event.inputs.replay_run_id != '') }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -741,7 +741,7 @@ jobs:
           fi
 
   retrigger:
-    if: ${{ needs.populate-db.result == 'success' && env.INPUT_REPLAY_RUN_ID == '' }}
+    if: ${{ needs.populate-db.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.replay_run_id == '') }}
     needs: populate-db
     runs-on: ubuntu-latest
     steps:
