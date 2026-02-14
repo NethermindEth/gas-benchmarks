@@ -59,7 +59,7 @@ jobs:
           if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
             runs=1
           fi
-          clients="geth,nethermind,erigon,besu,reth"
+          clients="geth,nethermind,besu"
           IFS=',' read -ra client_array <<< "$clients"
           tests_input="${{ env.INPUT_TEST }}"
           targets=()
