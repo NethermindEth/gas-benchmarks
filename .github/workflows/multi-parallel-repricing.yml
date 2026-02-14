@@ -615,7 +615,7 @@ jobs:
 
   populate-db:
     needs: combine-results
-    if: ${{ needs.combine-results.result == 'success' }}
+    if: ${{ always() && needs.combine-results.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
