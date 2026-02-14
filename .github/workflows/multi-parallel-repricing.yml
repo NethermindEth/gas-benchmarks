@@ -24,6 +24,9 @@ on:
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
+      replay_run_id:
+        description: 'Existing workflow run ID to reuse artifacts from (skip build, combine+populate only)'
+        default: ''
 
 concurrency:
   group: repricing-${{ github.ref }}
@@ -36,10 +39,11 @@ env:
   INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
   INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
   INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
+  INPUT_REPLAY_RUN_ID: ${{ github.event.inputs.replay_run_id || '' }}
 
 jobs:
   set-matrix:
-    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && env.INPUT_REPLAY_RUN_ID == '' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -103,6 +107,7 @@ jobs:
 
   build:
     needs: set-matrix
+    if: ${{ env.INPUT_REPLAY_RUN_ID == '' }}
     runs-on:
       - self-hosted
       - repricing
@@ -419,6 +424,7 @@ jobs:
           docker system prune -af --volumes || true
   combine-results:
     needs: build
+    if: ${{ needs.build.result == 'success' || env.INPUT_REPLAY_RUN_ID != '' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -438,10 +444,22 @@ jobs:
       - name: Install python dependencies
         run: pip install -r requirements.txt
 
-      - uses: actions/download-artifact@v4
+      - name: Download artifacts from current run
+        if: ${{ env.INPUT_REPLAY_RUN_ID == '' }}
+        uses: actions/download-artifact@v4
         with:
           path: combined-results
           merge-multiple: true
+
+      - name: Download artifacts from replay run
+        if: ${{ env.INPUT_REPLAY_RUN_ID != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          path: combined-results
+          merge-multiple: true
+          run-id: ${{ env.INPUT_REPLAY_RUN_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pattern: results-*
 
       - name: Extract all result files
         run: |
@@ -497,11 +515,7 @@ jobs:
               continue
             fi
 
-            mapfile -t TEST_CLIENT_FILES < <(
-              find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -regextype posix-extended \
-                -regex '.*/[A-Za-z0-9_-]+_results_[0-9]+_.*\\.txt' \
-                | sort
-            )
+            mapfile -t TEST_CLIENT_FILES < <(find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*.txt' | sort)
             if [ "${#TEST_CLIENT_FILES[@]}" -eq 0 ]; then
               echo "Skipping $TESTS - no client result files under ${TEST_RESULTS_ROOT}"
               continue
@@ -509,7 +523,7 @@ jobs:
             TEST_CLIENT_LIST=$(
               printf "%s\n" "${TEST_CLIENT_FILES[@]}" \
                 | awk -F/ '{print $NF}' \
-                | sed -nE 's/^([A-Za-z0-9_-]+)_results_[0-9]+_.*$/\1/p' \
+                | sed -nE 's/^([A-Za-z0-9_-]+)_results_[0-9]+_.*\.txt$/\1/p' \
                 | sort -u \
                 | paste -sd',' -
             )
@@ -573,11 +587,7 @@ jobs:
               echo "Skipping txt report for ${TESTS} - missing ${TEST_RESULTS_ROOT}"
               continue
             fi
-            mapfile -t TEST_CLIENT_FILES < <(
-              find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -regextype posix-extended \
-                -regex '.*/[A-Za-z0-9_-]+_results_[0-9]+_.*\\.txt' \
-                | sort
-            )
+            mapfile -t TEST_CLIENT_FILES < <(find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*.txt' | sort)
             if [ "${#TEST_CLIENT_FILES[@]}" -eq 0 ]; then
               echo "Skipping txt report for ${TESTS} - no client result files"
               continue
@@ -585,7 +595,7 @@ jobs:
             TEST_CLIENT_LIST=$(
               printf "%s\n" "${TEST_CLIENT_FILES[@]}" \
                 | awk -F/ '{print $NF}' \
-                | sed -nE 's/^([A-Za-z0-9_-]+)_results_[0-9]+_.*$/\1/p' \
+                | sed -nE 's/^([A-Za-z0-9_-]+)_results_[0-9]+_.*\.txt$/\1/p' \
                 | sort -u \
                 | paste -sd',' -
             )
@@ -605,6 +615,7 @@ jobs:
 
   populate-db:
     needs: combine-results
+    if: ${{ needs.combine-results.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
@@ -730,6 +741,7 @@ jobs:
           fi
 
   retrigger:
+    if: ${{ needs.populate-db.result == 'success' && env.INPUT_REPLAY_RUN_ID == '' }}
     needs: populate-db
     runs-on: ubuntu-latest
     steps:
