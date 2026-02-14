@@ -424,7 +424,7 @@ jobs:
           docker system prune -af --volumes || true
   combine-results:
     needs: build
-    if: ${{ needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && github.event.inputs.replay_run_id != '') }}
+    if: ${{ always() && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && github.event.inputs.replay_run_id != '')) }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
