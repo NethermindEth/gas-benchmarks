@@ -457,36 +457,8 @@ jobs:
       - name: Process combined results
         run: |
           set -euo pipefail
-          RESULTS_ROOT="extracted-results/results"
-          if [ ! -d "$RESULTS_ROOT" ]; then
-            echo "Results directory not found: $RESULTS_ROOT"
-            exit 1
-          fi
-
-          mapfile -t CLIENTS < <(find "$RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
-          if [ "${#CLIENTS[@]}" -eq 0 ]; then
-            echo "No client result files detected under $RESULTS_ROOT; skipping report generation."
-            mkdir -p reports
-            exit 0
-          fi
-
-          CLIENT_LIST=$(
-            printf "%s\n" "${CLIENTS[@]}" \
-              | xargs -n1 basename \
-              | sed 's/_results_.*//' \
-              | sort -u \
-              | paste -sd',' -
-          )
-
-          if [ -z "$CLIENT_LIST" ]; then
-            echo "Unable to derive client list from results; skipping report generation."
-            mkdir -p reports
-            exit 0
-          fi
-          echo "CLIENT_LIST=$CLIENT_LIST" >> $GITHUB_ENV
-
-          rm -rf reports
-          mkdir -p reports
+          rm -rf reports extracted-results/by_test
+          mkdir -p reports extracted-results/by_test
 
           RUNS="${{ env.INPUT_RUNS }}"
           IMAGES='${{ env.INPUT_IMAGES }}'
@@ -510,20 +482,57 @@ jobs:
               continue
             fi
             SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+            TEST_EXTRACT_DIR="extracted-results/by_test/${SAFE_TESTS}"
+            TEST_RESULTS_ROOT="${TEST_EXTRACT_DIR}/results"
             PER_TEST_REPORT_DIR="reports/by_test/${SAFE_TESTS}"
 
-            python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+            rm -rf "$TEST_EXTRACT_DIR"
+            mkdir -p "$TEST_EXTRACT_DIR"
+
+            mapfile -t TEST_ZIPS < <(find combined-results -type f -name "results-*-${SAFE_TESTS}.zip" | sort)
+            if [ "${#TEST_ZIPS[@]}" -eq 0 ]; then
+              echo "Skipping $TESTS - no matching result artifacts found for ${SAFE_TESTS}"
+              continue
+            fi
+            for zip in "${TEST_ZIPS[@]}"; do
+              unzip -o "$zip" -d "$TEST_EXTRACT_DIR" >/dev/null
+            done
+
+            if [ ! -d "$TEST_RESULTS_ROOT" ]; then
+              echo "Skipping $TESTS - extracted results directory not found at ${TEST_RESULTS_ROOT}"
+              continue
+            fi
+
+            mapfile -t TEST_CLIENT_FILES < <(find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
+            if [ "${#TEST_CLIENT_FILES[@]}" -eq 0 ]; then
+              echo "Skipping $TESTS - no client result files under ${TEST_RESULTS_ROOT}"
+              continue
+            fi
+            TEST_CLIENT_LIST=$(
+              printf "%s\n" "${TEST_CLIENT_FILES[@]}" \
+                | xargs -n1 basename \
+                | sed 's/_results_.*//' \
+                | sort -u \
+                | paste -sd',' -
+            )
+            if [ -z "$TEST_CLIENT_LIST" ]; then
+              echo "Skipping $TESTS - unable to derive clients from ${TEST_RESULTS_ROOT}"
+              continue
+            fi
+
+            echo "Generating reports for ${TESTS} with clients: ${TEST_CLIENT_LIST}"
+            python3 report_tables.py --resultsPath "$TEST_RESULTS_ROOT" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
             cp reports/tables_norm.txt "reports/tables_norm_${SAFE_TESTS}.txt"
 
-            python3 report_html.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+            python3 report_html.py --resultsPath "$TEST_RESULTS_ROOT" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
             cp reports/index.html "reports/index_${SAFE_TESTS}.html"
 
             rm -rf "$PER_TEST_REPORT_DIR"
             mkdir -p "$PER_TEST_REPORT_DIR"
             cp reports/tables_norm.txt "$PER_TEST_REPORT_DIR/tables_norm.txt"
             cp reports/index.html "$PER_TEST_REPORT_DIR/index.html"
-            if [ -f "$RESULTS_ROOT/computer_specs.txt" ]; then
-              cp "$RESULTS_ROOT/computer_specs.txt" "$PER_TEST_REPORT_DIR/computer_specs.txt"
+            if [ -f "$TEST_RESULTS_ROOT/computer_specs.txt" ]; then
+              cp "$TEST_RESULTS_ROOT/computer_specs.txt" "$PER_TEST_REPORT_DIR/computer_specs.txt"
             fi
 
             mapfile -t BASE_CSVS < <(find reports -maxdepth 1 -type f \( -regex '.*/output_[^_]+\.csv' -o -regex '.*/raw_results_[^_]+\.csv' \) | sort)
@@ -561,8 +570,25 @@ jobs:
               continue
             fi
             SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
-            python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath "$TESTS"
-            cp "extracted-results/results/transition_report_engine_newPayloadV4.txt" "reports/transition_report_engine_newPayloadV4_${SAFE_TESTS}.txt"
+            TEST_RESULTS_ROOT="extracted-results/by_test/${SAFE_TESTS}/results"
+            if [ ! -d "$TEST_RESULTS_ROOT" ]; then
+              echo "Skipping txt report for ${TESTS} - missing ${TEST_RESULTS_ROOT}"
+              continue
+            fi
+            mapfile -t TEST_CLIENT_FILES < <(find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
+            if [ "${#TEST_CLIENT_FILES[@]}" -eq 0 ]; then
+              echo "Skipping txt report for ${TESTS} - no client result files"
+              continue
+            fi
+            TEST_CLIENT_LIST=$(
+              printf "%s\n" "${TEST_CLIENT_FILES[@]}" \
+                | xargs -n1 basename \
+                | sed 's/_results_.*//' \
+                | sort -u \
+                | paste -sd',' -
+            )
+            python3 report_txt.py --resultsPath "${TEST_RESULTS_ROOT}/" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS"
+            cp "${TEST_RESULTS_ROOT}/transition_report_engine_newPayloadV4.txt" "reports/transition_report_engine_newPayloadV4_${SAFE_TESTS}.txt"
           done
 
       - name: Zip the results folder
@@ -596,8 +622,8 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          path: combined-results # Download artifacts from previous jobs
-          merge-multiple: true
+          name: reports
+          path: combined-results
 
       - name: Extract all result files
         run: |
@@ -680,7 +706,7 @@ jobs:
       - name: Retrigger workflow
         uses: benc-uk/workflow-dispatch@v1
         with:
-          workflow: multi-parallel.yml
+          workflow: multi-parallel-repricing.yml
           ref: "${{ github.ref }}"
           token: "${{ secrets.GH_TOKEN }}"
           inputs: ${{ toJson(github.event.inputs) }}
