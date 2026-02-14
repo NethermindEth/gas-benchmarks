@@ -25,6 +25,14 @@ GENESIS_FILES: Dict[str, Path] = {
 }
 DEFAULT_GENESIS = GENESIS_FILES["geth"]
 
+
+def resolve_nethermind_config_network(network: str) -> str:
+    normalized = str(network).strip().lower()
+    if normalized in {"mainnet", "perf-devnet-2"}:
+        return "mainnet"
+    return normalized
+
+
 CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     "nethermind": {
         "env_key": "CHAINSPEC_PATH",
@@ -34,7 +42,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
             {
                 "env": "NETHERMIND_CONFIG_FLAG",
                 "custom": "--config=none",
-                "network": lambda net: f"--config={net}",
+                "network": lambda net: f"--config={resolve_nethermind_config_network(net)}",
             },
             {
                 "env": "NETHERMIND_GENESIS_FLAG",
