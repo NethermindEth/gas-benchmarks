@@ -107,12 +107,12 @@ jobs:
       - self-hosted
       - repricing
       - ${{ matrix.client }}
+    timeout-minutes: 1440
 
     strategy:
       # Consume the JSON matrix we just emitted
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
       fail-fast: false
-      max-parallel: 5
 
     env:
       PIP_BREAK_SYSTEM_PACKAGES: "1"
