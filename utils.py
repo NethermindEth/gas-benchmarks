@@ -16,7 +16,17 @@ import datetime
 
 logger = logging.getLogger(__name__)
 
-def read_results(text):
+def _parse_number(value):
+    match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", str(value))
+    if not match:
+        return None
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return None
+
+
+def _parse_legacy_results(text):
     sections = {}
     for i, sections_text in enumerate(text.split('--------------------------------------------------------------')):
         # print("Processing section: " + str(i))
@@ -51,6 +61,270 @@ def read_results(text):
             sections[measurement] = SectionData(timestamp, measurement, tags, fields)
 
     return sections
+
+
+def _parse_new_kute_report(text):
+    lower_text = text.lower()
+    if "=== report ===" not in lower_text and "singles:" not in lower_text:
+        return {}
+
+    timestamp = 0
+    summary_fields = {}
+    method_fields = {}
+    in_singles = False
+    current_method = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if stripped.lower() == "singles:":
+            in_singles = True
+            current_method = None
+            continue
+        if stripped.lower() == "batches:":
+            in_singles = False
+            current_method = None
+            continue
+
+        summary_match = re.match(
+            r"^(Total Time|Total Messages|Succeeded|Failed|Ignored|Responses)\s*:\s*(.+)$",
+            stripped,
+            re.IGNORECASE,
+        )
+        if summary_match:
+            key = summary_match.group(1).strip().lower().replace(" ", "_")
+            value = summary_match.group(2).strip()
+            numeric = _parse_number(value)
+            if numeric is None:
+                continue
+            if key == "total_time":
+                summary_fields["total_time_ms"] = str(numeric * 1000.0)
+            else:
+                summary_fields[key] = str(int(numeric))
+            continue
+
+        if not in_singles:
+            continue
+
+        field_match = re.match(r"^(Count|Max|Average|Mean|Min|Stddev|StdDev)\s*:\s*(.+)$", stripped, re.IGNORECASE)
+        if field_match and current_method:
+            field_name = field_match.group(1).strip().lower()
+            value = field_match.group(2).strip()
+            numeric = _parse_number(value)
+            if numeric is None:
+                continue
+            if field_name == "count":
+                method_fields[current_method]["count"] = str(int(numeric))
+            elif field_name in ("average", "mean"):
+                method_fields[current_method]["mean"] = str(numeric)
+            elif field_name == "max":
+                method_fields[current_method]["max"] = str(numeric)
+            elif field_name == "min":
+                method_fields[current_method]["min"] = str(numeric)
+            elif field_name == "stddev":
+                method_fields[current_method]["stddev"] = str(numeric)
+            continue
+
+        method_match = re.match(r"^(.+?)\s*:\s*$", stripped)
+        if method_match:
+            method_name = method_match.group(1).strip()
+            if method_name.lower() in (
+                "count",
+                "max",
+                "average",
+                "mean",
+                "min",
+                "stddev",
+            ):
+                continue
+            current_method = method_name
+            method_fields.setdefault(current_method, {})
+
+    if not method_fields and not summary_fields:
+        return {}
+
+    sections = {}
+    for method_name, fields in method_fields.items():
+        local_fields = dict(fields)
+        count = _parse_number(local_fields.get("count", "0")) or 0
+        mean = _parse_number(local_fields.get("mean", "0")) or 0
+        if "sum" not in local_fields:
+            local_fields["sum"] = str(mean * count)
+
+        names = [method_name]
+        if not method_name.startswith("[Application] "):
+            names.append(f"[Application] {method_name}")
+        for name in names:
+            sections[name] = SectionData(timestamp, name, {}, dict(local_fields))
+
+    total_running_time_ms = _parse_number(summary_fields.get("total_time_ms", ""))
+    if total_running_time_ms is None:
+        total_running_time_ms = 0
+        for fields in method_fields.values():
+            total_running_time_ms += _parse_number(fields.get("sum", "0")) or 0
+    total_fields = {"sum": str(total_running_time_ms)}
+    sections["Total Running Time"] = SectionData(timestamp, "Total Running Time", {}, dict(total_fields))
+    sections["[Application] Total Running Time"] = SectionData(timestamp, "[Application] Total Running Time", {}, dict(total_fields))
+
+    if summary_fields:
+        sections["Summary"] = SectionData(timestamp, "Summary", {}, dict(summary_fields))
+        sections["[Application] Summary"] = SectionData(timestamp, "[Application] Summary", {}, dict(summary_fields))
+
+    return sections
+
+
+def read_results(text):
+    sections = _parse_legacy_results(text)
+    if sections:
+        return sections
+    return _parse_new_kute_report(text)
+
+
+def _resolve_section(sections, measurement):
+    if measurement in sections:
+        return sections[measurement]
+    app_name = f"[Application] {measurement}"
+    if app_name in sections:
+        return sections[app_name]
+    if measurement.startswith("[Application] "):
+        plain_name = measurement[len("[Application] "):]
+        if plain_name in sections:
+            return sections[plain_name]
+    plain_measurement = measurement[len("[Application] "):] if measurement.startswith("[Application] ") else measurement
+    lowered_plain = plain_measurement.lower()
+    if lowered_plain.startswith("engine_newpayload"):
+        fallback = _resolve_section_by_prefix(sections, "engine_newpayload")
+        if fallback:
+            return fallback
+    if lowered_plain.startswith("engine_forkchoiceupdated"):
+        fallback = _resolve_section_by_prefix(sections, "engine_forkchoiceupdated")
+        if fallback:
+            return fallback
+    return None
+
+
+def _resolve_section_by_prefix(sections, prefix):
+    best = None
+    for key, section in sections.items():
+        normalized = key[len("[Application] "):] if key.startswith("[Application] ") else key
+        lowered = normalized.lower()
+        if not lowered.startswith(prefix):
+            continue
+
+        suffix = normalized[len(prefix):]
+        version = -1
+        version_match = re.match(r"^v(\d+)$", suffix, re.IGNORECASE)
+        if version_match:
+            version = int(version_match.group(1))
+        elif suffix == "":
+            version = 0
+
+        app_score = 1 if key.startswith("[Application] ") else 0
+        score = (version, app_score)
+        if best is None or score > best[0]:
+            best = (score, section)
+
+    return best[1] if best else None
+
+
+def _extract_summary_failed_count(sections):
+    for summary_key in ("Summary", "[Application] Summary"):
+        summary = sections.get(summary_key)
+        if not summary:
+            continue
+        failed_number = _parse_number(summary.fields.get("failed"))
+        if failed_number is not None:
+            return int(failed_number)
+    return None
+
+
+def _normalize_token(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+
+def _expand_candidate_tokens(candidate_suffixes):
+    expanded = []
+    seen = set()
+
+    def add(token):
+        if token is None:
+            return
+        token = str(token).strip()
+        if not token:
+            return
+        lowered = token.lower()
+        if lowered in seen:
+            return
+        seen.add(lowered)
+        expanded.append(token)
+
+    for token in candidate_suffixes:
+        add(token)
+        token = str(token)
+        if ".py__" in token:
+            left, right = token.split(".py__", 1)
+            add(left)
+            add(right)
+        if "[" in token and "]" in token:
+            inside = token.split("[", 1)[1].rsplit("]", 1)[0]
+            add(inside)
+        add(re.sub(r"_\d+M$", "", token, flags=re.IGNORECASE))
+
+    return expanded
+
+
+def _select_best_result_file(results_path, client, run, gas_used, candidate_suffixes):
+    if not os.path.isdir(results_path):
+        return None, None
+
+    result_prefix = f"{client}_results_{run}_"
+    response_prefix = f"{client}_response_{run}_"
+    available_result_files = sorted(
+        file_name for file_name in os.listdir(results_path)
+        if file_name.startswith(result_prefix) and file_name.endswith(".txt")
+    )
+    if not available_result_files:
+        return None, None
+
+    tokens = _expand_candidate_tokens(candidate_suffixes)
+    gas_tag = f"_{gas_used}m"
+    best = None
+    for file_name in available_result_files:
+        stem = file_name[len(result_prefix):-4]
+        stem_lower = stem.lower()
+        stem_norm = _normalize_token(stem)
+        score = -1
+
+        for token in tokens:
+            token_lower = token.lower()
+            token_norm = _normalize_token(token)
+            if stem_lower == token_lower:
+                score = max(score, 100 + len(token))
+            elif stem_lower.endswith(token_lower):
+                score = max(score, 80 + len(token))
+            elif token_lower in stem_lower:
+                score = max(score, 60 + len(token))
+            elif token_norm and (token_norm in stem_norm or stem_norm in token_norm):
+                score = max(score, 20 + len(token_norm))
+
+        if gas_tag in stem_lower:
+            score += 5
+
+        if score < 0:
+            continue
+        if best is None or score > best[0]:
+            best = (score, stem)
+
+    if best is None:
+        return None, None
+
+    stem = best[1]
+    result_file = os.path.join(results_path, f"{result_prefix}{stem}.txt")
+    response_file = os.path.join(results_path, f"{response_prefix}{stem}.txt")
+    return result_file, response_file if os.path.exists(response_file) else None
 
 
 def extract_response_and_result(
@@ -91,75 +365,93 @@ def extract_response_and_result(
         potential_result = f"{results_path}/{client}_results_{run}_{suffix}.txt"
         potential_response = f"{results_path}/{client}_response_{run}_{suffix}.txt"
 
-        if os.path.exists(potential_result) and os.path.exists(potential_response):
+        if os.path.exists(potential_result):
             result_file = potential_result
-            response_file = potential_response
+            if os.path.exists(potential_response):
+                response_file = potential_response
             break
 
-    response = True
-    result = 0
+    if not result_file:
+        selected_result, selected_response = _select_best_result_file(
+            results_path=results_path,
+            client=client,
+            run=run,
+            gas_used=gas_used,
+            candidate_suffixes=candidate_suffixes,
+        )
+        if selected_result:
+            result_file = selected_result
+            response_file = selected_response
+
     if not result_file or not os.path.exists(result_file):
-        print("No result")
         return False, 0, 0, 0, 0, 0
-    if not response_file or not os.path.exists(response_file):
-        print("No repsonse")
-        return False, 0, 0, 0, 0, 0
-    # Get the responses from the files
-    with open(response_file, 'r') as file:
-        text = file.read()
-        if len(text) == 0:
-            print("text len 0")
-            return False, 0, 0, 0, 0, 0
-        found_status_line = False
-        # Get latest line
-        for line in text.split('\n'):
-            if len(line) < 1:
-                continue
-            status = check_sync_status(line)
-            if status is None:
-                continue
-            found_status_line = True
-            if not status:
-                print("Invalid sync status")
-                return False, 0, 0, 0, 0, 0
-        if not found_status_line:
-            print("No status-bearing JSON response line found")
-            return False, 0, 0, 0, 0, 0
-    # Get the results from the files
+
+    response = True
+    result = 0.0
+    timestamp = 0
+    total_running_time_ms = 0.0
+    fcu_duration_ms = 0.0
+    np_duration_ms = 0.0
+
     with open(result_file, 'r') as file:
         sections = read_results(file.read())
-        # Add [Application] prefix to method name if not present
-        method_key = f'[Application] {method}' if not method.startswith('[Application]') else method
-        
-        if method_key not in sections:
-            print(f"Method '{method_key}' not found in sections for file {result_file}. Available methods: {list(sections.keys())}")
-            # Get timestamp from first available section, or 0 if no sections exist
-            timestamp = getattr(next(iter(sections.values())), 'timestamp', 0) if sections else 0
+        if not sections:
+            return False, 0, 0, 0, 0, 0
+
+        method_section = _resolve_section(sections, method)
+        if not method_section:
+            timestamp = getattr(next(iter(sections.values())), 'timestamp', 0)
             return False, 0, timestamp, 0, 0, 0
-        result = sections[method_key].fields[field]
-        timestamp = getattr(sections[method_key], 'timestamp', 0)
-        # Extract total running time if available (in milliseconds)
-        total_running_time_ms = 0
-        if '[Application] Total Running Time' in sections:
-            total_running_time_section = sections['[Application] Total Running Time']
-            if 'sum' in total_running_time_section.fields:
-                total_running_time_ms = float(total_running_time_section.fields['sum'])
-        
-        # Extract FCU (engine_forkchoiceUpdatedV3) duration
-        fcu_duration_ms = 0
-        if '[Application] engine_forkchoiceUpdatedV3' in sections:
-            fcu_section = sections['[Application] engine_forkchoiceUpdatedV3']
-            if 'sum' in fcu_section.fields:
-                fcu_duration_ms = float(fcu_section.fields['sum'])
-        
-        # Extract NP (engine_newPayloadV4) duration
-        np_duration_ms = 0
-        if '[Application] engine_newPayloadV4' in sections:
-            np_section = sections['[Application] engine_newPayloadV4']
-            if 'sum' in np_section.fields:
-                np_duration_ms = float(np_section.fields['sum'])
-    
-    return response, float(result), timestamp, total_running_time_ms, fcu_duration_ms, np_duration_ms
+
+        raw_result = method_section.fields.get(field)
+        if raw_result is None and field == 'max':
+            raw_result = method_section.fields.get('mean')
+        parsed_result = _parse_number(raw_result)
+        if parsed_result is not None:
+            result = float(parsed_result)
+
+        timestamp = getattr(method_section, 'timestamp', 0)
+
+        total_running_time_section = _resolve_section(sections, 'Total Running Time')
+        if total_running_time_section and 'sum' in total_running_time_section.fields:
+            parsed_total = _parse_number(total_running_time_section.fields.get('sum'))
+            if parsed_total is not None:
+                total_running_time_ms = float(parsed_total)
+
+        fcu_section = _resolve_section(sections, 'engine_forkchoiceUpdatedV3')
+        if fcu_section and 'sum' in fcu_section.fields:
+            parsed_fcu = _parse_number(fcu_section.fields.get('sum'))
+            if parsed_fcu is not None:
+                fcu_duration_ms = float(parsed_fcu)
+
+        np_section = _resolve_section(sections, 'engine_newPayloadV4')
+        if np_section and 'sum' in np_section.fields:
+            parsed_np = _parse_number(np_section.fields.get('sum'))
+            if parsed_np is not None:
+                np_duration_ms = float(parsed_np)
+
+        summary_failed_count = _extract_summary_failed_count(sections)
+
+    response_status_determined = False
+    if response_file and os.path.exists(response_file):
+        with open(response_file, 'r') as file:
+            text = file.read()
+            if len(text) > 0:
+                for line in text.split('\n'):
+                    if len(line) < 1:
+                        continue
+                    status = check_sync_status(line)
+                    if status is None:
+                        continue
+                    response_status_determined = True
+                    if not status:
+                        response = False
+                        break
+
+    if not response_status_determined and summary_failed_count is not None:
+        response = summary_failed_count == 0
+
+    return response, result, timestamp, total_running_time_ms, fcu_duration_ms, np_duration_ms
 
 
 def get_gas_table(client_results, client, test_cases, gas_set, method, metadata, skip_empty=False):
