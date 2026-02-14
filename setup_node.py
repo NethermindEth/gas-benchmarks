@@ -79,7 +79,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "GETH_NETWORK_FLAG",
-                "custom": "--networkid=1337",
+                "custom": "--override.genesis=/tmp/genesis/genesis.json",
                 "network": lambda net: f"--{net.lower()}",
             },
             {
@@ -115,7 +115,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "ERIGON_CHAIN_FLAG",
-                "custom": "",
+                "custom": "--chain=/tmp/genesis/genesis.json",
                 "network": lambda net: f"--chain={net.lower()}",
             },
             {

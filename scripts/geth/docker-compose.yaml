@@ -32,6 +32,7 @@ services:
       - --datadir=/var/lib/goethereum
       - --port=0
       - --http.port=8545
+      - ${GETH_NETWORK_FLAG}
       - --maxpeers=0
       - --nodiscover
       - --bootnodes=
