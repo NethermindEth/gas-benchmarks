@@ -121,16 +121,15 @@ def main():
                         if str(timestamp) != "0":
                             # Store raw timestamp in ticks for calculation, not converted string
                             client_results[client][test_case_name]["timestamp_ticks"] = timestamp
-                            # Only store duration if non-zero to avoid overwriting valid values
-                            if duration != 0:
-                                client_results[client][test_case_name]["duration"] = duration
-                            if fcu_duration != 0:
-                                client_results[client][test_case_name]["fcu_duration"] = fcu_duration
-                            if np_duration != 0:
-                                client_results[client][test_case_name]["np_duration"] = np_duration
-                        else:
-                            if "timestamp_ticks" not in client_results[client][test_case_name]:
-                                client_results[client][test_case_name]["timestamp_ticks"] = 0
+                        elif "timestamp_ticks" not in client_results[client][test_case_name]:
+                            client_results[client][test_case_name]["timestamp_ticks"] = 0
+                        # Store duration metrics even when timestamp is unavailable (new Kute report format).
+                        if duration != 0:
+                            client_results[client][test_case_name]["duration"] = duration
+                        if fcu_duration != 0:
+                            client_results[client][test_case_name]["fcu_duration"] = fcu_duration
+                        if np_duration != 0:
+                            client_results[client][test_case_name]["np_duration"] = np_duration
                         # Initialize duration to 0 only if not set yet
                         if "duration" not in client_results[client][test_case_name]:
                             client_results[client][test_case_name]["duration"] = 0
