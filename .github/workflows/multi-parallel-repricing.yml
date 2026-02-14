@@ -360,13 +360,7 @@ jobs:
             echo "Warmup path not found: $WARMUP_PATH; continuing without explicit warmup path"
           fi
 
-          TEST_PATH_LC=$(echo "$TEST_PATH" | tr '[:upper:]' '[:lower:]')
           EFFECTIVE_FILTER="${{ env.INPUT_FILTER }}"
-          if [[ "$TEST_PATH_LC" == *"compute"* ]]; then
-            EFFECTIVE_FILTER="not_op"
-          elif [[ "$TEST_PATH_LC" == *"stateful"* ]]; then
-            EFFECTIVE_FILTER="test_mixed_sload_sstore[fork_Osaka-blockchain_test-10-90-token_name_XEN"
-          fi
           echo "Using filter: '${EFFECTIVE_FILTER}' for test path: $TEST_PATH"
 
           ./run.sh \
@@ -728,7 +722,6 @@ jobs:
           fi
 
   retrigger:
-    if: ${{ false }}
     needs: populate-db
     runs-on: ubuntu-latest
     steps:
