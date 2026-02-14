@@ -646,6 +646,12 @@ jobs:
 
           uploads=0
           skipped=0
+          targets_count=0
+          for candidate in "${TEST_PATHS[@]}"; do
+            trimmed="$(echo "$candidate" | xargs)"
+            [ -z "$trimmed" ] && continue
+            targets_count=$((targets_count + 1))
+          done
           for raw_test_path in "${TEST_PATHS[@]}"; do
             TESTS="$(echo "$raw_test_path" | xargs)"
             [ -z "$TESTS" ] && continue
@@ -663,19 +669,41 @@ jobs:
 
             SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
             REPORTS_DIR="extracted-results/reports/by_test/${SAFE_TESTS}"
+            if [ "$targets_count" -eq 1 ]; then
+              REPORTS_DIR="extracted-results/reports"
+            fi
             if [ ! -d "$REPORTS_DIR" ]; then
-              echo "Skipping DB upload: missing per-test report dir ${REPORTS_DIR}"
-              continue
+              FALLBACK_DIR="extracted-results/reports"
+              if [ -d "$FALLBACK_DIR" ]; then
+                echo "Per-test report dir missing for ${TESTS}, falling back to ${FALLBACK_DIR}"
+                REPORTS_DIR="$FALLBACK_DIR"
+              else
+                echo "Skipping DB upload: missing report dir ${REPORTS_DIR}"
+                continue
+              fi
             fi
             echo "DB upload source dir: ${REPORTS_DIR}"
             find "$REPORTS_DIR" -maxdepth 1 -type f \( -name 'output_*.csv' -o -name 'raw_results_*.csv' -o -name 'computer_specs.txt' -o -name 'index.html' \) -print | sort || true
             mapfile -t OUTPUT_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'output_*.csv' | sort)
             mapfile -t RAW_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'raw_results_*.csv' | sort)
+            if [ "${#OUTPUT_CSFS[@]}" -eq 0 ] && [ "${#RAW_CSFS[@]}" -eq 0 ]; then
+              FALLBACK_DIR="extracted-results/reports"
+              if [ "$REPORTS_DIR" != "$FALLBACK_DIR" ] && [ -d "$FALLBACK_DIR" ]; then
+                echo "No report CSVs in ${REPORTS_DIR}; retrying with fallback ${FALLBACK_DIR}"
+                REPORTS_DIR="$FALLBACK_DIR"
+                mapfile -t OUTPUT_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'output_*.csv' | sort)
+                mapfile -t RAW_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'raw_results_*.csv' | sort)
+              fi
+            fi
             echo "output_csv_count=${#OUTPUT_CSFS[@]} raw_csv_count=${#RAW_CSFS[@]}"
             for csv in "${OUTPUT_CSFS[@]}" "${RAW_CSFS[@]}"; do
               [ -f "$csv" ] || continue
               echo "$(basename "$csv"): lines=$(wc -l < "$csv")"
             done
+            if [ "${#OUTPUT_CSFS[@]}" -eq 0 ] && [ "${#RAW_CSFS[@]}" -eq 0 ]; then
+              echo "Skipping DB upload for ${TESTS}: no CSV inputs available even after fallback."
+              continue
+            fi
 
             DB_HOST="${{ env.PERFNET_DB_HOST }}"
             DB_PORT="${{ env.PERFNET_DB_PORT }}"

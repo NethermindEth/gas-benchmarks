@@ -719,27 +719,39 @@ def main() -> None:
             logging.debug(f"Computer specs parsed: {computer_specs}")
 
             output_csv_pattern = os.path.join(args.reports_dir, "output_*.csv")
-            client_files = glob.glob(output_csv_pattern)
+            raw_csv_pattern = os.path.join(args.reports_dir, "raw_results_*.csv")
+            output_files = glob.glob(output_csv_pattern)
+            raw_files = glob.glob(raw_csv_pattern)
 
-            if not client_files:
-                logging.warning(f"No 'output_*.csv' files found in {args.reports_dir}. Cannot determine clients.")
-                # No sys.exit here, connection will be closed in finally
-                return # Exit main if no clients
-
-            clients: List[str] = []
-            for f_path in client_files:
+            clients_set = set()
+            for f_path in output_files:
                 filename = os.path.basename(f_path)
                 match = re.match(r"output_(.+)\.csv", filename)
                 if match:
-                    clients.append(match.group(1))
+                    clients_set.add(match.group(1))
                 else:
                     logging.warning(f"Could not parse client name from {filename}")
 
-            if not clients:
-                logging.warning(f"No clients could be determined from 'output_*.csv' files in {args.reports_dir}. Exiting.")
+            for f_path in raw_files:
+                filename = os.path.basename(f_path)
+                match = re.match(r"raw_results_(.+)\.csv", filename)
+                if match:
+                    clients_set.add(match.group(1))
+                else:
+                    logging.warning(f"Could not parse client name from {filename}")
+
+            if not clients_set:
+                logging.warning(
+                    f"No output/raw client CSV files found in {args.reports_dir}. "
+                    "Cannot determine clients."
+                )
                 return
 
-            logging.info(f"Found clients: {clients}")
+            clients: List[str] = sorted(clients_set)
+            logging.info(
+                f"Found clients: {clients} "
+                f"(output_csv_files={len(output_files)}, raw_csv_files={len(raw_files)})"
+            )
 
             for client_name in clients:
                 logging.info(f"--- Processing client: {client_name} ---")
