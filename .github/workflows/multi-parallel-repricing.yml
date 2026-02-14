@@ -107,7 +107,7 @@ jobs:
       - self-hosted
       - repricing
       - ${{ matrix.client }}
-    timeout-minutes: 1440
+    timeout-minutes: 10080
 
     strategy:
       # Consume the JSON matrix we just emitted
@@ -217,61 +217,6 @@ jobs:
               exit 1
             fi
           fi
-
-      - name: Check alternative snapshot tooling
-        run: |
-          set -euo pipefail
-
-          has_cmd() {
-            command -v "$1" >/dev/null 2>&1
-          }
-
-          overlay_tools_ok=true
-          for cmd in mount umount findmnt; do
-            if ! has_cmd "$cmd"; then
-              overlay_tools_ok=false
-            fi
-          done
-
-          zfs_tools_ok=true
-          for cmd in zfs; do
-            if ! has_cmd "$cmd"; then
-              zfs_tools_ok=false
-            fi
-          done
-
-          lvm_tools_ok=true
-          for cmd in lvs lvcreate lvremove; do
-            if ! has_cmd "$cmd"; then
-              lvm_tools_ok=false
-            fi
-          done
-
-          reflink_supported=no
-          tmp_dir="$(mktemp -d)"
-          trap 'rm -rf "$tmp_dir"' EXIT
-          printf 'x' > "$tmp_dir/src"
-          if cp --reflink=always "$tmp_dir/src" "$tmp_dir/dst" >/dev/null 2>&1; then
-            reflink_supported=yes
-          fi
-
-          echo "Overlay tools available: $overlay_tools_ok"
-          echo "ZFS tools available: $zfs_tools_ok"
-          echo "LVM snapshot tools available: $lvm_tools_ok"
-          echo "Filesystem reflink supported: $reflink_supported"
-
-          if [ "$zfs_tools_ok" = false ] && [ "$lvm_tools_ok" = false ] && [ "$reflink_supported" = no ]; then
-            echo "::warning::No alternative snapshot backend tooling detected (zfs/lvm/reflink)."
-          fi
-
-          {
-            echo "| Capability | Status |"
-            echo "| --- | --- |"
-            echo "| Overlay tools (mount/umount/findmnt) | $overlay_tools_ok |"
-            echo "| ZFS tooling (zfs) | $zfs_tools_ok |"
-            echo "| LVM snapshot tooling (lvs/lvcreate/lvremove) | $lvm_tools_ok |"
-            echo "| Reflink copy support (cp --reflink=always) | $reflink_supported |"
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Ensure Docker client API compatibility
         run: |
@@ -638,10 +583,6 @@ jobs:
       PERFNET_DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
       PERFNET_DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
       PERFNET_DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
-      MAINNET_DB_HOST: ${{ secrets.MAINNET_0_DB_HOST }}
-      MAINNET_DB_PORT: ${{ secrets.MAINNET_0_DB_PORT || '5432' }}
-      MAINNET_DB_USER: ${{ secrets.MAINNET_0_DB_USER }}
-      MAINNET_DB_PASSWORD: ${{ secrets.MAINNET_0_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       
@@ -687,7 +628,7 @@ jobs:
               SUITE="${BASH_REMATCH[1]}"
               NETWORK="${BASH_REMATCH[2]}"
               DB_NETWORK="${NETWORK//-/_}"
-              DB_NAME="repricings_${SUITE}_${DB_NETWORK}"
+              DB_NAME="monitoring"
             else
               echo "Skipping DB upload for non-repricing path: $TESTS"
               skipped=$((skipped + 1))
@@ -701,31 +642,17 @@ jobs:
               continue
             fi
 
-            if [ "$NETWORK" = "mainnet" ] && [ -n "${{ env.MAINNET_DB_HOST }}" ] && [ -n "${{ env.MAINNET_DB_USER }}" ] && [ -n "${{ env.MAINNET_DB_PASSWORD }}" ]; then
-              DB_HOST="${{ env.MAINNET_DB_HOST }}"
-              DB_PORT="${{ env.MAINNET_DB_PORT }}"
-              DB_USER="${{ env.MAINNET_DB_USER }}"
-              DB_PASSWORD="${{ env.MAINNET_DB_PASSWORD }}"
-              TARGET="mainnet"
-            elif [ "$NETWORK" = "perf-devnet-2" ] && [ -n "${{ env.PERFNET_DB_HOST }}" ] && [ -n "${{ env.PERFNET_DB_USER }}" ] && [ -n "${{ env.PERFNET_DB_PASSWORD }}" ]; then
-              DB_HOST="${{ env.PERFNET_DB_HOST }}"
-              DB_PORT="${{ env.PERFNET_DB_PORT }}"
-              DB_USER="${{ env.PERFNET_DB_USER }}"
-              DB_PASSWORD="${{ env.PERFNET_DB_PASSWORD }}"
-              TARGET="perfnet"
-            else
-              echo "No DB credentials available for $TESTS (network=$NETWORK)."
-              echo "Expected MAINNET_0_DB_* for mainnet or PERFNET_0_DB_* for perf-devnet-2."
-              exit 1
-            fi
+            DB_HOST="${{ env.PERFNET_DB_HOST }}"
+            DB_PORT="${{ env.PERFNET_DB_PORT }}"
+            DB_USER="${{ env.PERFNET_DB_USER }}"
+            DB_PASSWORD="${{ env.PERFNET_DB_PASSWORD }}"
 
-            echo "Uploading ${TESTS} reports to ${TARGET} DB (${DB_HOST}:${DB_PORT}), db=${DB_NAME}, from ${REPORTS_DIR}"
             python fill_postgres_db.py \
               --db-host "$DB_HOST" \
               --db-port "$DB_PORT" \
               --db-user "$DB_USER" \
               --db-name "$DB_NAME" \
-              --table-name repricings_new \
+              --table-name "${SUITE}_${DB_NETWORK}" \
               --db-password "$DB_PASSWORD" \
               --log-level DEBUG \
               --reports-dir "$REPORTS_DIR"
