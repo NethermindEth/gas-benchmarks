@@ -365,7 +365,7 @@ jobs:
           if [[ "$TEST_PATH_LC" == *"compute"* ]]; then
             EFFECTIVE_FILTER="not_op"
           elif [[ "$TEST_PATH_LC" == *"stateful"* ]]; then
-            EFFECTIVE_FILTER="XEN"
+            EFFECTIVE_FILTER="test_mixed_sload_sstore[fork_Osaka-blockchain_test-10-90-token_name_XEN"
           fi
           echo "Using filter: '${EFFECTIVE_FILTER}' for test path: $TEST_PATH"
 
