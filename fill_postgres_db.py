@@ -567,21 +567,27 @@ def populate_data_for_client(
                     if run_value is None:
                         logging.debug(f"Skipping empty run value for {test_case_name_raw}.")
                         continue
-                    if run_value <= 0:
-                        # Zero/negative values represent missing or invalid measurements.
+                    if run_value == 0:
+                        # Zero values represent missing measurements.
                         continue
+                    invalid_run = run_value < 0
 
                     raw_run_duration_ms: Optional[float] = None
                     raw_run_mgas_s: Optional[float] = None
 
-                    if values_are_durations:
-                        raw_run_duration_ms = run_value
-                        if gas_value_float is not None and raw_run_duration_ms > 0:
-                            raw_run_mgas_s = (gas_value_float / raw_run_duration_ms) * 1000.0
+                    if invalid_run:
+                        # Keep invalid runs in DB for auditability and easy filtering.
+                        raw_run_duration_ms = -1.0
+                        raw_run_mgas_s = None
                     else:
-                        raw_run_mgas_s = run_value
-                        if gas_value_float is not None and raw_run_mgas_s > 0:
-                            raw_run_duration_ms = (gas_value_float / raw_run_mgas_s) * 1000.0
+                        if values_are_durations:
+                            raw_run_duration_ms = run_value
+                            if gas_value_float is not None and raw_run_duration_ms > 0:
+                                raw_run_mgas_s = (gas_value_float / raw_run_duration_ms) * 1000.0
+                        else:
+                            raw_run_mgas_s = run_value
+                            if gas_value_float is not None and raw_run_mgas_s > 0:
+                                raw_run_duration_ms = (gas_value_float / raw_run_mgas_s) * 1000.0
 
                     start_time = agg_stats.get('start_time')
                     if start_time in (0, "0", "", None):
@@ -594,6 +600,10 @@ def populate_data_for_client(
                     test_duration = agg_stats.get('test_duration')
                     fcu_duration = agg_stats.get('fcu_duration')
                     np_duration = agg_stats.get('np_duration')
+                    if invalid_run:
+                        test_duration = -1.0
+                        fcu_duration = -1.0
+                        np_duration = -1.0
                     
                     record: Dict[str, Any] = {
                         'client_name': client_name,
