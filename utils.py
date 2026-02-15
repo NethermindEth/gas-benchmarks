@@ -465,7 +465,7 @@ def get_gas_table(client_results, client, test_cases, gas_set, method, metadata,
                 results_per_test_case[test_case] = []
             results = client_results[client][test_case][gas][method]
             for x in results:
-                if x == 0:
+                if x <= 0:
                     continue
                 gas_values_for_case = test_cases.get(test_case, {})
                 actual_mgas = gas_values_for_case.get(gas, gas)
