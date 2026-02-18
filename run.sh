@@ -971,8 +971,29 @@ for run in $(seq 1 $RUNS); do
           esac
           if (( current_count < OPCODES_WARMUP_COUNT )); then
             for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-              echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
-              python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+              if (( OPCODES_WARMUP_COUNT > 1 && warmup_count > 1 )); then
+                # Iterations 2+: create variant with unique prevRandao so the
+                # client treats it as a new block and re-executes the opcodes.
+                variant_file=$(mktemp --suffix=.txt)
+                probe_dir=$(mktemp -d)
+                python3 vary_warmup.py create "$warmup_path" "$warmup_count" "$variant_file"
+
+                echo "[INFO] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: probe send to discover blockHash"
+                python3 run_kute.py --output "$probe_dir" --testsPath "$variant_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+
+                if python3 vary_warmup.py fix-hashes "$variant_file" "$probe_dir" "$client"; then
+                  echo "[INFO] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: re-send with corrected blockHash"
+                  python3 run_kute.py --output warmupresults --testsPath "$variant_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+                else
+                  echo "[WARN] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: hash fix failed, skipping re-send"
+                fi
+
+                rm -f "$variant_file"
+                rm -rf "$probe_dir"
+              else
+                echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+                python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+              fi
               current_count=$((current_count + 1))
             done
             warmup_run_counts["$warmup_path"]=$current_count
