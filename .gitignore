@@ -33,6 +33,20 @@
 /newpayload_comparison_*.md
 /scripts/nethermind/nethermind_native.log
 
+# Downloaded CI artifacts and benchmark results
+/artifact-*/
+/artifact-*.zip
+/run-*-logs*/
+/run-*-logs*.zip
+/run-*-logs*.txt
+/run-logs-*/
+/job-*-log*
+/joblog_*.zip
+/reports-*.zip
+/combine-*.log
+/populate-db-*.log
+/tmp-*/
+
 # Others
 .idea/
 /__pycache__/
