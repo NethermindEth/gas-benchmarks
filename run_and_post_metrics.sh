@@ -19,6 +19,7 @@
 #   --debug-file   Enable debug logging and save output to specified file
 #   --max-loops    Optional integer to stop after N iterations (default: unlimited)
 #   --warmup-opcodes-path Path to opcode warmup payloads directory (default: warmup-tests)
+#   --warmup-count Number of opcode warmup repetitions per test (default: 1, forwarded to run.sh -o)
 #   --filter       Comma-separated test case filter patterns forwarded to run.sh (-f)
 #
 # Example usage:
@@ -38,6 +39,7 @@ CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
 MAX_LOOPS=""
 WARMUP_OPCODES_PATH=""
+WARMUP_COUNT=""
 FILTER=""
 SKIP_CLEANUP=false
 CLEANUP_ARMED=false
@@ -208,6 +210,15 @@ while [[ $# -gt 0 ]]; do
       WARMUP_OPCODES_PATH="$2"
       shift 2
       ;;
+    --warmup-count)
+      if [[ "$2" =~ ^[0-9]+$ ]]; then
+        WARMUP_COUNT="$2"
+      else
+        echo "Invalid value for --warmup-count: $2 (expected non-negative integer)"
+        exit 1
+      fi
+      shift 2
+      ;;
     --filter)
       FILTER="$2"
       shift 2
@@ -310,6 +321,9 @@ while true; do
   fi
   if [ -n "$WARMUP_OPCODES_PATH" ]; then
     RUN_CMD+=(-W "$WARMUP_OPCODES_PATH")
+  fi
+  if [ -n "$WARMUP_COUNT" ]; then
+    RUN_CMD+=(-o "$WARMUP_COUNT")
   fi
   if [ -n "$FILTER" ]; then
     RUN_CMD+=(-f "$FILTER")
