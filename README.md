@@ -242,6 +242,99 @@ uv run execute remote -v --fork=Prague --rpc-seed-key=ACCOUNT --rpc-chain-id=1 -
 
 Note: you will need an account with some ETH (native tokens) to run the tests. Specify the private key using `--rpc-seed-key`. Also, `--rpc-endpoint` should point to the node you want to test against (it may be a remote node).
 
+## Response Hash Comparison
+
+The benchmark suite supports capturing and comparing Engine API response hashes across multiple clients. This feature helps verify that different Ethereum clients produce identical results for the same test payloads.
+
+### How It Works
+
+1. **Hash Capture**: A mitmproxy addon intercepts Engine API traffic and captures SHA256 hashes of request/response bodies for `engine_newPayloadV4` and `engine_forkchoiceUpdatedV3` methods (TBD configure in the future)
+2. **Cross-Client Comparison**: After all clients run, hashes are compared to detect any discrepancies
+3. **Deterministic Hashing**: JSON payloads are normalized (keys sorted, whitespace removed) before hashing to ensure consistent comparison
+
+### Usage
+
+Enable hash comparison by adding the `-H` flag to `run.sh`:
+
+```sh
+# Compare request hashes (default mode)
+bash run.sh -t "eest_tests/" -w "warmup-tests" -c "nethermind,geth,reth" -r 1 -H request
+
+# Compare response hashes
+bash run.sh -t "eest_tests/" -w "warmup-tests" -c "nethermind,geth,reth" -r 1 -H response
+
+# Compare both request and response hashes
+bash run.sh -t "eest_tests/" -w "warmup-tests" -c "nethermind,geth,reth" -r 1 -H all
+```
+
+### Hash Capture Modes
+
+- **`request`**: Hash only request bodies sent to the Engine API (default)
+- **`response`**: Hash only response bodies received from the Engine API
+- **`all`**: Hash both request and response bodies
+
+### Optional Logging
+
+Add the `-L` flag to enable full request/response logging to YAML files for debugging:
+
+```sh
+bash run.sh -t "eest_tests/" -c "nethermind,geth" -r 1 -H all -L
+```
+
+Logs are saved to `mitmproxy_logs/<client>_run_<N>.yaml`.
+
+### Output Files
+
+When hash comparison is enabled, the following files are generated:
+
+- `response_hashes/<client>_run_<N>.json` - Hash data for each client run
+- `response_hashes/comparison_report.txt` - Human-readable comparison report
+- `response_hashes/comparison_report.json` - Machine-readable JSON report with full hashes
+
+### Manual Hash Comparison
+
+You can also compare hash files directly using the `compare_hashes.py` script:
+
+```sh
+# Compare with default mode (request)
+python3 compare_hashes.py response_hashes/*.json
+
+# Compare response hashes only
+python3 compare_hashes.py --mode response response_hashes/*.json
+
+# Compare all hashes and generate reports
+python3 compare_hashes.py --mode all \
+  -o comparison_report.txt \
+  -j comparison_report.json \
+  response_hashes/*.json
+```
+
+**Options:**
+
+- `-m, --mode`: Comparison mode (`request`, `response`, or `all`)
+- `-o, --output`: Write text results to file
+- `-j, --json`: Write JSON report with full hashes
+- `-q, --quiet`: Only print mismatches and summary
+
+**Exit codes:**
+
+- `0` - All hashes match across all clients
+- `1` - Mismatches found or errors occurred
+
+### CI/CD Integration
+
+When using the GitHub Action, enable hash comparison via the `compareHashes` input:
+
+```yaml
+- name: Run gas-benchmarks
+  uses: ./.github/actions/gas-benchmark-action
+  with:
+    clients: nethermind,geth,reth
+    compareHashes: 'all'  # Options: false, request, response, all
+```
+
+The comparison report is included in the `gas-benchmarks-outputs` artifact.
+
 ### EELS stateful tests generator
 
 The EELS stateful generator creates deterministic, reproducible execution payloads by running Execution Layer Spec tests against a local Nethermind node through a proxy. It consists of two cooperating tools:
@@ -491,6 +584,7 @@ jobs:
 - **filter** (string, default empty): Comma-separated case-insensitive substrings; only matching scenarios are executed.
 - **images** (string, default JSON map of `default` tags): JSON map of client → image tag, same format as `multi-parallel.yml`.
 - **txtReport** (string, default `'false'`): When set to `'true'`, also generates a TXT report via `report_txt.py`.
+- **compareHashes** (string, default `'false'`): Capture and compare Engine API hashes across clients. Values: `false` (disabled), `request`, `response`, or `all`.
 - **postgresHost** (string, optional, default empty): When non-empty, enables posting metrics to PostgreSQL.
 - **postgresPort** (string, default `5432`): PostgreSQL port.
 - **postgresDbName** (string, optional, default empty): PostgreSQL database name.
@@ -506,4 +600,4 @@ jobs:
 - **Single run per trigger**: The reusable workflow runs a single benchmark job per invocation (no parallel matrix), but can execute multiple clients in one `run.sh` call.
 - **Preconditions**: The workflow clones `NethermindEth/gas-benchmarks`, installs Python dependencies from `requirements.txt`, runs `make prepare_tools`, and then calls `run.sh` with the provided inputs.
 - **PostgreSQL (optional)**: If `postgresHost` is left empty, no database writes are attempted and only artifacts are produced. If any PostgreSQL-related input is provided, the action validates that `postgresHost`, `postgresDbName`, `postgresTable`, `postgresUser`, and `postgresPassword` are all non-empty before calling `fill_postgres_db.py`; otherwise, it fails fast with a clear error.
-- **Artifacts**: The `reports/`, `reports.zip`, and `results/` directories are uploaded as a single `gas-benchmarks-outputs` artifact for further inspection in the caller repository.
+- **Artifacts**: The `reports/`, `reports.zip`, `results/`, `response_hashes/`, and `mitmproxy_logs/` directories are uploaded as a single `gas-benchmarks-outputs` artifact for further inspection in the caller repository.

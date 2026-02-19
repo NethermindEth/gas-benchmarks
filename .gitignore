@@ -43,8 +43,14 @@ execution-data
 execution-spec-tests/
 execution-specs/
 mitm_config.json
+
+# Logs and traces
 nethermind.log
 nethermind-generation.log
+mitmproxy_logs/*
+response_hashes/*
+repricings_compute/*
+.DS_Store
 traces.json
 opcode-tracing*
 erigon.log
