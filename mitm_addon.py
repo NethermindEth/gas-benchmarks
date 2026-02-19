@@ -102,7 +102,7 @@ _NM_LAST_TS: Optional[str] = None
 # Quiet period before producing a block (seconds).
 # Heavier scenarios need more time for all transactions to arrive before
 # the testing endpoint triggers block production.
-QUIET_SECONDS: float = 0.5
+QUIET_SECONDS: float = 2.0
 
 # Synchronization / state
 _GROUP_LOCK = threading.Lock()
@@ -1574,18 +1574,11 @@ def request(flow: http.HTTPFlow) -> None:
             _wait_for_resume()
             _insert_empty_hook_separator("confirmed-restore-before-next-request", scenario)
 
-    # If a tx lookup arrives while sendraws are still buffered, only force-flush
-    # when the quiet period has already elapsed.  Otherwise let the normal timer
-    # handle it — the test runner will retry within its tx-wait-timeout window.
+    # Fast path: if tx lookup starts, flush pending buffered sendraws immediately.
     has_get_tx_by_hash = any(entry.get("method") == "eth_getTransactionByHash" for entry in entries)
     if has_get_tx_by_hash and _has_pending_buffered_sendraw():
-        with _GROUP_LOCK:
-            age = time.time() - _LAST_TS
-        if age >= QUIET_SECONDS:
-            _log("eth_getTransactionByHash observed with pending sendraw buffer (quiet elapsed) -> forcing flush")
-            _produce_if_quiet(force=True)
-        else:
-            _log(f"eth_getTransactionByHash observed but quiet period not elapsed ({age:.2f}s < {QUIET_SECONDS}s) -> skipping force flush")
+        _log("eth_getTransactionByHash observed with pending sendraw buffer -> forcing flush")
+        _produce_if_quiet(force=True)
 
     if isinstance(req_obj, list):
         if not entries:
