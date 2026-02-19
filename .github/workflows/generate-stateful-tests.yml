@@ -53,6 +53,10 @@ on:
           - repricing
           - benchmark
         default: "repricing"
+      parameter_filter:
+        description: "pytest -k filter expression (e.g. 'test_add_op or test_mul_op')"
+        required: false
+        default: ""
       generation_mode:
         description: "Generation mode"
         required: true
@@ -89,6 +93,7 @@ jobs:
       CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
       CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
       CFG_RPC_ADDRESS: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
+      CFG_PARAMETER_FILTER: ${{ github.event.inputs.parameter_filter || '' }}
       CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
 
     steps:
@@ -222,6 +227,7 @@ jobs:
             --allow-execute-remote-failures \
             --trace-json \
             --trace-json-output "$TRACES_JSON" \
+            ${CFG_PARAMETER_FILTER:+--parameter_filter "$CFG_PARAMETER_FILTER"} \
             2>&1 | tee -a "$STATEFUL_GENERATOR_LOG"
 
       - name: Print stateful generator log
