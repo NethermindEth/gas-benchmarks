@@ -108,7 +108,7 @@ _ACTIVE_GRP: Optional[Tuple[str, str, str]] = None  # (file_base, test_name, pha
 _LAST_TS: float = 0.0
 _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
-_BUF: List[Tuple[str, Any, Optional[str]]] = []  # list of (txrlp_hex, original_id, extra_data_label)
+_BUF: List[Tuple[str, Any, Optional[str], Optional[int]]] = []  # list of (txrlp_hex, original_id, extra_data_label, tx_index)
 _STOP: bool = False
 _LIFECYCLE_TS: Optional[int] = None
 
@@ -1185,6 +1185,9 @@ def _produce_if_quiet(force: bool = False) -> None:
         buf_copy = list(_BUF)
         _PENDING = False
         _BUF = []
+    # Sort by txIndex to ensure proper transaction ordering within a block.
+    # Transactions without a txIndex keep their arrival order at the end.
+    buf_copy.sort(key=lambda x: (x[3] is None, x[3] if x[3] is not None else 0))
     _log(f"flushing group={grp} size={len(buf_copy)} reason={'force' if force else 'quiet'}")
     if buf_copy:
         last_extra_data_label = buf_copy[-1][2]
@@ -1462,20 +1465,27 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
     )
 
     current_extra_data_label = _extra_data_label_from_meta(meta)
-    force_prev: Optional[Tuple[Tuple[str, str, str], List[Tuple[str, Any, Optional[str]]]]] = None
+    parsed_tx_index: Optional[int] = None
+    if tx_index is not None:
+        try:
+            parsed_tx_index = int(tx_index)
+        except (ValueError, TypeError):
+            parsed_tx_index = None
+    force_prev: Optional[Tuple[Tuple[str, str, str], List[Tuple[str, Any, Optional[str], Optional[int]]]]] = None
     with _GROUP_LOCK:
         if _ACTIVE_GRP and grp != _ACTIVE_GRP and _PENDING:
             force_prev = (_ACTIVE_GRP, list(_BUF))
             _PENDING = False
             _BUF = []
         _ACTIVE_GRP = grp
-        _BUF.append((raw, item.get("id"), current_extra_data_label))
+        _BUF.append((raw, item.get("id"), current_extra_data_label, parsed_tx_index))
         _PENDING = True
         _LAST_TS = time.time()
-    _log(f"buffered tx: group={grp} buf_size={len(_BUF)}")
+    _log(f"buffered tx: group={grp} buf_size={len(_BUF)} tx_index={parsed_tx_index}")
 
     if force_prev:
         prev_grp, prev_buf = force_prev
+        prev_buf.sort(key=lambda x: (x[3] is None, x[3] if x[3] is not None else 0))
         _log(f"group switch → force flush prev={prev_grp} size={len(prev_buf)}")
         prev_last_extra_data_label = prev_buf[-1][2] if prev_buf else None
         _flush_group(prev_grp, [x[0] for x in prev_buf], last_extra_data_label=prev_last_extra_data_label)
