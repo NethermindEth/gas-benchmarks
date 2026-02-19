@@ -99,23 +99,14 @@ except Exception:
 _LIGHT_PREFIX_KEEP = ("[MITM]", "[NM]", "[SENDRAW]", "ERROR", "WARN", "overlay", "PAUSE", "RESUME")
 _NM_LAST_TS: Optional[str] = None
 
-# Quiet period before producing a block (seconds).
-# Heavier scenarios need more time for all transactions to arrive before
-# the testing endpoint triggers block production.
-QUIET_SECONDS: float = 2.0
-
 # Synchronization / state
 _GROUP_LOCK = threading.Lock()
 _ACTIVE_GRP: Optional[Tuple[str, str, str]] = None  # (file_base, test_name, phase)
-_LAST_TS: float = 0.0
 _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
 _BUF: List[Tuple[str, Any, Optional[str], Optional[int]]] = []  # list of (txrlp_hex, original_id, extra_data_label, tx_index)
 _STOP: bool = False
 _LIFECYCLE_TS: Optional[int] = None
-
-# Thread handle
-_MON_THR: Optional[threading.Thread] = None
 
 # Per-scenario bookkeeping
 _SEEN_SCENARIOS: set[str] = set()
@@ -1172,34 +1163,23 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
         _log(f"produce error: {e}")
 
 
-def _produce_if_quiet(force: bool = False) -> None:
+def _force_flush_buffer() -> None:
+    """Drain the pending buffer and build a block immediately."""
     global _PENDING, _BUF
     with _GROUP_LOCK:
-        if not _PENDING and not force:
+        if not _PENDING:
             return
         grp = _ACTIVE_GRP
-        last = _LAST_TS
-        age = time.time() - last
-        if not force and age < QUIET_SECONDS:
-            _log(f"waiting quiet: group={grp} age={age:.2f}s < {QUIET_SECONDS}s buf={len(_BUF)}")
-            return
-
         buf_copy = list(_BUF)
         _PENDING = False
         _BUF = []
     # Sort by txIndex to ensure proper transaction ordering within a block.
     # Transactions without a txIndex keep their arrival order at the end.
     buf_copy.sort(key=lambda x: (x[3] is None, x[3] if x[3] is not None else 0))
-    _log(f"flushing group={grp} size={len(buf_copy)} reason={'force' if force else 'quiet'}")
+    _log(f"flushing group={grp} size={len(buf_copy)} reason=force")
     if buf_copy:
         last_extra_data_label = buf_copy[-1][2]
         _flush_group(grp, [x[0] for x in buf_copy], last_extra_data_label=last_extra_data_label)
-
-
-def _monitor() -> None:
-    while not _STOP:
-        _produce_if_quiet(force=False)
-        time.sleep(0.01)
 
 
 def _has_pending_buffered_sendraw() -> bool:
@@ -1284,7 +1264,7 @@ def _wait_for_resume() -> None:
 
 
 def load(loader) -> None:
-    global _MON_THR, _CONTROL_THREAD
+    global _CONTROL_THREAD
     _apply_mitm_quiet_options()
     _log(
         "timestamp mode for testing_buildBlockV1: "
@@ -1348,8 +1328,6 @@ def load(loader) -> None:
 
     _CONTROL_THREAD = threading.Thread(target=_control_watcher, daemon=True)
     _CONTROL_THREAD.start()
-    _MON_THR = threading.Thread(target=_monitor, daemon=True)
-    _MON_THR.start()
     _log('mitm_addon loaded')
 
 def done() -> None:
@@ -1359,8 +1337,6 @@ def done() -> None:
 
     _STOP = True
     _PAUSE_EVENT.set()
-    if _MON_THR and _MON_THR.is_alive():
-        _MON_THR.join(timeout=1.0)
     if _CONTROL_THREAD and _CONTROL_THREAD.is_alive():
         _CONTROL_THREAD.join(timeout=1.0)
     try:
@@ -1398,7 +1374,7 @@ def _append_raw_request_line(path: pathlib.Path, obj: Any) -> None:
 
 
 def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
-    global _ACTIVE_GRP, _LAST_TS, _PENDING, _BUF, _TESTS_STARTED
+    global _ACTIVE_GRP, _PENDING, _BUF, _TESTS_STARTED
 
     _wait_for_resume()
 
@@ -1482,7 +1458,6 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         _ACTIVE_GRP = grp
         _BUF.append((raw, item.get("id"), current_extra_data_label, parsed_tx_index))
         _PENDING = True
-        _LAST_TS = time.time()
     _log(f"buffered tx: group={grp} buf_size={len(_BUF)} tx_index={parsed_tx_index}")
 
     if force_prev:
@@ -1578,7 +1553,7 @@ def request(flow: http.HTTPFlow) -> None:
     has_get_tx_by_hash = any(entry.get("method") == "eth_getTransactionByHash" for entry in entries)
     if has_get_tx_by_hash and _has_pending_buffered_sendraw():
         _log("eth_getTransactionByHash observed with pending sendraw buffer -> forcing flush")
-        _produce_if_quiet(force=True)
+        _force_flush_buffer()
 
     if isinstance(req_obj, list):
         if not entries:
