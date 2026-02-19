@@ -166,7 +166,10 @@ _PAUSE_TOKEN: Optional[str] = None
 _PAUSE_SCENARIO: Optional[str] = None
 _CONTROL_THREAD: Optional[threading.Thread] = None
 _PENDING_OVERLAY: Optional[Tuple[str, int, Optional[str]]] = None  # (scenario, stage, block)
-_PENDING_OVERLAY_CONFIRMED: bool = False
+_PENDING_TX_HASHES: set = set()          # tx hashes awaiting eth_getTransactionByHash confirmation
+_PENDING_TX_LOCK = threading.Lock()
+_ALL_TX_CONFIRMED_EVENT = threading.Event()
+_ALL_TX_CONFIRMED_EVENT.set()            # initially set (no pending txs)
 _SEPARATOR_READY_FOR_NEXT_SETUP: bool = False
 _PENDING_SEPARATOR_PAIR: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None
 _LEGACY_PHASE_DIRS_CLEANED: bool = False
@@ -1147,7 +1150,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
         if ph == "cleanup":
             block_hash = exec_payload.get("blockHash")
             globals()['_PENDING_OVERLAY'] = None
-            globals()['_PENDING_OVERLAY_CONFIRMED'] = False
+            _clear_pending_tx_hashes()
             _log(f"cleanup stage {idx} complete for {scenario}; triggering immediate restore")
             _signal_cleanup_pause("__overlay_restore__", idx, block_hash)
             _wait_for_resume()
@@ -1155,10 +1158,21 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
         elif SKIP_CLEANUP and ph == "testing":
             block_hash = exec_payload.get("blockHash")
             globals()['_PENDING_OVERLAY'] = (scenario, idx, block_hash)
-            globals()['_PENDING_OVERLAY_CONFIRMED'] = False
+            tx_hashes: set = set()
+            for txrlp in txrlps:
+                try:
+                    tx_hashes.add(_tx_hash_from_raw(txrlp).lower())
+                except Exception:
+                    pass
+            with _PENDING_TX_LOCK:
+                globals()['_PENDING_TX_HASHES'] = tx_hashes
+                if tx_hashes:
+                    _ALL_TX_CONFIRMED_EVENT.clear()
+                else:
+                    _ALL_TX_CONFIRMED_EVENT.set()
             _log(
                 f"testing stage {idx} complete for {scenario}; restore deferred until "
-                "eth_getTransactionByHash confirms inclusion (--skip-cleanup)"
+                f"all {len(tx_hashes)} tx(s) confirmed via eth_getTransactionByHash (--skip-cleanup)"
             )
     except Exception as e:  # pragma: no cover
         _log(f"produce error: {e}")
@@ -1244,7 +1258,7 @@ def _control_watcher() -> None:
         with _PAUSE_LOCK:
             if not _PAUSE_EVENT.is_set() and token == _PAUSE_TOKEN and scenario == _PAUSE_SCENARIO:
                 _PAUSE_EVENT.set()
-                globals()['_PENDING_OVERLAY_CONFIRMED'] = False
+                _clear_pending_tx_hashes()
                 _log(f"resume accepted scenario={scenario} token={token}")
                 if scenario == "__overlay_init__":
                     globals()["_PENDING_OVERLAY"] = None
@@ -1264,6 +1278,21 @@ def _wait_for_resume() -> None:
         time.sleep(0.02)
 
 
+def _wait_for_all_tx_confirmed() -> None:
+    """Block until all pending testing-phase tx hashes are confirmed."""
+    while not _ALL_TX_CONFIRMED_EVENT.wait(timeout=0.05):
+        if _STOP:
+            return
+        time.sleep(0.02)
+
+
+def _clear_pending_tx_hashes() -> None:
+    """Clear pending tx hash tracking and release any waiters."""
+    with _PENDING_TX_LOCK:
+        globals()['_PENDING_TX_HASHES'] = set()
+        _ALL_TX_CONFIRMED_EVENT.set()
+
+
 def load(loader) -> None:
     global _CONTROL_THREAD
     _apply_mitm_quiet_options()
@@ -1274,7 +1303,7 @@ def load(loader) -> None:
     _ensure_dirs_and_cleanup_old()
     globals()['_OVERLAY_PRIMED'] = False
     globals()['_PENDING_OVERLAY'] = None
-    globals()['_PENDING_OVERLAY_CONFIRMED'] = False
+    _clear_pending_tx_hashes()
     _ensure_control_dir()
     try:
         if _RESUME_FILE.exists():
@@ -1392,7 +1421,7 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
                 current_scenario = None
         if current_scenario and current_scenario != pending_scenario:
             globals()['_PENDING_OVERLAY'] = None
-            globals()['_PENDING_OVERLAY_CONFIRMED'] = False
+            _clear_pending_tx_hashes()
             _log(f"overlay restore pause triggered before scenario {current_scenario}")
             _signal_cleanup_pause('__overlay_restore__', pending_stage, pending_block)
             _wait_for_resume()
@@ -1534,8 +1563,7 @@ def request(flow: http.HTTPFlow) -> None:
         entries = [entry for entry in req_obj if isinstance(entry, dict)]
 
     pending = globals().get("_PENDING_OVERLAY")
-    pending_confirmed = globals().get("_PENDING_OVERLAY_CONFIRMED")
-    if pending and pending_confirmed:
+    if pending:
         trigger_method = None
         for entry in entries:
             method = entry.get("method") if isinstance(entry, dict) else None
@@ -1543,9 +1571,19 @@ def request(flow: http.HTTPFlow) -> None:
                 trigger_method = method
                 break
         if trigger_method:
+            # Gate: wait until ALL testing-phase txs are confirmed before letting
+            # non-getTxByHash requests through and triggering the overlay restore.
+            with _PENDING_TX_LOCK:
+                remaining = len(_PENDING_TX_HASHES)
+            if remaining > 0:
+                _log(
+                    f"non-getTxByHash method {trigger_method} arrived but {remaining} tx(s) still "
+                    f"unconfirmed; blocking until all confirmed"
+                )
+            _wait_for_all_tx_confirmed()
             scenario, stage, block_hash = pending
             globals()["_PENDING_OVERLAY"] = None
-            globals()["_PENDING_OVERLAY_CONFIRMED"] = False
+            _clear_pending_tx_hashes()
             _log(f"overlay restore pause triggered before method {trigger_method} for scenario {scenario}")
             _signal_cleanup_pause("__overlay_restore__", stage, block_hash)
             _wait_for_resume()
@@ -1693,6 +1731,15 @@ def response(flow: http.HTTPFlow) -> None:
     except Exception:
         resp_obj = None
 
+    # Build response lookup by id for batch matching
+    resp_by_id: Dict[Any, Dict] = {}
+    if isinstance(resp_obj, dict):
+        resp_by_id[resp_obj.get("id")] = resp_obj
+    elif isinstance(resp_obj, list):
+        for r in resp_obj:
+            if isinstance(r, dict):
+                resp_by_id[r.get("id")] = r
+
     for entry in entries:
         method = entry.get("method")
         if method != "eth_getTransactionByHash":
@@ -1711,12 +1758,24 @@ def response(flow: http.HTTPFlow) -> None:
         if scenario != pending_scenario:
             continue
 
-        if not isinstance(resp_obj, dict):
+        matched_resp = resp_by_id.get(entry.get("id"))
+        if matched_resp is None and isinstance(resp_obj, dict):
+            matched_resp = resp_obj  # fallback for single responses
+        if not isinstance(matched_resp, dict):
             continue
-        if resp_obj.get("result") in (None, False):
+        if matched_resp.get("result") in (None, False):
             continue
 
-        globals()["_PENDING_OVERLAY_CONFIRMED"] = True
-        _log(f"cleanup confirmation observed for scenario {scenario}")
-        return
+        params = entry.get("params", [])
+        queried_hash = (params[0] if params and isinstance(params[0], str) else "").lower()
+        with _PENDING_TX_LOCK:
+            removed = queried_hash in _PENDING_TX_HASHES
+            _PENDING_TX_HASHES.discard(queried_hash)
+            remaining = len(_PENDING_TX_HASHES)
+            if not _PENDING_TX_HASHES:
+                _ALL_TX_CONFIRMED_EVENT.set()
+        if removed:
+            _log(f"tx confirmed: {queried_hash[:18]}... remaining={remaining} scenario={scenario}")
+        else:
+            _log(f"tx confirmation observed (not in pending set): {queried_hash[:18]}... scenario={scenario}")
 
