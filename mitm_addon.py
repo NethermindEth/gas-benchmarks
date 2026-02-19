@@ -102,6 +102,7 @@ _NM_LAST_TS: Optional[str] = None
 # Synchronization / state
 _GROUP_LOCK = threading.Lock()
 _ACTIVE_GRP: Optional[Tuple[str, str, str]] = None  # (file_base, test_name, phase)
+_LAST_SENDRAW_TS: float = 0.0  # timestamp of the last buffered sendRawTransaction (diagnostic only)
 _PENDING: bool = False
 _STAGE: Dict[Tuple[str, str, str], int] = {}
 _BUF: List[Tuple[str, Any, Optional[str], Optional[int]]] = []  # list of (txrlp_hex, original_id, extra_data_label, tx_index)
@@ -1374,7 +1375,7 @@ def _append_raw_request_line(path: pathlib.Path, obj: Any) -> None:
 
 
 def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
-    global _ACTIVE_GRP, _PENDING, _BUF, _TESTS_STARTED
+    global _ACTIVE_GRP, _LAST_SENDRAW_TS, _PENDING, _BUF, _TESTS_STARTED
 
     _wait_for_resume()
 
@@ -1458,6 +1459,7 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         _ACTIVE_GRP = grp
         _BUF.append((raw, item.get("id"), current_extra_data_label, parsed_tx_index))
         _PENDING = True
+        _LAST_SENDRAW_TS = time.time()
     _log(f"buffered tx: group={grp} buf_size={len(_BUF)} tx_index={parsed_tx_index}")
 
     if force_prev:
@@ -1552,7 +1554,13 @@ def request(flow: http.HTTPFlow) -> None:
     # Fast path: if tx lookup starts, flush pending buffered sendraws immediately.
     has_get_tx_by_hash = any(entry.get("method") == "eth_getTransactionByHash" for entry in entries)
     if has_get_tx_by_hash and _has_pending_buffered_sendraw():
-        _log("eth_getTransactionByHash observed with pending sendraw buffer -> forcing flush")
+        with _GROUP_LOCK:
+            gap = time.time() - _LAST_SENDRAW_TS
+            buf_size = len(_BUF)
+        _log(
+            f"eth_getTransactionByHash observed with pending sendraw buffer -> forcing flush "
+            f"(gap_since_last_sendraw={gap:.3f}s buf_size={buf_size})"
+        )
         _force_flush_buffer()
 
     if isinstance(req_obj, list):
