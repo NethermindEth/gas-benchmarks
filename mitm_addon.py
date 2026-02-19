@@ -1574,11 +1574,18 @@ def request(flow: http.HTTPFlow) -> None:
             _wait_for_resume()
             _insert_empty_hook_separator("confirmed-restore-before-next-request", scenario)
 
-    # Fast path: if tx lookup starts, flush pending buffered sendraws immediately.
+    # If a tx lookup arrives while sendraws are still buffered, only force-flush
+    # when the quiet period has already elapsed.  Otherwise let the normal timer
+    # handle it — the test runner will retry within its tx-wait-timeout window.
     has_get_tx_by_hash = any(entry.get("method") == "eth_getTransactionByHash" for entry in entries)
     if has_get_tx_by_hash and _has_pending_buffered_sendraw():
-        _log("eth_getTransactionByHash observed with pending sendraw buffer -> forcing flush")
-        _produce_if_quiet(force=True)
+        with _GROUP_LOCK:
+            age = time.time() - _LAST_TS
+        if age >= QUIET_SECONDS:
+            _log("eth_getTransactionByHash observed with pending sendraw buffer (quiet elapsed) -> forcing flush")
+            _produce_if_quiet(force=True)
+        else:
+            _log(f"eth_getTransactionByHash observed but quiet period not elapsed ({age:.2f}s < {QUIET_SECONDS}s) -> skipping force flush")
 
     if isinstance(req_obj, list):
         if not entries:
