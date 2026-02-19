@@ -99,8 +99,10 @@ except Exception:
 _LIGHT_PREFIX_KEEP = ("[MITM]", "[NM]", "[SENDRAW]", "ERROR", "WARN", "overlay", "PAUSE", "RESUME")
 _NM_LAST_TS: Optional[str] = None
 
-# Quiet period before producing a block (seconds)
-QUIET_SECONDS: float = 0.1
+# Quiet period before producing a block (seconds).
+# Heavier scenarios need more time for all transactions to arrive before
+# the testing endpoint triggers block production.
+QUIET_SECONDS: float = 0.5
 
 # Synchronization / state
 _GROUP_LOCK = threading.Lock()
