@@ -842,6 +842,8 @@ def start_nethermind_container(
         "/db/mainnet",
         "--JsonRpc.MaxBatchSize",
         "10000000",
+        "--JsonRpc.MaxBatchResponseBodySize",
+        "3355443200",
     ]
     if trace_json:
         cmd += [
