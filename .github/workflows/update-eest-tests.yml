@@ -21,11 +21,40 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      - name: Show disk space before cleanup
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+
+      - name: Free up disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false      # Keep tool-cache for setup-python/setup-dotnet
+          android: true          # 9.7GiB
+          dotnet: false          # 4.1GiB fail installation
+          haskell: true          # ~5GB
+          large-packages: false  # 4.8GiB but slow
+          docker-images: false   # 813MiB
+          swap-storage: false    # ~4GB
+
+      - name: Show disk space after cleanup
+        run: |
+          echo "=== Disk space after cleanup ==="
+          df -h
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           lfs: true
           fetch-depth: 0
+
+      - name: Show disk space after checkout
+        run: |
+          echo "=== Disk space after checkout ==="
+          df -h
+          echo ""
+          echo "=== Repository size ==="
+          du -sh .
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,38 +79,97 @@ jobs:
           git lfs pull
           rm -rf eest_tests
           
+      - name: Show disk space before EEST download
+        run: |
+          echo "=== Disk space before EEST fixture download ==="
+          df -h
+          echo ""
+          echo "=== /tmp usage ==="
+          du -sh /tmp/* 2>/dev/null | sort -hr | head -20 || echo "Empty or inaccessible"
+          echo ""
+          echo "=== /mnt has more space, using it for large artifacts ==="
+          df -h /mnt
+
       - name: Create temp directory for EEST fixture artifacts
-        run: mkdir -p "${{ runner.temp }}/eest_artifacts"
+        run: |
+          sudo mkdir -p /mnt/eest_artifacts
+          sudo chown $USER:$USER /mnt/eest_artifacts
 
       - name: Download EEST fixtures securely
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: /mnt/eest_artifacts  # Use /mnt for temp files during extraction (66GB vs 33GB on root)
         run: |
-          gh run download -R ethereum/execution-specs -n fixtures_benchmark_fast -D "${{ runner.temp }}/eest_artifacts"
-          ls -la "${{ runner.temp }}/eest_artifacts"
+          echo "=== Starting EEST fixtures download ==="
+          echo "Downloading to: /mnt/eest_artifacts"
+          echo "TMPDIR set to: $TMPDIR (for gh cli temp files)"
+          
+          gh run download -R ethereum/execution-specs -n fixtures_benchmark_fast -D /mnt/eest_artifacts
+          
+          echo ""
+          echo "=== Download complete ==="
+          ls -la /mnt/eest_artifacts
+          echo ""
+          echo "=== Artifact sizes ==="
+          du -sh /mnt/eest_artifacts/*
+          echo ""
+          echo "=== Disk space after download ==="
+          df -h
 
       - name: Capture EEST tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Securely verify and rename artifact, fail if not a regular file
-          if [ ! -f "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
+          if [ ! -f "/mnt/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
             echo "Expected file not found: fixtures_benchmark_fast.tar.gz" >&2
             exit 1
           fi
-          if [ -L "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
+          if [ -L "/mnt/eest_artifacts/fixtures_benchmark_fast.tar.gz" ]; then
             echo "Artifact file is a symbolic link! Aborting." >&2
             exit 1
           fi
-          cp "${{ runner.temp }}/eest_artifacts/fixtures_benchmark_fast.tar.gz" "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
-          python3 capture_eest_tests.py -o eest_tests --local-archive "${{ runner.temp }}/eest_artifacts/fixtures_benchmark.tar.gz"
+          cp "/mnt/eest_artifacts/fixtures_benchmark_fast.tar.gz" "/mnt/eest_artifacts/fixtures_benchmark.tar.gz"
+          
+          echo "=== Running capture_eest_tests.py ==="
+          python3 capture_eest_tests.py -o eest_tests --local-archive "/mnt/eest_artifacts/fixtures_benchmark.tar.gz"
+          
+          echo ""
+          echo "=== EEST tests captured ==="
+          du -sh eest_tests
+          echo ""
+          echo "=== Disk space after EEST capture ==="
+          df -h
+          
+          # Clean up temp artifacts to free space
+          echo ""
+          echo "=== Cleaning up temp artifacts ==="
+          sudo rm -rf "/mnt/eest_artifacts"
+          df -h
+
+      - name: Show disk space before genesis download
+        run: |
+          echo "=== Disk space before genesis artifact download ==="
+          df -h
+
+      - name: Create temp directory for genesis artifacts
+        run: |
+          sudo mkdir -p /mnt/genesis_temp
+          sudo chown $USER:$USER /mnt/genesis_temp
 
       - name: Download benchmark genesis artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMPDIR: /mnt/genesis_temp  # Use /mnt for temp files during extraction
         run: |
+          echo "=== Starting genesis artifact download ==="
           gh run download -R ethereum/execution-specs -n benchmark_genesis_benchmark_fast
+          echo ""
+          echo "=== Download complete ==="
           ls -la
+          echo ""
+          echo "=== Disk space after genesis download ==="
+          df -h
 
       - name: Extract benchmark genesis artifact
         run: |
@@ -112,6 +200,17 @@ jobs:
           
           echo "Contents after extraction:"
           ls -la
+          
+          echo ""
+          echo "=== Disk space after genesis extraction ==="
+          df -h
+          
+          # Clean up the archive and temp dir to free space
+          echo ""
+          echo "=== Cleaning up genesis archive and temp ==="
+          rm -f "$archive"
+          sudo rm -rf /mnt/genesis_temp
+          df -h
 
       - name: Find largest genesis directory
         id: genesis-dir
@@ -206,6 +305,17 @@ jobs:
               echo ""
             fi
           done
+
+      - name: Final disk space check
+        run: |
+          echo "=== Final disk space summary ==="
+          df -h
+          echo ""
+          echo "=== Repository size breakdown ==="
+          du -sh eest_tests scripts/genesisfiles 2>/dev/null || echo "Directories not yet created"
+          echo ""
+          echo "=== Total repository size ==="
+          du -sh .
 
       - name: Detect repository changes
         id: git-status
