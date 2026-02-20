@@ -144,7 +144,7 @@ jobs:
           # Clean up temp artifacts to free space
           echo ""
           echo "=== Cleaning up temp artifacts ==="
-          rm -rf "/mnt/eest_artifacts"
+          sudo rm -rf "/mnt/eest_artifacts"
           df -h
 
       - name: Show disk space before genesis download
