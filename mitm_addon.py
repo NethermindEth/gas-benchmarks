@@ -32,7 +32,8 @@ JWT_HEX_PATH: str = _CFG["jwt_hex_path"]
 FINALIZED_BLOCK: str = _CFG.get("finalized_block") or ""
 HOOK_BLOCK: str = _CFG.get("hook_block") or ""
 SKIP_CLEANUP: bool = bool(_CFG.get("skip_cleanup"))
-DISABLE_OVERLAY_RESTORE: bool = bool(_CFG.get("disable_overlay_restore", True))
+DISABLE_OVERLAY_RESTORE: bool = bool(_CFG.get("disable_overlay_restore"))
+OVERLAY_RESTORE_TRIGGER_ADDRESS: str = _CFG.get("overlay_restore_trigger_address", "0x86cf016fb873d50a7b8f31eb154c9234dd31b058").lower()
 REUSE_GLOBALS: bool = bool(_CFG.get("reuse_globals"))
 FORK: str = str(_CFG.get("fork") or "Prague")
 
@@ -1306,6 +1307,8 @@ def load(loader) -> None:
     )
     if DISABLE_OVERLAY_RESTORE:
         _log("OVERLAY RESTORE DISABLED — no pause/resume or reorg between scenarios")
+    else:
+        _log(f"overlay restore trigger: eth_getBalance for {OVERLAY_RESTORE_TRIGGER_ADDRESS}")
     _ensure_dirs_and_cleanup_old()
     globals()['_OVERLAY_PRIMED'] = False
     globals()['_PENDING_OVERLAY'] = None
@@ -1414,24 +1417,8 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
 
     if not DISABLE_OVERLAY_RESTORE:
         _wait_for_resume()
-
-        pending_overlay = globals().get('_PENDING_OVERLAY')
-        if pending_overlay:
-            pending_scenario, pending_stage, pending_block = pending_overlay
-            meta_probe, _src_probe = _extract_meta(headers, item)
-            current_scenario = None
-            if meta_probe:
-                try:
-                    grp_probe = _derive_group_from_meta(meta_probe)
-                    current_scenario = _scenario_name(grp_probe[0], grp_probe[1])
-                except Exception:
-                    current_scenario = None
-            if current_scenario and current_scenario != pending_scenario:
-                globals()['_PENDING_OVERLAY'] = None
-                _clear_pending_tx_hashes()
-                _log(f"overlay restore pause triggered before scenario {current_scenario}")
-                _signal_cleanup_pause('__overlay_restore__', pending_stage, pending_block)
-                _wait_for_resume()
+        # NOTE: overlay restore is triggered exclusively by eth_getBalance for
+        # OVERLAY_RESTORE_TRIGGER_ADDRESS in the request() hook — not here.
 
     params = item.get("params") or []
     raw = params[0] if params and isinstance(params[0], str) and params[0].startswith("0x") else None
@@ -1573,27 +1560,34 @@ def request(flow: http.HTTPFlow) -> None:
     if not DISABLE_OVERLAY_RESTORE:
         pending = globals().get("_PENDING_OVERLAY")
         if pending:
-            trigger_method = None
+            # Trigger overlay restore ONLY when eth_getBalance for the designated
+            # trigger address is observed (deterministic reorg point).
+            is_trigger = False
             for entry in entries:
                 method = entry.get("method") if isinstance(entry, dict) else None
-                if method and method != "eth_getTransactionByHash":
-                    trigger_method = method
-                    break
-            if trigger_method:
-                # Gate: wait until ALL testing-phase txs are confirmed before letting
-                # non-getTxByHash requests through and triggering the overlay restore.
+                if method == "eth_getBalance":
+                    params = entry.get("params", [])
+                    addr = (params[0] if params and isinstance(params[0], str) else "").lower()
+                    if addr == OVERLAY_RESTORE_TRIGGER_ADDRESS:
+                        is_trigger = True
+                        break
+            if is_trigger:
+                # Gate: wait until ALL testing-phase txs are confirmed first.
                 with _PENDING_TX_LOCK:
                     remaining = len(_PENDING_TX_HASHES)
                 if remaining > 0:
                     _log(
-                        f"non-getTxByHash method {trigger_method} arrived but {remaining} tx(s) still "
-                        f"unconfirmed; blocking until all confirmed"
+                        f"eth_getBalance trigger for {OVERLAY_RESTORE_TRIGGER_ADDRESS} but {remaining} "
+                        f"tx(s) still unconfirmed; blocking until all confirmed"
                     )
                 _wait_for_all_tx_confirmed()
                 scenario, stage, block_hash = pending
                 globals()["_PENDING_OVERLAY"] = None
                 _clear_pending_tx_hashes()
-                _log(f"overlay restore pause triggered before method {trigger_method} for scenario {scenario}")
+                _log(
+                    f"overlay restore triggered by eth_getBalance for "
+                    f"{OVERLAY_RESTORE_TRIGGER_ADDRESS} scenario={scenario}"
+                )
                 _signal_cleanup_pause("__overlay_restore__", stage, block_hash)
                 _wait_for_resume()
                 _insert_empty_hook_separator("confirmed-restore-before-next-request", scenario)
