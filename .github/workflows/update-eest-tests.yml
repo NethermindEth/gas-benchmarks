@@ -209,7 +209,7 @@ jobs:
           echo ""
           echo "=== Cleaning up genesis archive and temp ==="
           rm -f "$archive"
-          rm -rf /mnt/genesis_temp
+          sudo rm -rf /mnt/genesis_temp
           df -h
 
       - name: Find largest genesis directory
