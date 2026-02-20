@@ -1,0 +1,72 @@
+# TIMESTAMP: 639071822376542830
+# MEASUREMENT: [Application] Failed
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 1
+--------------------------------------------------------------
+# TIMESTAMP: 639071822376542830
+# MEASUREMENT: [Application] Messages
+# TAGS:
+                  mtype = counter
+                   unit = items
+# FIELDS:
+                  value = 1
+--------------------------------------------------------------
+# TIMESTAMP: 639071822376542830
+# MEASUREMENT: [Application] Total Running Time
+# TAGS:
+                  mtype = timer
+                   unit = none
+               unit_dur = ms
+              unit_rate = min
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 432.3165248668465
+                samples = 1
+                   last = 119.5591
+             count.hist = 1
+                    sum = 119.5591
+                    min = 119.5591
+                    max = 119.5591
+                   mean = 119.5591
+                 median = 119.5591
+                 stddev = 0
+                   p999 = 119.5591
+                    p99 = 119.5591
+                    p98 = 119.5591
+                    p95 = 119.5591
+                    p75 = 119.5591
+--------------------------------------------------------------
+# TIMESTAMP: 639071822376542830
+# MEASUREMENT: [Application] engine_newPayloadV4
+# TAGS:
+                  mtype = timer
+                   unit = req
+               unit_dur = ms
+              unit_rate = ms
+# FIELDS:
+            count.meter = 1
+                 rate1m = 0
+                 rate5m = 0
+                rate15m = 0
+              rate.mean = 0.014919717002807892
+                samples = 1
+                   last = 19.2293
+             count.hist = 1
+                    sum = 19.2293
+                    min = 19.2293
+                    max = 19.2293
+                   mean = 19.2293
+                 median = 19.2293
+                 stddev = 0
+                   p999 = 19.2293
+                    p99 = 19.2293
+                    p98 = 19.2293
+                    p95 = 19.2293
+                    p75 = 19.2293
+--------------------------------------------------------------
