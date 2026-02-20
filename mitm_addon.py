@@ -32,6 +32,7 @@ JWT_HEX_PATH: str = _CFG["jwt_hex_path"]
 FINALIZED_BLOCK: str = _CFG.get("finalized_block") or ""
 HOOK_BLOCK: str = _CFG.get("hook_block") or ""
 SKIP_CLEANUP: bool = bool(_CFG.get("skip_cleanup"))
+DISABLE_OVERLAY_RESTORE: bool = bool(_CFG.get("disable_overlay_restore", True))
 REUSE_GLOBALS: bool = bool(_CFG.get("reuse_globals"))
 FORK: str = str(_CFG.get("fork") or "Prague")
 
@@ -1116,7 +1117,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
                         _minified_json_line(fcu_body)
                     ])
                     _log(f"global-no-phase CURRENT-LAST updated -> {_CURRENT_LAST_FILE}")
-            if not _OVERLAY_PRIMED and not _TESTS_STARTED:
+            if not DISABLE_OVERLAY_RESTORE and not _OVERLAY_PRIMED and not _TESTS_STARTED:
                 block_hash = exec_payload.get("blockHash")
                 globals()["_PENDING_OVERLAY"] = ("__overlay_init__", idx, block_hash)
                 _signal_cleanup_pause("__overlay_init__", idx, block_hash)
@@ -1151,11 +1152,14 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
             block_hash = exec_payload.get("blockHash")
             globals()['_PENDING_OVERLAY'] = None
             _clear_pending_tx_hashes()
-            _log(f"cleanup stage {idx} complete for {scenario}; triggering immediate restore")
-            _signal_cleanup_pause("__overlay_restore__", idx, block_hash)
-            _wait_for_resume()
-            _insert_empty_hook_separator("cleanup-stage", scenario)
-        elif SKIP_CLEANUP and ph == "testing":
+            if not DISABLE_OVERLAY_RESTORE:
+                _log(f"cleanup stage {idx} complete for {scenario}; triggering immediate restore")
+                _signal_cleanup_pause("__overlay_restore__", idx, block_hash)
+                _wait_for_resume()
+                _insert_empty_hook_separator("cleanup-stage", scenario)
+            else:
+                _log(f"cleanup stage {idx} complete for {scenario}; overlay restore disabled")
+        elif SKIP_CLEANUP and not DISABLE_OVERLAY_RESTORE and ph == "testing":
             block_hash = exec_payload.get("blockHash")
             globals()['_PENDING_OVERLAY'] = (scenario, idx, block_hash)
             tx_hashes: set = set()
@@ -1300,6 +1304,8 @@ def load(loader) -> None:
         "timestamp mode for testing_buildBlockV1: "
         + ("parent+24h+1 (hack enabled)" if _TESTING_BUILDBLOCK_TIMESTAMP_HACK else "parent+1 (default)")
     )
+    if DISABLE_OVERLAY_RESTORE:
+        _log("OVERLAY RESTORE DISABLED — no pause/resume or reorg between scenarios")
     _ensure_dirs_and_cleanup_old()
     globals()['_OVERLAY_PRIMED'] = False
     globals()['_PENDING_OVERLAY'] = None
@@ -1406,25 +1412,26 @@ def _append_raw_request_line(path: pathlib.Path, obj: Any) -> None:
 def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
     global _ACTIVE_GRP, _LAST_SENDRAW_TS, _PENDING, _BUF, _TESTS_STARTED
 
-    _wait_for_resume()
+    if not DISABLE_OVERLAY_RESTORE:
+        _wait_for_resume()
 
-    pending_overlay = globals().get('_PENDING_OVERLAY')
-    if pending_overlay:
-        pending_scenario, pending_stage, pending_block = pending_overlay
-        meta_probe, _src_probe = _extract_meta(headers, item)
-        current_scenario = None
-        if meta_probe:
-            try:
-                grp_probe = _derive_group_from_meta(meta_probe)
-                current_scenario = _scenario_name(grp_probe[0], grp_probe[1])
-            except Exception:
-                current_scenario = None
-        if current_scenario and current_scenario != pending_scenario:
-            globals()['_PENDING_OVERLAY'] = None
-            _clear_pending_tx_hashes()
-            _log(f"overlay restore pause triggered before scenario {current_scenario}")
-            _signal_cleanup_pause('__overlay_restore__', pending_stage, pending_block)
-            _wait_for_resume()
+        pending_overlay = globals().get('_PENDING_OVERLAY')
+        if pending_overlay:
+            pending_scenario, pending_stage, pending_block = pending_overlay
+            meta_probe, _src_probe = _extract_meta(headers, item)
+            current_scenario = None
+            if meta_probe:
+                try:
+                    grp_probe = _derive_group_from_meta(meta_probe)
+                    current_scenario = _scenario_name(grp_probe[0], grp_probe[1])
+                except Exception:
+                    current_scenario = None
+            if current_scenario and current_scenario != pending_scenario:
+                globals()['_PENDING_OVERLAY'] = None
+                _clear_pending_tx_hashes()
+                _log(f"overlay restore pause triggered before scenario {current_scenario}")
+                _signal_cleanup_pause('__overlay_restore__', pending_stage, pending_block)
+                _wait_for_resume()
 
     params = item.get("params") or []
     raw = params[0] if params and isinstance(params[0], str) and params[0].startswith("0x") else None
@@ -1523,7 +1530,8 @@ def serverdisconnect(con) -> None:
 
 def request(flow: http.HTTPFlow) -> None:
     start_time = perf_counter()
-    _wait_for_resume()
+    if not DISABLE_OVERLAY_RESTORE:
+        _wait_for_resume()
 
     body_text = ""
     try:
@@ -1562,32 +1570,33 @@ def request(flow: http.HTTPFlow) -> None:
     elif isinstance(req_obj, list):
         entries = [entry for entry in req_obj if isinstance(entry, dict)]
 
-    pending = globals().get("_PENDING_OVERLAY")
-    if pending:
-        trigger_method = None
-        for entry in entries:
-            method = entry.get("method") if isinstance(entry, dict) else None
-            if method and method != "eth_getTransactionByHash":
-                trigger_method = method
-                break
-        if trigger_method:
-            # Gate: wait until ALL testing-phase txs are confirmed before letting
-            # non-getTxByHash requests through and triggering the overlay restore.
-            with _PENDING_TX_LOCK:
-                remaining = len(_PENDING_TX_HASHES)
-            if remaining > 0:
-                _log(
-                    f"non-getTxByHash method {trigger_method} arrived but {remaining} tx(s) still "
-                    f"unconfirmed; blocking until all confirmed"
-                )
-            _wait_for_all_tx_confirmed()
-            scenario, stage, block_hash = pending
-            globals()["_PENDING_OVERLAY"] = None
-            _clear_pending_tx_hashes()
-            _log(f"overlay restore pause triggered before method {trigger_method} for scenario {scenario}")
-            _signal_cleanup_pause("__overlay_restore__", stage, block_hash)
-            _wait_for_resume()
-            _insert_empty_hook_separator("confirmed-restore-before-next-request", scenario)
+    if not DISABLE_OVERLAY_RESTORE:
+        pending = globals().get("_PENDING_OVERLAY")
+        if pending:
+            trigger_method = None
+            for entry in entries:
+                method = entry.get("method") if isinstance(entry, dict) else None
+                if method and method != "eth_getTransactionByHash":
+                    trigger_method = method
+                    break
+            if trigger_method:
+                # Gate: wait until ALL testing-phase txs are confirmed before letting
+                # non-getTxByHash requests through and triggering the overlay restore.
+                with _PENDING_TX_LOCK:
+                    remaining = len(_PENDING_TX_HASHES)
+                if remaining > 0:
+                    _log(
+                        f"non-getTxByHash method {trigger_method} arrived but {remaining} tx(s) still "
+                        f"unconfirmed; blocking until all confirmed"
+                    )
+                _wait_for_all_tx_confirmed()
+                scenario, stage, block_hash = pending
+                globals()["_PENDING_OVERLAY"] = None
+                _clear_pending_tx_hashes()
+                _log(f"overlay restore pause triggered before method {trigger_method} for scenario {scenario}")
+                _signal_cleanup_pause("__overlay_restore__", stage, block_hash)
+                _wait_for_resume()
+                _insert_empty_hook_separator("confirmed-restore-before-next-request", scenario)
 
     # Fast path: if tx lookup starts, flush pending buffered sendraws immediately.
     has_get_tx_by_hash = any(entry.get("method") == "eth_getTransactionByHash" for entry in entries)
