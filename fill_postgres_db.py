@@ -567,18 +567,27 @@ def populate_data_for_client(
                     if run_value is None:
                         logging.debug(f"Skipping empty run value for {test_case_name_raw}.")
                         continue
+                    if run_value == 0:
+                        # Zero values represent missing measurements.
+                        continue
+                    invalid_run = run_value < 0
 
                     raw_run_duration_ms: Optional[float] = None
                     raw_run_mgas_s: Optional[float] = None
 
-                    if values_are_durations:
-                        raw_run_duration_ms = run_value
-                        if gas_value_float is not None and raw_run_duration_ms > 0:
-                            raw_run_mgas_s = (gas_value_float / raw_run_duration_ms) * 1000.0
+                    if invalid_run:
+                        # Keep invalid runs in DB for auditability and easy filtering.
+                        raw_run_duration_ms = -1.0
+                        raw_run_mgas_s = None
                     else:
-                        raw_run_mgas_s = run_value
-                        if gas_value_float is not None and raw_run_mgas_s > 0:
-                            raw_run_duration_ms = (gas_value_float / raw_run_mgas_s) * 1000.0
+                        if values_are_durations:
+                            raw_run_duration_ms = run_value
+                            if gas_value_float is not None and raw_run_duration_ms > 0:
+                                raw_run_mgas_s = (gas_value_float / raw_run_duration_ms) * 1000.0
+                        else:
+                            raw_run_mgas_s = run_value
+                            if gas_value_float is not None and raw_run_mgas_s > 0:
+                                raw_run_duration_ms = (gas_value_float / raw_run_mgas_s) * 1000.0
 
                     start_time = agg_stats.get('start_time')
                     if start_time in (0, "0", "", None):
@@ -591,6 +600,10 @@ def populate_data_for_client(
                     test_duration = agg_stats.get('test_duration')
                     fcu_duration = agg_stats.get('fcu_duration')
                     np_duration = agg_stats.get('np_duration')
+                    if invalid_run:
+                        test_duration = -1.0
+                        fcu_duration = -1.0
+                        np_duration = -1.0
                     
                     record: Dict[str, Any] = {
                         'client_name': client_name,
@@ -716,27 +729,39 @@ def main() -> None:
             logging.debug(f"Computer specs parsed: {computer_specs}")
 
             output_csv_pattern = os.path.join(args.reports_dir, "output_*.csv")
-            client_files = glob.glob(output_csv_pattern)
+            raw_csv_pattern = os.path.join(args.reports_dir, "raw_results_*.csv")
+            output_files = glob.glob(output_csv_pattern)
+            raw_files = glob.glob(raw_csv_pattern)
 
-            if not client_files:
-                logging.warning(f"No 'output_*.csv' files found in {args.reports_dir}. Cannot determine clients.")
-                # No sys.exit here, connection will be closed in finally
-                return # Exit main if no clients
-
-            clients: List[str] = []
-            for f_path in client_files:
+            clients_set = set()
+            for f_path in output_files:
                 filename = os.path.basename(f_path)
                 match = re.match(r"output_(.+)\.csv", filename)
                 if match:
-                    clients.append(match.group(1))
+                    clients_set.add(match.group(1))
                 else:
                     logging.warning(f"Could not parse client name from {filename}")
 
-            if not clients:
-                logging.warning(f"No clients could be determined from 'output_*.csv' files in {args.reports_dir}. Exiting.")
+            for f_path in raw_files:
+                filename = os.path.basename(f_path)
+                match = re.match(r"raw_results_(.+)\.csv", filename)
+                if match:
+                    clients_set.add(match.group(1))
+                else:
+                    logging.warning(f"Could not parse client name from {filename}")
+
+            if not clients_set:
+                logging.warning(
+                    f"No output/raw client CSV files found in {args.reports_dir}. "
+                    "Cannot determine clients."
+                )
                 return
 
-            logging.info(f"Found clients: {clients}")
+            clients: List[str] = sorted(clients_set)
+            logging.info(
+                f"Found clients: {clients} "
+                f"(output_csv_files={len(output_files)}, raw_csv_files={len(raw_files)})"
+            )
 
             for client_name in clients:
                 logging.info(f"--- Processing client: {client_name} ---")
@@ -753,8 +778,10 @@ def main() -> None:
                 aggregated_stats_map = load_aggregated_stats(output_csv_path)
 
                 if not aggregated_stats_map:
-                    logging.warning(f"No aggregated stats loaded for client {client_name}, skipping raw data processing for this client.")
-                    continue
+                    logging.warning(
+                        f"No aggregated stats loaded for client {client_name}; "
+                        "continuing with raw_results_* ingestion only."
+                    )
 
                 inserted_for_client = populate_data_for_client(
                     cursor, args.table_name, client_name, client_version, # Added client_version

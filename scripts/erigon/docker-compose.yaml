@@ -50,6 +50,7 @@ services:
       - --authrpc.vhosts=*
       - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
       - --datadir=/var/lib/erigon
+      - ${ERIGON_CHAIN_FLAG}
       - --healthcheck
       - --metrics
       - --metrics.addr=0.0.0.0

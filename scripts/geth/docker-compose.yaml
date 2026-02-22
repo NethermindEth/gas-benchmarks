@@ -1,7 +1,23 @@
 services:
+  execution-sync:
+    container_name: gas-execution-client-sync
+    image: ${EC_IMAGE_VERSION}
+    pull_policy: always
+    networks:
+      - gas
+    volumes:
+      - execution_data:/var/lib/goethereum/geth
+      - ${GENESIS_PATH}:/tmp/genesis/genesis.json
+    entrypoint:
+      - /bin/sh
+      - -c
+      - ${GETH_INIT_COMMAND}
   execution:
     stop_grace_period: 30m
     container_name: gas-execution-client
+    depends_on:
+      execution-sync:
+        condition: service_completed_successfully
     restart: unless-stopped
     image: ${EC_IMAGE_VERSION}
     pull_policy: always
@@ -32,22 +48,16 @@ services:
       - --datadir=/var/lib/goethereum
       - --port=0
       - --http.port=8545
-      - ${GETH_NETWORK_FLAG:---networkid=1337}
+      - ${GETH_NETWORK_FLAG}
       - --maxpeers=0
       - --nodiscover
       - --bootnodes=
-      - --ws
-      - --ws.addr=0.0.0.0
-      - --ws.port=8546
-      - --ws.api=engine,eth,web3,net,debug
       - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
       - --authrpc.addr=0.0.0.0
       - --authrpc.port=8551
       - --authrpc.vhosts=*
       - --metrics
       - --metrics.port=8008
-      - --verbosity=3
-      - --networkid=12159
     logging:
       driver: json-file
       options:

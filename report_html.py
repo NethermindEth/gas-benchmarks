@@ -63,7 +63,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
             image_to_print = el_images[client_without_tag]
         results_to_print += f'<h1>{client.capitalize()} - {image_to_print} - Benchmarking Report</h1>' + '\n'
         results_to_print += f'<table id="table_{client}">'
-        results_to_print += ('<thread>\n'
+        results_to_print += ('<thead>\n'
                              '<tr>\n'
                              f'<th class=\"title\" onclick="sortTable(0, \'table_{client}\', false)" style="cursor: pointer;">Title &uarr; &darr;</th>\n'
                              f'<th onclick="sortTable(1, \'table_{client}\', true)" style="cursor: pointer;">Max (MGas/s) &uarr; &darr;</th>\n'
@@ -79,7 +79,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              f'<th onclick="sortTable(11, \'table_{client}\', true)" style="cursor: pointer;">FCU time (ms) &uarr; &darr;</th>\n'
                              f'<th onclick="sortTable(12, \'table_{client}\', true)" style="cursor: pointer;">NP time (ms) &uarr; &darr;</th>\n'
                              '</tr>\n'
-                             '</thread>\n'
+                             '</thead>\n'
                              '<tbody>\n')
         gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, skip_empty)
         csv_table[client] = gas_table_norm
@@ -225,22 +225,25 @@ def main():
                         result_token = variant_meta.get("result_token")
                         responses, results, timestamp, duration, fcu_duration, np_duration = utils.extract_response_and_result(results_paths, client, test_case_name,
                                                                                gas, run, method, fields, result_token=result_token)
-                        client_results[client][test_case_name][gas][method].append(results)
+                        run_result = results if responses else -1
+                        client_results[client][test_case_name][gas][method].append(run_result)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
-                        # print(test_case_name + " : " + str(timestamp))
-                        if str(timestamp) != "0":
-                            # Store raw timestamp in ticks for calculation, not converted string
-                            client_results[client][test_case_name]["timestamp_ticks"] = timestamp
-                            # Only store duration if non-zero to avoid overwriting valid values
+                        # Capture duration/timestamp only for VALID responses to avoid contaminating aggregates.
+                        if responses:
+                            if str(timestamp) != "0":
+                                # Store raw timestamp in ticks for calculation, not converted string
+                                client_results[client][test_case_name]["timestamp_ticks"] = timestamp
+                            elif "timestamp_ticks" not in client_results[client][test_case_name]:
+                                client_results[client][test_case_name]["timestamp_ticks"] = 0
+                            # Store duration metrics even when timestamp is unavailable (new Kute report format).
                             if duration != 0:
                                 client_results[client][test_case_name]["duration"] = duration
                             if fcu_duration != 0:
                                 client_results[client][test_case_name]["fcu_duration"] = fcu_duration
                             if np_duration != 0:
                                 client_results[client][test_case_name]["np_duration"] = np_duration
-                        else:
-                            if "timestamp_ticks" not in client_results[client][test_case_name]:
-                                client_results[client][test_case_name]["timestamp_ticks"] = 0
+                        elif "timestamp_ticks" not in client_results[client][test_case_name]:
+                            client_results[client][test_case_name]["timestamp_ticks"] = 0
                         # Initialize duration to 0 only if not set yet
                         if "duration" not in client_results[client][test_case_name]:
                             client_results[client][test_case_name]["duration"] = 0
