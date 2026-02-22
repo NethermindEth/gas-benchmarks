@@ -1167,8 +1167,14 @@ else
 fi
 
 # Prepare and zip the results
-mkdir -p reports/docker
-cp -r results/docker_* reports/docker
-zip -r reports.zip reports
+if ls logs/docker_* 1>/dev/null 2>&1; then
+  mkdir -p reports/docker
+  cp -r logs/docker_* reports/docker
+fi
+if command -v zip &>/dev/null; then
+  zip -r reports.zip reports
+else
+  tar -czf reports.tar.gz reports
+fi
 
 # Print timing summary at the end

@@ -809,10 +809,8 @@ def print_computer_specs():
         'CPU GHz': cpu.get('hz_actual_friendly', 'N/A')
     }
 
-    # Print the specifications
     for key, value in system_info.items():
         line = f'{key}: {value}'
-        print(line)
         info += line + "\n"
     return info + "\n"
 

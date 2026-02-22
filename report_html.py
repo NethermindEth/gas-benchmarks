@@ -158,7 +158,6 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
 
     soup = BeautifulSoup(results_to_print, 'lxml')
     formatted_html = soup.prettify()
-    print(formatted_html)
     if not os.path.exists('reports'):
         os.mkdir('reports')
     with open('reports/index.html', 'w') as file:
@@ -202,7 +201,6 @@ def main():
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
         computer_spec = text
-    print(computer_spec)
 
     client_results = {}
     failed_tests = {}
@@ -292,8 +290,6 @@ def main():
                     csvwriter.writerow(rows)
 
     get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, skip_empty)
-
-    print('Done!')
 
 
 if __name__ == '__main__':
