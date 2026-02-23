@@ -3,12 +3,12 @@ name: Run Parallel Benchmarks (Repricing)
 on:
   push:
     branches:
-      - repricing
+      - main
   workflow_dispatch:
     inputs:
       test:
-        description: 'Path to test file'
-        default: 'repricings_compute'
+        description: "Path(s) to repricing test directories (comma-separated) or 'all'"
+        default: 'all'
       runs:
         description: 'Number of runs for the application'
         default: 1
@@ -24,26 +24,22 @@ on:
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
-      genesis:
-        description: 'Genesis filename (used for all clients)'
-        default: 'zkevmgenesis.json'
 
 concurrency:
   group: repricing-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  INPUT_TEST: ${{ github.event.inputs.test || 'repricings_compute' }}
+  INPUT_TEST: ${{ github.event.inputs.test || 'all' }}
   INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
   INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
   INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
   INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
   INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
-  INPUT_GENESIS: ${{ github.event.inputs.genesis || 'zkevmgenesis.json' }}
 
 jobs:
   set-matrix:
-    if: github.ref == 'refs/heads/repricing'
+    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -63,14 +59,41 @@ jobs:
           if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
             runs=1
           fi
-          clients="geth,nethermind,erigon,besu,reth"
+          clients="geth,nethermind,besu"
           IFS=',' read -ra client_array <<< "$clients"
+          tests_input="${{ env.INPUT_TEST }}"
+          targets=()
+
+          if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
+            targets+=("repricings_compute/mainnet|mainnet")
+            targets+=("repricings_compute/perf-devnet-2|perf-devnet-2")
+            targets+=("repricings_stateful/mainnet|mainnet")
+            targets+=("repricings_stateful/perf-devnet-2|perf-devnet-2")
+          else
+            IFS=',' read -ra requested_paths <<< "$tests_input"
+            for raw_path in "${requested_paths[@]}"; do
+              test_path="$(echo "$raw_path" | xargs)"
+              [ -z "$test_path" ] && continue
+              network="$(basename "$test_path")"
+              targets+=("${test_path}|${network}")
+            done
+          fi
+
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No test targets selected"
+            exit 1
+          fi
+
           matrix_elements=()
           
           for ((i=1; i<=runs; i++)); do
-            for client in "${client_array[@]}"; do
-              element="{'run': '$i', 'client': '$client'}"
-              matrix_elements+=("$element")
+            for target in "${targets[@]}"; do
+              for client in "${client_array[@]}"; do
+                test_path="${target%%|*}"
+                network="${target##*|}"
+                element="{'run': '$i', 'client': '$client', 'test_path': '$test_path', 'network': '$network'}"
+                matrix_elements+=("$element")
+              done
             done
           done
           
@@ -80,35 +103,173 @@ jobs:
 
   build:
     needs: set-matrix
-    runs-on: [self-hosted, repricing]
+    runs-on:
+      - self-hosted
+      - repricing
+      - ${{ matrix.client }}
+    timeout-minutes: 10080
 
     strategy:
       # Consume the JSON matrix we just emitted
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
       fail-fast: false
-      max-parallel: 5
 
     env:
-      DOTNET_INSTALL_DIR: "~/.dotnet"
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      MIN_DOCKER_API_VERSION: "1.44"
+      NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT: "12"
+      NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS: "5000"
+      NUGET_ENHANCED_NETWORK_TIMEOUT_MILLISECONDS: "300000"
+      NUGET_PACKAGES: "/data/nuget/packages"
 
     steps:
-      - name: Ensure git-lfs and zip are installed
+      - name: Ensure base tools are installed
         run: |
+          set -euo pipefail
           missing=()
+          docker_missing=false
+          compose_missing=false
+
           if ! command -v git-lfs >/dev/null 2>&1; then
             missing+=("git-lfs")
           fi
           if ! command -v zip >/dev/null 2>&1; then
             missing+=("zip")
           fi
-          if [ ${#missing[@]} -eq 0 ]; then
-            exit 0
+          if ! command -v curl >/dev/null 2>&1; then
+            missing+=("curl")
           fi
-          if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}"
+          if ! command -v make >/dev/null 2>&1; then
+            missing+=("make")
+          fi
+
+          if ! command -v docker >/dev/null 2>&1; then
+            docker_missing=true
+            compose_missing=true
           else
-            echo "Missing: ${missing[*]}. Install them on the runner or provide apt-get."
+            if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+              compose_missing=true
+            fi
+          fi
+
+          packages=("${missing[@]}")
+          if [ "$docker_missing" = true ]; then
+            packages+=("docker.io")
+          fi
+          if [ "$compose_missing" = true ]; then
+            if command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+              packages+=("docker-compose-plugin")
+            elif command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+              packages+=("docker-compose-v2")
+            fi
+          fi
+
+          if [ ${#packages[@]} -gt 0 ]; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+            else
+              echo "Missing packages: ${packages[*]}. Install them on the runner or provide apt-get."
+              exit 1
+            fi
+          fi
+
+          if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl start docker >/dev/null 2>&1 || true
+          elif command -v service >/dev/null 2>&1; then
+            sudo service docker start >/dev/null 2>&1 || true
+          fi
+
+          if ! docker compose version >/dev/null 2>&1; then
+            echo "docker compose plugin is still unavailable; installing Compose v2 binary plugin..."
+            arch="$(uname -m)"
+            case "$arch" in
+              x86_64|amd64) arch="x86_64" ;;
+              aarch64|arm64) arch="aarch64" ;;
+              *)
+                echo "Unsupported architecture for Compose v2 bootstrap: $arch"
+                exit 1
+                ;;
+            esac
+            os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+            compose_version="${COMPOSE_VERSION:-v2.29.7}"
+            plugin_dir="$HOME/.docker/cli-plugins"
+            mkdir -p "$plugin_dir"
+            curl -fsSL "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-${os}-${arch}" -o "$plugin_dir/docker-compose"
+            chmod +x "$plugin_dir/docker-compose"
+            mkdir -p "$HOME/.local/bin"
+            ln -sf "$plugin_dir/docker-compose" "$HOME/.local/bin/docker-compose"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+          mkdir -p "$NUGET_PACKAGES"
+
+          echo "PATH=$PATH"
+          command -v docker || true
+          which -a docker || true
+          docker version --format 'CLIENT={{.Client.Version}} API={{.Client.APIVersion}} SERVER_MIN={{.Server.MinAPIVersion}}' || true
+          docker compose version || true
+          if ! docker compose version >/dev/null 2>&1; then
+            if command -v docker-compose >/dev/null 2>&1 && docker-compose version --short 2>/dev/null | grep -q '^v\?2\.'; then
+              echo "Using docker-compose v2 standalone fallback: $(command -v docker-compose)"
+            else
+              echo "ERROR: Docker Compose v2 is not available (plugin missing and no docker-compose v2 fallback)."
+              exit 1
+            fi
+          fi
+
+      - name: Ensure Docker client API compatibility
+        run: |
+          set -euo pipefail
+
+          version_ge() {
+            local lhs="$1"
+            local rhs="$2"
+            [ "$lhs" = "$rhs" ] && return 0
+            [ "$(printf '%s\n%s\n' "$lhs" "$rhs" | sort -V | tail -n 1)" = "$lhs" ]
+          }
+
+          required="${MIN_DOCKER_API_VERSION:-1.44}"
+
+          docker_bin="$(command -v docker || true)"
+          while IFS= read -r candidate; do
+            if [ -n "$candidate" ] && [[ "$candidate" != *"/.native-bin/"* ]] && [ -x "$candidate" ]; then
+              docker_bin="$candidate"
+              break
+            fi
+          done < <(which -a docker 2>/dev/null | awk '!seen[$0]++')
+
+          if [ -z "${docker_bin}" ] || [ ! -x "${docker_bin}" ]; then
+            echo "docker CLI is missing on runner."
+            exit 1
+          fi
+
+          echo "Using docker binary: ${docker_bin}"
+          echo "DOCKER_BIN=${docker_bin}" >> "$GITHUB_ENV"
+
+          if [ -n "${DOCKER_API_VERSION:-}" ]; then
+            echo "Clearing DOCKER_API_VERSION=${DOCKER_API_VERSION} to allow client/daemon negotiation."
+            echo "DOCKER_API_VERSION=" >> "$GITHUB_ENV"
+            unset DOCKER_API_VERSION
+          fi
+
+          client_api="$("${docker_bin}" version --format '{{.Client.APIVersion}}' 2>/dev/null || true)"
+          daemon_min="$("${docker_bin}" version --format '{{.Server.MinAPIVersion}}' 2>/dev/null || true)"
+
+          if [ -n "$daemon_min" ] && version_ge "$daemon_min" "$required"; then
+            required="$daemon_min"
+          fi
+
+          if [ -z "$client_api" ]; then
+            echo "Unable to read Docker client API version. Diagnostic output:"
+            "${docker_bin}" version || true
+            exit 1
+          fi
+
+          echo "Docker client API=${client_api}, required>=${required}"
+          if ! version_ge "$client_api" "$required"; then
+            echo "ERROR: Docker client API ${client_api} is too old for this daemon (requires >= ${required})."
+            echo "ERROR: Upgrade docker CLI on the self-hosted runner."
             exit 1
           fi
 
@@ -117,32 +278,102 @@ jobs:
         with:
           lfs: true
 
-      - name: Setup Python & .NET
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+      - name: Ensure Python is available (self-hosted)
+        run: |
+          if ! command -v python3 >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-pip python3-venv
+            else
+              echo "python3 not found and apt-get is unavailable on this runner."
+              exit 1
+            fi
+          fi
+
+          if ! python3 -m pip --version >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-pip
+            else
+              echo "python3 is present but pip is unavailable and apt-get is unavailable."
+              exit 1
+            fi
+          fi
+
+          if ! command -v pip >/dev/null 2>&1; then
+            mkdir -p "$HOME/.local/bin"
+            printf '%s\n' '#!/usr/bin/env bash' 'exec python3 -m pip "$@"' > "$HOME/.local/bin/pip"
+            chmod +x "$HOME/.local/bin/pip"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+          python3 --version
+          pip --version
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
+
+      - name: Ensure .NET SDK is available (self-hosted)
+        run: |
+          set -euo pipefail
+          if ! command -v dotnet >/dev/null 2>&1; then
+            echo "dotnet not found after setup-dotnet; installing fallback SDK 10.0"
+            curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+            bash /tmp/dotnet-install.sh --channel 10.0 --quality ga --install-dir "$HOME/.dotnet"
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+            export PATH="$HOME/.dotnet:$PATH"
+          fi
+
+          if ! dotnet --list-sdks | grep -q '^10\.'; then
+            echo "No .NET 10 SDK found; installing fallback SDK 10.0"
+            curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+            bash /tmp/dotnet-install.sh --channel 10.0 --quality ga --install-dir "$HOME/.dotnet"
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+            export PATH="$HOME/.dotnet:$PATH"
+          fi
+
+          dotnet --info
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --user --ignore-installed -r requirements.txt
 
       - name: Make run.sh executable
         run: chmod +x ./run.sh
 
       - name: Run benchmarks for client=${{ matrix.client }}
         run: |
-          GENESIS_FILENAME="${{ env.INPUT_GENESIS }}"
-          TEST_PATH="${{ env.INPUT_TEST }}"
+          TEST_PATH="${{ matrix.test_path }}"
+          NETWORK="${{ matrix.network }}"
           CLIENT="${{ matrix.client }}"
-          TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
-      
+          WARMUP_PATH="${TEST_PATH}_warmup"
+
+          if [ ! -d "$TEST_PATH" ]; then
+            echo "Test path does not exist: $TEST_PATH"
+            exit 1
+          fi
+
+          WARMUP_ARGS=()
+          if [ -d "$WARMUP_PATH" ]; then
+            WARMUP_ARGS=(-W "$WARMUP_PATH")
+          else
+            echo "Warmup path not found: $WARMUP_PATH; continuing without explicit warmup path"
+          fi
+
+          EFFECTIVE_FILTER="${{ env.INPUT_FILTER }}"
+          echo "Using filter: '${EFFECTIVE_FILTER}' for test path: $TEST_PATH"
+
           ./run.sh \
-            -T "$TEST_PATHS_JSON" \
+            -t "$TEST_PATH" \
+            -n "$NETWORK" \
+            -B "/data/snapshots/<<CLIENT>>/<<NETWORK>>" \
+            -O "/data/overlay-workspace" \
             -c "$CLIENT" \
             -r 1 \
             -i '${{ env.INPUT_IMAGES }}' \
             -o "${{ env.INPUT_OPCODES_WARMUP }}" \
-            -f "${{ env.INPUT_FILTER }}" \
-            -W "warmup-repricing"
+            -f "$EFFECTIVE_FILTER" \
+            "${WARMUP_ARGS[@]}"
 
       - name: Dump latest Docker logs for ${{ matrix.client }}
         if: always()
@@ -168,15 +399,17 @@ jobs:
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
           CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
+          CLEANED_TEST_PATH=$(echo "${{ matrix.test_path }}" | tr -d '\n' | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
           echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
           echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
-          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}.zip results
+          echo "CLEANED_TEST_PATH=$CLEANED_TEST_PATH" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}-${CLEANED_TEST_PATH}.zip results
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}
-          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}.zip
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_TEST_PATH }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_TEST_PATH }}.zip
 
       - name: Docker full prune
         if: always()
@@ -218,48 +451,139 @@ jobs:
       - name: Process combined results
         run: |
           set -euo pipefail
-          RESULTS_ROOT="extracted-results/results"
-          if [ ! -d "$RESULTS_ROOT" ]; then
-            echo "Results directory not found: $RESULTS_ROOT"
-            exit 1
-          fi
-
-          mapfile -t CLIENTS < <(find "$RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*')
-          if [ "${#CLIENTS[@]}" -eq 0 ]; then
-            echo "No client result files detected under $RESULTS_ROOT; skipping report generation."
-            mkdir -p reports
-            exit 0
-          fi
-
-          CLIENT_LIST=$(
-            printf "%s\n" "${CLIENTS[@]}" \
-              | xargs -n1 basename \
-              | sed 's/_results_.*//' \
-              | sort -u \
-              | paste -sd',' -
-          )
-
-          if [ -z "$CLIENT_LIST" ]; then
-            echo "Unable to derive client list from results; skipping report generation."
-            mkdir -p reports
-            exit 0
-          fi
-          echo "CLIENT_LIST=$CLIENT_LIST" >> $GITHUB_ENV
-
-          rm -rf reports
-          mkdir -p reports
+          rm -rf reports extracted-results/by_test
+          mkdir -p reports extracted-results/by_test
 
           RUNS="${{ env.INPUT_RUNS }}"
-          TESTS="${{ env.INPUT_TEST }}"
           IMAGES='${{ env.INPUT_IMAGES }}'
 
-          python3 report_tables.py --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
-          python3 report_html.py   --resultsPath "$RESULTS_ROOT" --clients "$CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+          TEST_PATHS=()
+          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
+            TEST_PATHS+=("repricings_compute/mainnet")
+            TEST_PATHS+=("repricings_compute/perf-devnet-2")
+            TEST_PATHS+=("repricings_stateful/mainnet")
+            TEST_PATHS+=("repricings_stateful/perf-devnet-2")
+          else
+            IFS=',' read -ra TEST_PATHS <<< "${{ env.INPUT_TEST }}"
+          fi
+
+          generated=false
+          for raw_test_path in "${TEST_PATHS[@]}"; do
+            TESTS="$(echo "$raw_test_path" | xargs)"
+            [ -z "$TESTS" ] && continue
+            if [ ! -d "$TESTS" ]; then
+              echo "Skipping missing tests path: $TESTS"
+              continue
+            fi
+            SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+            TEST_EXTRACT_DIR="extracted-results/by_test/${SAFE_TESTS}"
+            TEST_RESULTS_ROOT="${TEST_EXTRACT_DIR}/results"
+            PER_TEST_REPORT_DIR="reports/by_test/${SAFE_TESTS}"
+
+            rm -rf "$TEST_EXTRACT_DIR"
+            mkdir -p "$TEST_EXTRACT_DIR"
+
+            mapfile -t TEST_ZIPS < <(find combined-results -type f -name "results-*-${SAFE_TESTS}.zip" | sort)
+            if [ "${#TEST_ZIPS[@]}" -eq 0 ]; then
+              echo "Skipping $TESTS - no matching result artifacts found for ${SAFE_TESTS}"
+              continue
+            fi
+            for zip in "${TEST_ZIPS[@]}"; do
+              unzip -o "$zip" -d "$TEST_EXTRACT_DIR" >/dev/null
+            done
+
+            if [ ! -d "$TEST_RESULTS_ROOT" ]; then
+              echo "Skipping $TESTS - extracted results directory not found at ${TEST_RESULTS_ROOT}"
+              continue
+            fi
+
+            mapfile -t TEST_CLIENT_FILES < <(find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*.txt' | sort)
+            if [ "${#TEST_CLIENT_FILES[@]}" -eq 0 ]; then
+              echo "Skipping $TESTS - no client result files under ${TEST_RESULTS_ROOT}"
+              continue
+            fi
+            TEST_CLIENT_LIST=$(
+              printf "%s\n" "${TEST_CLIENT_FILES[@]}" \
+                | awk -F/ '{print $NF}' \
+                | sed -nE 's/^([A-Za-z0-9_-]+)_results_[0-9]+_.*\.txt$/\1/p' \
+                | sort -u \
+                | paste -sd',' -
+            )
+            if [ -z "$TEST_CLIENT_LIST" ]; then
+              echo "Skipping $TESTS - unable to derive clients from ${TEST_RESULTS_ROOT}"
+              continue
+            fi
+
+            echo "Generating reports for ${TESTS} with clients: ${TEST_CLIENT_LIST}"
+            python3 report_tables.py --resultsPath "$TEST_RESULTS_ROOT" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+            cp reports/tables_norm.txt "reports/tables_norm_${SAFE_TESTS}.txt"
+
+            python3 report_html.py --resultsPath "$TEST_RESULTS_ROOT" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+            cp reports/index.html "reports/index_${SAFE_TESTS}.html"
+
+            rm -rf "$PER_TEST_REPORT_DIR"
+            mkdir -p "$PER_TEST_REPORT_DIR"
+            cp reports/tables_norm.txt "$PER_TEST_REPORT_DIR/tables_norm.txt"
+            cp reports/index.html "$PER_TEST_REPORT_DIR/index.html"
+            if [ -f "$TEST_RESULTS_ROOT/computer_specs.txt" ]; then
+              cp "$TEST_RESULTS_ROOT/computer_specs.txt" "$PER_TEST_REPORT_DIR/computer_specs.txt"
+            fi
+
+            mapfile -t BASE_CSVS < <(find reports -maxdepth 1 -type f \( -regex '.*/output_[^_]+\.csv' -o -regex '.*/raw_results_[^_]+\.csv' \) | sort)
+            for csv in "${BASE_CSVS[@]}"; do
+              [ -f "$csv" ] || continue
+              cp "$csv" "${csv%.csv}_${SAFE_TESTS}.csv"
+              cp "$csv" "$PER_TEST_REPORT_DIR/$(basename "$csv")"
+            done
+            generated=true
+          done
+
+          if [ "$generated" = false ]; then
+            echo "No report generated: no valid tests paths were available"
+            exit 1
+          fi
 
       - name: Generate Report
         if: ${{ env.INPUT_TXT_REPORT == 'true' }}
         run: |
-          python3 report_txt.py --resultsPath extracted-results/results/ --clients "$CLIENT_LIST" --testsPath "${{ env.INPUT_TEST }}"
+          TXT_TEST_PATHS=()
+          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
+            TXT_TEST_PATHS+=("repricings_compute/mainnet")
+            TXT_TEST_PATHS+=("repricings_compute/perf-devnet-2")
+            TXT_TEST_PATHS+=("repricings_stateful/mainnet")
+            TXT_TEST_PATHS+=("repricings_stateful/perf-devnet-2")
+          else
+            IFS=',' read -ra TXT_TEST_PATHS <<< "${{ env.INPUT_TEST }}"
+          fi
+
+          for raw_test_path in "${TXT_TEST_PATHS[@]}"; do
+            TESTS="$(echo "$raw_test_path" | xargs)"
+            [ -z "$TESTS" ] && continue
+            if [ ! -d "$TESTS" ]; then
+              echo "Skipping missing tests path for txt report: $TESTS"
+              continue
+            fi
+            SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+            TEST_RESULTS_ROOT="extracted-results/by_test/${SAFE_TESTS}/results"
+            if [ ! -d "$TEST_RESULTS_ROOT" ]; then
+              echo "Skipping txt report for ${TESTS} - missing ${TEST_RESULTS_ROOT}"
+              continue
+            fi
+            mapfile -t TEST_CLIENT_FILES < <(find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*.txt' | sort)
+            if [ "${#TEST_CLIENT_FILES[@]}" -eq 0 ]; then
+              echo "Skipping txt report for ${TESTS} - no client result files"
+              continue
+            fi
+            TEST_CLIENT_LIST=$(
+              printf "%s\n" "${TEST_CLIENT_FILES[@]}" \
+                | awk -F/ '{print $NF}' \
+                | sed -nE 's/^([A-Za-z0-9_-]+)_results_[0-9]+_.*\.txt$/\1/p' \
+                | sort -u \
+                | paste -sd',' -
+            )
+            python3 report_txt.py --resultsPath "${TEST_RESULTS_ROOT}/" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS"
+            cp "${TEST_RESULTS_ROOT}/transition_report_engine_newPayloadV4.txt" "reports/transition_report_engine_newPayloadV4_${SAFE_TESTS}.txt"
+          done
 
       - name: Zip the results folder
         run: |
@@ -275,10 +599,10 @@ jobs:
     needs: combine-results
     runs-on: ubuntu-latest
     env:
-      DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
-      DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
-      DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
-      DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+      PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+      PERFNET_DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+      PERFNET_DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+      PERFNET_DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       
@@ -292,8 +616,8 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          path: combined-results # Download artifacts from previous jobs
-          merge-multiple: true
+          name: reports
+          path: combined-results
 
       - name: Extract all result files
         run: |
@@ -302,25 +626,109 @@ jobs:
 
       - name: Populate Benchmark DB
         run: |
-          python fill_postgres_db.py \
-            --db-host ${{ env.DB_HOST }} \
-            --db-port ${{ env.DB_PORT }} \
-            --db-user ${{ env.DB_USER }} \
-            --db-name monitoring \
-            --table-name repricings_new \
-            --db-password "${{ env.DB_PASSWORD }}" \
-            --log-level DEBUG \
-            --reports-dir 'extracted-results/reports/'
+          set -euo pipefail
+
+          TEST_PATHS=()
+          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
+            TEST_PATHS+=("repricings_compute/mainnet")
+            TEST_PATHS+=("repricings_compute/perf-devnet-2")
+            TEST_PATHS+=("repricings_stateful/mainnet")
+            TEST_PATHS+=("repricings_stateful/perf-devnet-2")
+          else
+            IFS=',' read -ra TEST_PATHS <<< "${{ env.INPUT_TEST }}"
+          fi
+
+          uploads=0
+          skipped=0
+          targets_count=0
+          for candidate in "${TEST_PATHS[@]}"; do
+            trimmed="$(echo "$candidate" | xargs)"
+            [ -z "$trimmed" ] && continue
+            targets_count=$((targets_count + 1))
+          done
+          for raw_test_path in "${TEST_PATHS[@]}"; do
+            TESTS="$(echo "$raw_test_path" | xargs)"
+            [ -z "$TESTS" ] && continue
+
+            if [[ "$TESTS" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2)$ ]]; then
+              SUITE="${BASH_REMATCH[1]}"
+              NETWORK="${BASH_REMATCH[2]}"
+              DB_NETWORK="${NETWORK//-/_}"
+              DB_NAME="monitoring"
+            else
+              echo "Skipping DB upload for non-repricing path: $TESTS"
+              skipped=$((skipped + 1))
+              continue
+            fi
+
+            SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+            REPORTS_DIR="extracted-results/reports/by_test/${SAFE_TESTS}"
+            if [ "$targets_count" -eq 1 ]; then
+              REPORTS_DIR="extracted-results/reports"
+            fi
+            if [ ! -d "$REPORTS_DIR" ]; then
+              FALLBACK_DIR="extracted-results/reports"
+              if [ -d "$FALLBACK_DIR" ]; then
+                echo "Per-test report dir missing for ${TESTS}, falling back to ${FALLBACK_DIR}"
+                REPORTS_DIR="$FALLBACK_DIR"
+              else
+                echo "Skipping DB upload: missing report dir ${REPORTS_DIR}"
+                continue
+              fi
+            fi
+            echo "DB upload source dir: ${REPORTS_DIR}"
+            find "$REPORTS_DIR" -maxdepth 1 -type f \( -name 'output_*.csv' -o -name 'raw_results_*.csv' -o -name 'computer_specs.txt' -o -name 'index.html' \) -print | sort || true
+            mapfile -t OUTPUT_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'output_*.csv' | sort)
+            mapfile -t RAW_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'raw_results_*.csv' | sort)
+            if [ "${#OUTPUT_CSFS[@]}" -eq 0 ] && [ "${#RAW_CSFS[@]}" -eq 0 ]; then
+              FALLBACK_DIR="extracted-results/reports"
+              if [ "$REPORTS_DIR" != "$FALLBACK_DIR" ] && [ -d "$FALLBACK_DIR" ]; then
+                echo "No report CSVs in ${REPORTS_DIR}; retrying with fallback ${FALLBACK_DIR}"
+                REPORTS_DIR="$FALLBACK_DIR"
+                mapfile -t OUTPUT_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'output_*.csv' | sort)
+                mapfile -t RAW_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'raw_results_*.csv' | sort)
+              fi
+            fi
+            echo "output_csv_count=${#OUTPUT_CSFS[@]} raw_csv_count=${#RAW_CSFS[@]}"
+            for csv in "${OUTPUT_CSFS[@]}" "${RAW_CSFS[@]}"; do
+              [ -f "$csv" ] || continue
+              echo "$(basename "$csv"): lines=$(wc -l < "$csv")"
+            done
+            if [ "${#OUTPUT_CSFS[@]}" -eq 0 ] && [ "${#RAW_CSFS[@]}" -eq 0 ]; then
+              echo "Skipping DB upload for ${TESTS}: no CSV inputs available even after fallback."
+              continue
+            fi
+
+            DB_HOST="${{ env.PERFNET_DB_HOST }}"
+            DB_PORT="${{ env.PERFNET_DB_PORT }}"
+            DB_USER="${{ env.PERFNET_DB_USER }}"
+            DB_PASSWORD="${{ env.PERFNET_DB_PASSWORD }}"
+
+            python fill_postgres_db.py \
+              --db-host "$DB_HOST" \
+              --db-port "$DB_PORT" \
+              --db-user "$DB_USER" \
+              --db-name "$DB_NAME" \
+              --table-name "${SUITE}_${DB_NETWORK}" \
+              --db-password "$DB_PASSWORD" \
+              --log-level DEBUG \
+              --reports-dir "$REPORTS_DIR"
+            uploads=$((uploads + 1))
+          done
+
+          if [ "$uploads" -eq 0 ]; then
+            echo "No DB uploads were performed. skipped_non_matching=$skipped"
+            exit 0
+          fi
 
   retrigger:
     needs: populate-db
     runs-on: ubuntu-latest
-    if: ${{ github.ref == 'refs/heads/repricing' && needs.populate-db.result == 'success' }}
     steps:
       - name: Retrigger workflow
         uses: benc-uk/workflow-dispatch@v1
         with:
-          workflow: multi-parallel.yml
+          workflow: multi-parallel-repricing.yml
           ref: "${{ github.ref }}"
           token: "${{ secrets.GH_TOKEN }}"
           inputs: ${{ toJson(github.event.inputs) }}

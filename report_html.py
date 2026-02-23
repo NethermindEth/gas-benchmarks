@@ -8,13 +8,13 @@ import utils
 import csv
 
 
-def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images):
+def get_html_report(client_results, clients, results_paths, test_cases, methods, gas_set, metadata, images, skip_empty=False):
     # Load the computer specs
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
         computer_spec = text
 
-    results_to_print = ('<!DOCTYPE html\>' +
+    results_to_print = ('<!DOCTYPE html>' +
                         '<html lang="en">' +
                         '<head>' +
                         '    <meta charset=\"UTF-8\">' +
@@ -63,7 +63,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
             image_to_print = el_images[client_without_tag]
         results_to_print += f'<h1>{client.capitalize()} - {image_to_print} - Benchmarking Report</h1>' + '\n'
         results_to_print += f'<table id="table_{client}">'
-        results_to_print += ('<thread>\n'
+        results_to_print += ('<thead>\n'
                              '<tr>\n'
                              f'<th class=\"title\" onclick="sortTable(0, \'table_{client}\', false)" style="cursor: pointer;">Title &uarr; &darr;</th>\n'
                              f'<th onclick="sortTable(1, \'table_{client}\', true)" style="cursor: pointer;">Max (MGas/s) &uarr; &darr;</th>\n'
@@ -79,9 +79,9 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                              f'<th onclick="sortTable(11, \'table_{client}\', true)" style="cursor: pointer;">FCU time (ms) &uarr; &darr;</th>\n'
                              f'<th onclick="sortTable(12, \'table_{client}\', true)" style="cursor: pointer;">NP time (ms) &uarr; &darr;</th>\n'
                              '</tr>\n'
-                             '</thread>\n'
+                             '</thead>\n'
                              '<tbody>\n')
-        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata)
+        gas_table_norm = utils.get_gas_table(client_results, client, test_cases, gas_set, methods[0], metadata, skip_empty)
         csv_table[client] = gas_table_norm
         for test_case, data in gas_table_norm.items():
             results_to_print += (f'<tr>\n<td class="title">{data[0]}</td>\n'
@@ -158,7 +158,6 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
 
     soup = BeautifulSoup(results_to_print, 'lxml')
     formatted_html = soup.prettify()
-    print(formatted_html)
     if not os.path.exists('reports'):
         os.mkdir('reports')
     with open('reports/index.html', 'w') as file:
@@ -185,6 +184,7 @@ def main():
     parser.add_argument('--runs', type=int, help='Number of runs the program will process', default='8')
     parser.add_argument('--images', type=str, help='Image values per each client',
                         default='{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}')
+    parser.add_argument('--skipEmpty', action='store_true', default=True, help='Skip empty results')
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -195,12 +195,12 @@ def main():
     tests_path = args.testsPath
     runs = args.runs
     images = args.images
+    skip_empty = args.skipEmpty
 
     # Get the computer spec
     with open(os.path.join(results_paths, 'computer_specs.txt'), 'r') as file:
         text = file.read()
         computer_spec = text
-    print(computer_spec)
 
     client_results = {}
     failed_tests = {}
@@ -225,22 +225,25 @@ def main():
                         result_token = variant_meta.get("result_token")
                         responses, results, timestamp, duration, fcu_duration, np_duration = utils.extract_response_and_result(results_paths, client, test_case_name,
                                                                                gas, run, method, fields, result_token=result_token)
-                        client_results[client][test_case_name][gas][method].append(results)
+                        run_result = results if responses else -1
+                        client_results[client][test_case_name][gas][method].append(run_result)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
-                        # print(test_case_name + " : " + str(timestamp))
-                        if str(timestamp) != "0":
-                            # Store raw timestamp in ticks for calculation, not converted string
-                            client_results[client][test_case_name]["timestamp_ticks"] = timestamp
-                            # Only store duration if non-zero to avoid overwriting valid values
+                        # Capture duration/timestamp only for VALID responses to avoid contaminating aggregates.
+                        if responses:
+                            if str(timestamp) != "0":
+                                # Store raw timestamp in ticks for calculation, not converted string
+                                client_results[client][test_case_name]["timestamp_ticks"] = timestamp
+                            elif "timestamp_ticks" not in client_results[client][test_case_name]:
+                                client_results[client][test_case_name]["timestamp_ticks"] = 0
+                            # Store duration metrics even when timestamp is unavailable (new Kute report format).
                             if duration != 0:
                                 client_results[client][test_case_name]["duration"] = duration
                             if fcu_duration != 0:
                                 client_results[client][test_case_name]["fcu_duration"] = fcu_duration
                             if np_duration != 0:
                                 client_results[client][test_case_name]["np_duration"] = np_duration
-                        else:
-                            if "timestamp_ticks" not in client_results[client][test_case_name]:
-                                client_results[client][test_case_name]["timestamp_ticks"] = 0
+                        elif "timestamp_ticks" not in client_results[client][test_case_name]:
+                            client_results[client][test_case_name]["timestamp_ticks"] = 0
                         # Initialize duration to 0 only if not set yet
                         if "duration" not in client_results[client][test_case_name]:
                             client_results[client][test_case_name]["duration"] = 0
@@ -286,9 +289,7 @@ def main():
                     rows = [name, gas_value_mgas, opcount_value if opcount_value is not None else ''] + client_results[client][test_case_name][gas][methods[0]] + [description]
                     csvwriter.writerow(rows)
 
-    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images)
-
-    print('Done!')
+    get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, skip_empty)
 
 
 if __name__ == '__main__':

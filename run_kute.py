@@ -4,6 +4,7 @@ import os
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 
 LOKI_ENDPOINT_ENV_VAR = "LOKI_ENDPOINT"
 PROMETHEUS_ENDPOINT_ENV_VAR = "PROMETHEUS_ENDPOINT"
@@ -13,6 +14,47 @@ PROMETHEUS_PASSWORD_ENV_VAR = "PROMETHEUS_PASSWORD"
 executables = {
     "kute": "./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute"
 }
+
+
+def _quote(path: Path) -> str:
+    return f"\"{path.as_posix()}\""
+
+
+def resolve_kute_command(preferred_path: str) -> str:
+    candidates = []
+    if preferred_path:
+        candidates.append(Path(preferred_path))
+
+    artifacts_root = Path("nethermind/tools/artifacts/bin")
+    if artifacts_root.exists():
+        patterns = (
+            "Nethermind.Tools.Kute",
+            "Nethermind.Tools.Kute.exe",
+            "Kute",
+            "Kute.exe",
+            "Nethermind.Tools.Kute.dll",
+            "Kute.dll",
+        )
+        for pattern in patterns:
+            candidates.extend(sorted(artifacts_root.rglob(pattern)))
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate or not candidate.is_file():
+            continue
+        resolved = candidate.resolve()
+        key = str(resolved)
+        if key in seen:
+            continue
+        seen.add(key)
+        if resolved.suffix.lower() == ".dll":
+            return f"dotnet {_quote(resolved)}"
+        return _quote(resolved)
+
+    raise FileNotFoundError(
+        "Unable to find a Kute executable under nethermind/tools/artifacts/bin. "
+        "Run `make prepare_tools` first."
+    )
 
 def get_command_env(
     client: str,
@@ -48,6 +90,24 @@ def run_command(
     skip_forkchoice=False,
     rerun_syncing=False,
 ):
+    def response_contains_syncing(response_path: str) -> bool:
+        if not os.path.exists(response_path):
+            return False
+        try:
+            with open(response_path, "r", encoding="utf-8") as handle:
+                payload = handle.read()
+        except OSError:
+            return False
+        return "syncing" in payload.lower()
+
+    def stderr_looks_like_syncing_payload(stderr_text: str) -> bool:
+        lowered = (stderr_text or "").lower()
+        if "syncing" in lowered:
+            return True
+        # Erigon can briefly return non-JSON payloads (for example plain "syncing")
+        # that Kute fails to parse as JSON.
+        return "jsonreaderexception" in lowered and "invalid start of a value" in lowered
+
     input_path = test_case_file
     temp_path = None
     if skip_forkchoice:
@@ -69,7 +129,7 @@ def run_command(
             temp_path = temp_file.name
     # Add logic here to run the appropriate command for each client
     command = (
-        f"{executables['kute']} -i \"{input_path}\" -s {jwt_secret} -r \"{response}\" -a {ec_url} "
+        f"{executables['kute']} -i \"{input_path}\" -s \"{jwt_secret}\" -r \"{response}\" -a \"{ec_url}\" "
         f"{kute_extra_arguments} "
     )
     # Prepare env variables
@@ -85,13 +145,16 @@ def run_command(
         results = subprocess.run(
             command, shell=True, capture_output=True, text=True, env=command_env
         )
+        syncing_from_response = response_contains_syncing(response)
+        syncing_from_stderr = stderr_looks_like_syncing_payload(results.stderr)
         if rerun_syncing and \
                 attempts < max_attempts and \
-                os.path.exists(response) and \
-                "SYNCING" in open(response, "r").read().split("\n")[0]:
+                (syncing_from_response or syncing_from_stderr):
             attempts += 1
-            print(f"Rerunning syncing response {attempts} times out of {max_attempts} max with {retry_backoff_sec} seconds backoff")
-            os.remove(response)
+            retry_reason = "syncing response" if syncing_from_response else "non-JSON syncing-like response"
+            print(f"Rerunning {retry_reason} {attempts} times out of {max_attempts} max with {retry_backoff_sec} seconds backoff")
+            if os.path.exists(response):
+                os.remove(response)
             time.sleep(retry_backoff_sec)
         else:
             break
@@ -101,6 +164,8 @@ def run_command(
         except OSError:
             pass
     print(results.stderr, end="")
+    if results.returncode != 0:
+        raise SystemExit(results.returncode)
     return results.stdout
 
 def save_to(output_folder, file_name, content):
@@ -175,7 +240,10 @@ def main():
     execution_url = args.ecURL
     output_folder = args.output
     executables["dotnet"] = args.dotnetPath
-    executables["kute"] = args.kutePath
+    try:
+        executables["kute"] = resolve_kute_command(args.kutePath)
+    except FileNotFoundError as exc:
+        raise SystemExit(str(exc)) from exc
     kute_arguments = args.kuteArguments
     warmup_file = args.warmupPath
     client = args.client
@@ -226,6 +294,7 @@ def main():
                 execution_url,
                 kute_arguments,
                 skip_forkchoice=args.skipForkchoice,
+                rerun_syncing=args.rerunSyncing,
             )
             save_to(output_folder, f"{client}_results_{run}_{name}.txt", response)
         return

@@ -12,17 +12,26 @@ import yaml
 
 from utils import print_computer_specs
 
+REPO_ROOT = Path(__file__).resolve().parent
 
 GENESIS_FILES: Dict[str, Path] = {
-    "nethermind": Path("scripts/genesisfiles/nethermind/zkevmgenesis.json"),
-    "besu": Path("scripts/genesisfiles/besu/zkevmgenesis.json"),
-    "geth": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
-    "reth": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
-    "erigon": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
-    "nimbus": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
-    "ethrex": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
+    "nethermind": REPO_ROOT / "scripts" / "genesisfiles" / "nethermind" / "zkevmgenesis.json",
+    "besu": REPO_ROOT / "scripts" / "genesisfiles" / "besu" / "zkevmgenesis.json",
+    "geth": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
+    "reth": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
+    "erigon": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
+    "nimbus": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
+    "ethrex": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
 }
 DEFAULT_GENESIS = GENESIS_FILES["geth"]
+
+
+def resolve_nethermind_config_network(network: str) -> str:
+    normalized = str(network).strip().lower()
+    if normalized in {"mainnet", "perf-devnet-2"}:
+        return "mainnet"
+    return normalized
+
 
 CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     "nethermind": {
@@ -33,7 +42,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
             {
                 "env": "NETHERMIND_CONFIG_FLAG",
                 "custom": "--config=none",
-                "network": lambda net: f"--config={net}",
+                "network": lambda net: f"--config={resolve_nethermind_config_network(net)}",
             },
             {
                 "env": "NETHERMIND_GENESIS_FLAG",
@@ -70,7 +79,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "GETH_NETWORK_FLAG",
-                "custom": "--networkid=1337",
+                "custom": "--override.genesis=/tmp/genesis/genesis.json",
                 "network": lambda net: f"--{net.lower()}",
             },
             {
@@ -106,7 +115,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "ERIGON_CHAIN_FLAG",
-                "custom": "",
+                "custom": "--chain=/tmp/genesis/genesis.json",
                 "network": lambda net: f"--chain={net.lower()}",
             },
             {
@@ -162,9 +171,16 @@ def sanitize_volume_name(name: str) -> str:
 def run_command(client, run_path):
     command = f"{run_path}/run.sh"
     print(
-        f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'"
+        f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'",
+        flush=True,
     )
-    subprocess.run(command, shell=True, text=True)
+    completed = subprocess.run(command, shell=True, text=True, check=False, cwd=run_path)
+    if completed.returncode != 0:
+        print(
+            f"ERROR: Client startup script failed with exit code {completed.returncode}",
+            flush=True,
+        )
+        raise SystemExit(completed.returncode)
 
 
 def get_metadata(client: str) -> Dict[str, Any]:
@@ -208,7 +224,11 @@ def set_env(
     metadata: Dict[str, Any],
     volume_name: Optional[str],
 ):
-    resolved_data_dir = Path(data_dir or Path(run_path) / "execution-data").resolve()
+    run_path_obj = Path(run_path).resolve()
+    if not run_path_obj.is_dir():
+        raise FileNotFoundError(f"Client run path does not exist: {run_path_obj}")
+
+    resolved_data_dir = Path(data_dir or run_path_obj / "execution-data").resolve()
 
     env_map: Dict[str, str] = {
         "EC_IMAGE_VERSION": el_images[client],
@@ -242,9 +262,9 @@ def set_env(
 
     env_lines = [f"{key}={value}" for key, value in env_map.items()]
 
-    env_file_path = os.path.join(run_path, ".env")
-    if os.path.exists(env_file_path):
-        os.remove(env_file_path)
+    env_file_path = run_path_obj / ".env"
+    if env_file_path.exists():
+        env_file_path.unlink()
     with open(env_file_path, "w", encoding="utf-8") as file:
         file.write("\n".join(env_lines))
 
@@ -299,7 +319,7 @@ def main():
     data_dir = args.dataDir
     volume_name = args.volumeName
 
-    with open("images.yaml", "r") as f:
+    with open(REPO_ROOT / "images.yaml", "r", encoding="utf-8") as f:
         el_images = yaml.safe_load(f)["images"]
 
     if client_without_tag not in el_images:
@@ -316,7 +336,7 @@ def main():
     if image and image != "default":
         el_images[client_without_tag] = image
 
-    run_path = os.path.join(os.getcwd(), "scripts", client_without_tag)
+    run_path = str((REPO_ROOT / "scripts" / client_without_tag).resolve())
 
     metadata = get_metadata(client_without_tag)
     use_custom_genesis = bool(genesis_path)
