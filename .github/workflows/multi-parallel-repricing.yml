@@ -81,6 +81,7 @@ jobs:
   build:
     needs: set-matrix
     runs-on: [self-hosted, repricing]
+    timeout-minutes: 720
 
     strategy:
       # Consume the JSON matrix we just emitted
