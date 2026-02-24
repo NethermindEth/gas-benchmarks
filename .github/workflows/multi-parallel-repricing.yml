@@ -24,21 +24,6 @@ on:
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
-      genesis:
-        description: 'Genesis filename (used for all clients)'
-        default: 'zkevmgenesis.json'
-      snapshot_backend:
-        description: 'Snapshot backend mode (direct keeps current behavior)'
-        default: 'direct'
-      snapshot_root:
-        description: 'Snapshot root path (required for overlay/zfs backends)'
-        default: ''
-      snapshot_runtime_root:
-        description: 'Runtime root path for overlay/zfs writable data'
-        default: ''
-      network:
-        description: 'Optional network name passed to run.sh for snapshot path resolution'
-        default: ''
 
 concurrency:
   group: repricing-${{ github.ref }}
@@ -51,11 +36,7 @@ env:
   INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
   INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
   INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
-  INPUT_GENESIS: ${{ github.event.inputs.genesis || 'zkevmgenesis.json' }}
-  INPUT_SNAPSHOT_BACKEND: ${{ github.event.inputs.snapshot_backend || 'direct' }}
-  INPUT_SNAPSHOT_ROOT: ${{ github.event.inputs.snapshot_root || '' }}
-  INPUT_SNAPSHOT_RUNTIME_ROOT: ${{ github.event.inputs.snapshot_runtime_root || '' }}
-  INPUT_NETWORK: ${{ github.event.inputs.network || '' }}
+
 
 jobs:
   set-matrix:
