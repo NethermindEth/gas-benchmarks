@@ -79,7 +79,7 @@ jobs:
           if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
             runs=1
           fi
-          clients="geth,nethermind,besu"
+          clients="geth,nethermind,besu,erigon,reth"
           IFS=',' read -ra client_array <<< "$clients"
           tests_input="${{ env.INPUT_TEST }}"
           targets=()
@@ -368,10 +368,28 @@ jobs:
           CLIENT="${{ matrix.client }}"
           TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
 
-          SNAPSHOT_BACKEND="${{ env.INPUT_SNAPSHOT_BACKEND }}"
-          SNAPSHOT_ROOT="${{ env.INPUT_SNAPSHOT_ROOT }}"
-          SNAPSHOT_RUNTIME_ROOT="${{ env.INPUT_SNAPSHOT_RUNTIME_ROOT }}"
-          NETWORK_NAME="${{ env.INPUT_NETWORK }}"
+          # Per-client snapshot backend selection
+          case "$CLIENT" in
+            erigon|reth)
+              SNAPSHOT_BACKEND="zfs"
+              SNAPSHOT_ROOT="/data-zfs/eth/<<CLIENT>>/<<NETWORK>>"
+              SNAPSHOT_RUNTIME_ROOT=""
+              NETWORK_NAME="$NETWORK"
+              ;;
+            *)
+              SNAPSHOT_BACKEND="${{ env.INPUT_SNAPSHOT_BACKEND }}"
+              SNAPSHOT_ROOT="${{ env.INPUT_SNAPSHOT_ROOT }}"
+              SNAPSHOT_RUNTIME_ROOT="${{ env.INPUT_SNAPSHOT_RUNTIME_ROOT }}"
+              NETWORK_NAME="${{ env.INPUT_NETWORK }}"
+              # Fall back to overlay with default paths when no explicit config
+              if [ "$SNAPSHOT_BACKEND" = "direct" ] || [ -z "$SNAPSHOT_BACKEND" ]; then
+                SNAPSHOT_BACKEND="overlay"
+                SNAPSHOT_ROOT="/data/snapshots/<<CLIENT>>/<<NETWORK>>"
+                SNAPSHOT_RUNTIME_ROOT="/data/overlay-workspace"
+                NETWORK_NAME="$NETWORK"
+              fi
+              ;;
+          esac
 
           if [ "$SNAPSHOT_BACKEND" != "direct" ] && [ -z "$SNAPSHOT_ROOT" ]; then
             echo "snapshot_root is required when snapshot_backend is '$SNAPSHOT_BACKEND'" >&2
