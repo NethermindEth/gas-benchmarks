@@ -682,9 +682,6 @@ jobs:
 
             SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
             REPORTS_DIR="extracted-results/reports/by_test/${SAFE_TESTS}"
-            if [ "$targets_count" -eq 1 ]; then
-              REPORTS_DIR="extracted-results/reports"
-            fi
             if [ ! -d "$REPORTS_DIR" ]; then
               FALLBACK_DIR="extracted-results/reports"
               if [ -d "$FALLBACK_DIR" ]; then
