@@ -225,7 +225,12 @@ def main():
                         result_token = variant_meta.get("result_token")
                         responses, results, timestamp, duration, fcu_duration, np_duration = utils.extract_response_and_result(results_paths, client, test_case_name,
                                                                                gas, run, method, fields, result_token=result_token)
-                        run_result = results if responses else -1
+                        if responses:
+                            run_result = results      # VALID
+                        elif results:
+                            run_result = -1           # executed but INVALID
+                        else:
+                            run_result = 0            # never executed (no result file)
                         client_results[client][test_case_name][gas][method].append(run_result)
                         failed_tests[client][test_case_name][gas][method].append(not responses)
                         # Capture duration/timestamp only for VALID responses to avoid contaminating aggregates.
@@ -284,8 +289,8 @@ def main():
                         description = metadata[test_case_name]['Description']
 
                     run_values = client_results[client][test_case_name][gas][methods[0]]
-                    # Skip scenarios that were never executed (all runs are <= 0)
-                    if not any(v > 0 for v in run_values):
+                    # Skip scenarios that were never executed (all runs are 0)
+                    if all(v == 0 for v in run_values):
                         continue
                     variant_meta = case_meta.get(gas, {})
                     gas_value_mgas = variant_meta.get("gas_value_mgas", test_case_gas.get(gas, gas))
