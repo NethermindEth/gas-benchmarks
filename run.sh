@@ -234,6 +234,87 @@ is_measured_file() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# Bootstrap FCU – send a forkchoiceUpdated to drive the client to the
+# expected head block via p2p.  Used when a snapshot is a few blocks behind.
+# Args: $1 = head_block_hash, $2 = max_retries (default 60),
+#        $3 = backoff_seconds (default 30)
+# ---------------------------------------------------------------------------
+bootstrap_fcu() {
+  local head_block_hash="$1"
+  local max_retries="${2:-60}"
+  local backoff="${3:-30}"
+  local jwt_secret_path="/tmp/jwtsecret"
+  local engine_url="http://127.0.0.1:8551"
+
+  echo "[INFO] Bootstrap FCU: driving head to $head_block_hash (max_retries=$max_retries, backoff=${backoff}s)"
+
+  python3 - "$head_block_hash" "$max_retries" "$backoff" "$jwt_secret_path" "$engine_url" <<'PYEOF'
+import sys, time, json, urllib.request, urllib.error, hmac, hashlib, base64, math
+
+head_hash    = sys.argv[1]
+max_retries  = int(sys.argv[2])
+backoff_secs = int(sys.argv[3])
+jwt_path     = sys.argv[4]
+engine_url   = sys.argv[5]
+
+with open(jwt_path) as f:
+    jwt_secret = bytes.fromhex(f.read().strip())
+
+def make_jwt():
+    header  = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"JWT"}').rstrip(b'=')
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"iat": int(time.time())}).encode()
+    ).rstrip(b'=')
+    msg = header + b'.' + payload
+    sig = base64.urlsafe_b64encode(
+        hmac.new(jwt_secret, msg, hashlib.sha256).digest()
+    ).rstrip(b'=')
+    return (msg + b'.' + sig).decode()
+
+fcu_payload = json.dumps({
+    "jsonrpc": "2.0",
+    "method": "engine_forkchoiceUpdatedV3",
+    "params": [
+        {
+            "headBlockHash": head_hash,
+            "safeBlockHash": head_hash,
+            "finalizedBlockHash": head_hash,
+        },
+        None,
+    ],
+    "id": 1,
+}).encode()
+
+for attempt in range(1, max_retries + 1):
+    try:
+        token = make_jwt()
+        req = urllib.request.Request(
+            engine_url,
+            data=fcu_payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = json.loads(resp.read())
+        status = (body.get("result") or {}).get("payloadStatus", {}).get("status", "")
+        print(f"[INFO] Bootstrap FCU attempt {attempt}/{max_retries}: status={status}", flush=True)
+        if status == "VALID":
+            print("[INFO] Bootstrap FCU succeeded – head is VALID", flush=True)
+            sys.exit(0)
+    except Exception as exc:
+        print(f"[WARN] Bootstrap FCU attempt {attempt}/{max_retries} failed: {exc}", flush=True)
+
+    if attempt < max_retries:
+        time.sleep(backoff_secs)
+
+print("[ERROR] Bootstrap FCU exhausted all retries", file=sys.stderr, flush=True)
+sys.exit(1)
+PYEOF
+}
+
 append_tests_for_path() {
   local base_path="$1"
   local genesis="$2"
@@ -1207,6 +1288,11 @@ for run in $(seq 1 $RUNS); do
       wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
     else
       sleep 5
+    fi
+
+    # Reth mainnet snapshot is 2 blocks behind; bootstrap via FCU + p2p
+    if [ "$client_base" = "reth" ] && [ "$NETWORK" = "mainnet" ]; then
+      bootstrap_fcu "0x6aadde478df4f485c2cf91cd48038f918ef6ff97b19eec9cdd0cd1ca45476eb4" 60 30
     fi
 
     python3 -c "from utils import print_computer_specs; print(print_computer_specs())" > results/computer_specs.txt
