@@ -366,42 +366,13 @@ jobs:
           TEST_PATH="${{ matrix.test_path }}"
           NETWORK="${{ matrix.network }}"
           CLIENT="${{ matrix.client }}"
-          TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILENAME}\"} ]"
-
-          # Per-client snapshot backend selection
-          case "$CLIENT" in
-            erigon|reth)
-              SNAPSHOT_BACKEND="zfs"
-              SNAPSHOT_ROOT="/data-zfs/eth/<<CLIENT>>/<<NETWORK>>"
-              SNAPSHOT_RUNTIME_ROOT=""
-              NETWORK_NAME="$NETWORK"
-              ;;
-            *)
-              SNAPSHOT_BACKEND="${{ env.INPUT_SNAPSHOT_BACKEND }}"
-              SNAPSHOT_ROOT="${{ env.INPUT_SNAPSHOT_ROOT }}"
-              SNAPSHOT_RUNTIME_ROOT="${{ env.INPUT_SNAPSHOT_RUNTIME_ROOT }}"
-              NETWORK_NAME="${{ env.INPUT_NETWORK }}"
-              # Fall back to overlay with default paths when no explicit config
-              if [ "$SNAPSHOT_BACKEND" = "direct" ] || [ -z "$SNAPSHOT_BACKEND" ]; then
-                SNAPSHOT_BACKEND="overlay"
-                SNAPSHOT_ROOT="/data/snapshots/<<CLIENT>>/<<NETWORK>>"
-                SNAPSHOT_RUNTIME_ROOT="/data/overlay-workspace"
-                NETWORK_NAME="$NETWORK"
-              fi
-              ;;
-          esac
-
-          if [ "$SNAPSHOT_BACKEND" != "direct" ] && [ -z "$SNAPSHOT_ROOT" ]; then
-            echo "snapshot_root is required when snapshot_backend is '$SNAPSHOT_BACKEND'" >&2
-            exit 1
-          fi
+          WARMUP_PATH="${TEST_PATH}_warmup"
 
           if [ ! -d "$TEST_PATH" ]; then
             echo "Test path does not exist: $TEST_PATH"
             exit 1
           fi
 
-          WARMUP_PATH="${TEST_PATH}_warmup"
           WARMUP_ARGS=()
           if [ -d "$WARMUP_PATH" ]; then
             WARMUP_ARGS=(-W "$WARMUP_PATH")
@@ -409,28 +380,38 @@ jobs:
             echo "Warmup path not found: $WARMUP_PATH; continuing without explicit warmup path"
           fi
 
-          RUN_ARGS=(
-            -T "$TEST_PATHS_JSON"
-            -c "$CLIENT"
-            -r 1
-            -i '${{ env.INPUT_IMAGES }}'
-            -o "${{ env.INPUT_OPCODES_WARMUP }}"
-            -f "${{ env.INPUT_FILTER }}"
-            "${WARMUP_ARGS[@]}"
-          )
+          EFFECTIVE_FILTER="${{ env.INPUT_FILTER }}"
+          echo "Using filter: '${EFFECTIVE_FILTER}' for test path: $TEST_PATH"
 
-          if [ "$SNAPSHOT_BACKEND" = "overlay" ] || [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
-            RUN_ARGS+=(-S "$SNAPSHOT_BACKEND")
-            RUN_ARGS+=(-B "$SNAPSHOT_ROOT")
-            if [ -n "$NETWORK_NAME" ]; then
-              RUN_ARGS+=(-n "$NETWORK_NAME")
-            fi
-            if [ -n "$SNAPSHOT_RUNTIME_ROOT" ]; then
-              RUN_ARGS+=(-O "$SNAPSHOT_RUNTIME_ROOT")
-            fi
-          fi
-
-          ./run.sh "${RUN_ARGS[@]}"
+          # Per-client snapshot backend selection
+          case "$CLIENT" in
+            erigon|reth)
+              ./run.sh \
+                -t "$TEST_PATH" \
+                -n "$NETWORK" \
+                -S "zfs" \
+                -B "/data-zfs/eth/<<CLIENT>>/<<NETWORK>>" \
+                -c "$CLIENT" \
+                -r 1 \
+                -i '${{ env.INPUT_IMAGES }}' \
+                -o "${{ env.INPUT_OPCODES_WARMUP }}" \
+                -f "$EFFECTIVE_FILTER" \
+                "${WARMUP_ARGS[@]}"
+              ;;
+            *)
+              ./run.sh \
+                -t "$TEST_PATH" \
+                -n "$NETWORK" \
+                -B "/data/snapshots/<<CLIENT>>/<<NETWORK>>" \
+                -O "/data/overlay-workspace" \
+                -c "$CLIENT" \
+                -r 1 \
+                -i '${{ env.INPUT_IMAGES }}' \
+                -o "${{ env.INPUT_OPCODES_WARMUP }}" \
+                -f "$EFFECTIVE_FILTER" \
+                "${WARMUP_ARGS[@]}"
+              ;;
+          esac
 
       - name: Dump latest Docker logs for ${{ matrix.client }}
         if: always()

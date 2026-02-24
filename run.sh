@@ -401,8 +401,12 @@ prepare_overlay_for_client() {
   local network="$2"
   local snapshot_root="$3"
 
-  local lower=""
-  lower=$(resolve_snapshot_lower_for_client "$client" "$network" "$snapshot_root") || return 1
+  if ! dir_has_content "$snapshot_root"; then
+    echo "[ERROR] Snapshot directory for $client is missing or empty: $snapshot_root" >&2
+    return 1
+  fi
+
+  local lower="$snapshot_root"
   local abs_lower
   abs_lower=$(abspath "$lower")
   echo "[INFO] Overlay snapshot source for $client (network=${network:-none}): $abs_lower" >&2
