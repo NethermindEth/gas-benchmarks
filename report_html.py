@@ -283,10 +283,14 @@ def main():
                         name = metadata[test_case_name]['Title']
                         description = metadata[test_case_name]['Description']
 
+                    run_values = client_results[client][test_case_name][gas][methods[0]]
+                    # Skip scenarios that were never executed (all runs are <= 0)
+                    if not any(v > 0 for v in run_values):
+                        continue
                     variant_meta = case_meta.get(gas, {})
                     gas_value_mgas = variant_meta.get("gas_value_mgas", test_case_gas.get(gas, gas))
                     opcount_value = variant_meta.get("opcount")
-                    rows = [name, gas_value_mgas, opcount_value if opcount_value is not None else ''] + client_results[client][test_case_name][gas][methods[0]] + [description]
+                    rows = [name, gas_value_mgas, opcount_value if opcount_value is not None else ''] + run_values + [description]
                     csvwriter.writerow(rows)
 
     get_html_report(client_results, clients.split(','), results_paths, test_cases, methods, gas_set, metadata, images, skip_empty)

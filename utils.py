@@ -241,92 +241,6 @@ def _extract_summary_failed_count(sections):
     return None
 
 
-def _normalize_token(value):
-    return re.sub(r"[^a-z0-9]+", "", str(value).lower())
-
-
-def _expand_candidate_tokens(candidate_suffixes):
-    expanded = []
-    seen = set()
-
-    def add(token):
-        if token is None:
-            return
-        token = str(token).strip()
-        if not token:
-            return
-        lowered = token.lower()
-        if lowered in seen:
-            return
-        seen.add(lowered)
-        expanded.append(token)
-
-    for token in candidate_suffixes:
-        add(token)
-        token = str(token)
-        if ".py__" in token:
-            left, right = token.split(".py__", 1)
-            add(left)
-            add(right)
-        if "[" in token and "]" in token:
-            inside = token.split("[", 1)[1].rsplit("]", 1)[0]
-            add(inside)
-        add(re.sub(r"_\d+M$", "", token, flags=re.IGNORECASE))
-
-    return expanded
-
-
-def _select_best_result_file(results_path, client, run, gas_used, candidate_suffixes):
-    if not os.path.isdir(results_path):
-        return None, None
-
-    result_prefix = f"{client}_results_{run}_"
-    response_prefix = f"{client}_response_{run}_"
-    available_result_files = sorted(
-        file_name for file_name in os.listdir(results_path)
-        if file_name.startswith(result_prefix) and file_name.endswith(".txt")
-    )
-    if not available_result_files:
-        return None, None
-
-    tokens = _expand_candidate_tokens(candidate_suffixes)
-    gas_tag = f"_{gas_used}m"
-    best = None
-    for file_name in available_result_files:
-        stem = file_name[len(result_prefix):-4]
-        stem_lower = stem.lower()
-        stem_norm = _normalize_token(stem)
-        score = -1
-
-        for token in tokens:
-            token_lower = token.lower()
-            token_norm = _normalize_token(token)
-            if stem_lower == token_lower:
-                score = max(score, 100 + len(token))
-            elif stem_lower.endswith(token_lower):
-                score = max(score, 80 + len(token))
-            elif token_lower in stem_lower:
-                score = max(score, 60 + len(token))
-            elif token_norm and (token_norm in stem_norm or stem_norm in token_norm):
-                score = max(score, 20 + len(token_norm))
-
-        if gas_tag in stem_lower:
-            score += 5
-
-        if score < 0:
-            continue
-        if best is None or score > best[0]:
-            best = (score, stem)
-
-    if best is None:
-        return None, None
-
-    stem = best[1]
-    result_file = os.path.join(results_path, f"{result_prefix}{stem}.txt")
-    response_file = os.path.join(results_path, f"{response_prefix}{stem}.txt")
-    return result_file, response_file if os.path.exists(response_file) else None
-
-
 def extract_response_and_result(
     results_path,
     client,
@@ -370,18 +284,6 @@ def extract_response_and_result(
             if os.path.exists(potential_response):
                 response_file = potential_response
             break
-
-    if not result_file:
-        selected_result, selected_response = _select_best_result_file(
-            results_path=results_path,
-            client=client,
-            run=run,
-            gas_used=gas_used,
-            candidate_suffixes=candidate_suffixes,
-        )
-        if selected_result:
-            result_file = selected_result
-            response_file = selected_response
 
     if not result_file or not os.path.exists(result_file):
         return False, 0, 0, 0, 0, 0
