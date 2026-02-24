@@ -1017,7 +1017,6 @@ if [ "${#FILTERS[@]}" -gt 0 ]; then
   FILTER_ACTIVE=true
 fi
 declare -A SCENARIO_FILTER_CACHE=()
-declare -A SCENARIO_SKIP_LOGGED=()
 
 trap cleanup_on_exit EXIT INT TERM
 
@@ -1250,10 +1249,6 @@ for run in $(seq 1 $RUNS); do
         fi
 
         if [ "$match" -ne 1 ]; then
-          if [ -z "${SCENARIO_SKIP_LOGGED[$scenario_key]}" ]; then
-            echo "Skipping scenario $filename (does not match case-insensitive filter)"
-            SCENARIO_SKIP_LOGGED["$scenario_key"]=1
-          fi
           continue
         fi
       fi
