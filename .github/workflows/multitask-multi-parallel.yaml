@@ -1,21 +1,11 @@
 name: Run Parallel Benchmarks with Test Shards
 
 on:
-  push:
   workflow_dispatch:
     inputs:
       test:
         description: 'Path to test file or directory'
         default: 'eest_tests'
-      warmup:
-        description: 'Name of the warm up file'
-        type: choice
-        options:
-          - ''
-          - warmup/warmup-100bl-16wi-32tx.txt
-          - warmup/warmup-1000bl-16wi-24tx.txt
-          - warmup/warmup-1000bl-16wi-1000tx.txt
-        default: ''
       client:
         description: 'Comma-separated list of client names'
         default: 'nethermind,geth,reth,besu,erigon,nimbus,ethrex'
@@ -43,8 +33,7 @@ on:
 
 env:
   INPUT_TEST: ${{ github.event.inputs.test || 'eest_tests' }}
-  INPUT_WARMUP: ${{ github.event.inputs.warmup || '' }}
-  INPUT_CLIENT: ${{ github.event_name == 'push' && 'nethermind' || (github.event.inputs.client || 'nethermind,geth,reth,besu,erigon,nimbus,ethrex') }}
+  INPUT_CLIENT: ${{ github.event.inputs.client || 'nethermind,geth,reth,besu,erigon,nimbus,ethrex' }}
   INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
   INPUT_PARALLEL_LEVEL: ${{ github.event.inputs.parallel_level || 10 }}
   INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default","nimbus":"default","ethrex":"default"}' }}
@@ -149,7 +138,6 @@ jobs:
 
           ./run.sh \
             -T "@shard-tests.json" \
-            -w "${{ env.INPUT_WARMUP }}" \
             -c "$CLIENT" \
             -r 1 \
             -i '${{ env.INPUT_IMAGES }}' \

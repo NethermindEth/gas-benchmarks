@@ -22,10 +22,33 @@ PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 SKIP_FORKCHOICE=false
 SKIP_EMPTY=true
+RPC_READINESS_MAX_ATTEMPTS="${RPC_READINESS_MAX_ATTEMPTS:-50}"
+OVERLAY_MOUNT_EXTRA_OPTS="${OVERLAY_MOUNT_EXTRA_OPTS:-}"
+OVERLAY_USE_VOLATILE="${OVERLAY_USE_VOLATILE:-false}"
+
+# Prevent inherited low API pin from older docker clients/wrappers.
+unset DOCKER_API_VERSION
 
 if [ -f "scripts/common/wait_for_rpc.sh" ]; then
   # shellcheck source=/dev/null
   source "scripts/common/wait_for_rpc.sh"
+fi
+if [ -f "scripts/common/docker_compose.sh" ]; then
+  # shellcheck source=/dev/null
+  source "scripts/common/docker_compose.sh"
+fi
+
+if ! declare -f compose_cmd >/dev/null 2>&1; then
+  compose_cmd() { docker compose "$@"; }
+fi
+if ! declare -f docker_cmd >/dev/null 2>&1; then
+  docker_cmd() { docker "$@"; }
+fi
+if ! declare -f resolve_docker_bin >/dev/null 2>&1; then
+  resolve_docker_bin() { command -v docker 2>/dev/null || true; }
+fi
+if ! declare -f compose_detect >/dev/null 2>&1; then
+  compose_detect() { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; }
 fi
 
 declare -A ACTIVE_OVERLAY_MOUNTS
@@ -130,6 +153,7 @@ resolve_snapshot_root_for_client() {
   local client="$1"
   local network="$2"
   local root_template="$SNAPSHOT_ROOT"
+  local original_template="$SNAPSHOT_ROOT"
 
   if [[ -z "$root_template" ]]; then
     echo ""
@@ -147,6 +171,11 @@ resolve_snapshot_root_for_client() {
   root_template="${root_template//<<network>>/$network_lower}"
   root_template="${root_template//<<Network>>/$network}"
 
+  # Enforce per-network snapshot selection even if caller omitted <<NETWORK>>.
+  if [ -n "$network_lower" ] && [[ "$original_template" != *"<<NETWORK>>"* ]] && [[ "$original_template" != *"<<network>>"* ]] && [[ "$original_template" != *"<<Network>>"* ]]; then
+    root_template="${root_template%/}/$network_lower"
+  fi
+
   echo "$root_template"
 }
 
@@ -162,15 +191,15 @@ restart_client_containers() {
   fi
 
   if [ -f "$env_file" ]; then
-    if ! docker compose -f "$compose_file" --env-file "$env_file" restart >/dev/null 2>&1; then
-      if ! docker compose -f "$compose_file" --env-file "$env_file" restart; then
+    if ! compose_cmd -f "$compose_file" --env-file "$env_file" restart >/dev/null 2>&1; then
+      if ! compose_cmd -f "$compose_file" --env-file "$env_file" restart; then
         echo "[ERROR] Failed to restart services for $client_base" >&2
         return 1
       fi
     fi
   else
     if ! (
-      cd "$compose_dir" && docker compose restart
+      cd "$compose_dir" && compose_cmd restart
     ); then
       echo "[ERROR] Failed to restart services for $client_base" >&2
       return 1
@@ -178,7 +207,7 @@ restart_client_containers() {
   fi
 
   if declare -f wait_for_rpc >/dev/null 2>&1; then
-    wait_for_rpc "http://127.0.0.1:8545" 300
+    wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
   else
     sleep 5
   fi
@@ -295,6 +324,45 @@ run_zfs() {
   return 1
 }
 
+overlay_mount_with_fallback() {
+  local client="$1"
+  local abs_lower="$2"
+  local abs_upper="$3"
+  local abs_work="$4"
+  local merged="$5"
+
+  local base_opts="lowerdir=$abs_lower,upperdir=$abs_upper,workdir=$abs_work"
+  local volatile_suffix=""
+  if [ "${OVERLAY_USE_VOLATILE,,}" = "true" ]; then
+    volatile_suffix=",volatile"
+  fi
+
+  local candidate_opts=()
+  if [ -n "$OVERLAY_MOUNT_EXTRA_OPTS" ]; then
+    candidate_opts+=("$base_opts,$OVERLAY_MOUNT_EXTRA_OPTS")
+  fi
+  candidate_opts+=("$base_opts,metacopy=on,xino=auto,index=off,redirect_dir=off$volatile_suffix")
+  candidate_opts+=("$base_opts,metacopy=on,xino=auto,redirect_dir=off$volatile_suffix")
+  candidate_opts+=("$base_opts,xino=auto,redirect_dir=off$volatile_suffix")
+  candidate_opts+=("$base_opts,redirect_dir=on$volatile_suffix")
+  candidate_opts+=("$base_opts")
+
+  local mount_opts
+  for mount_opts in "${candidate_opts[@]}"; do
+    if mount -t overlay overlay -o "$mount_opts" "$merged" 2>/dev/null; then
+      echo "[INFO] Overlay mount options for $client: $mount_opts" >&2
+      return 0
+    fi
+
+    if command -v sudo >/dev/null 2>&1 && sudo mount -t overlay overlay -o "$mount_opts" "$merged" >/dev/null 2>&1; then
+      echo "[INFO] Overlay mount options for $client: $mount_opts (via sudo)" >&2
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 resolve_zfs_dataset_for_path() {
   local target_path="$1"
   local target_abs
@@ -335,9 +403,9 @@ prepare_overlay_for_client() {
 
   local lower=""
   lower=$(resolve_snapshot_lower_for_client "$client" "$network" "$snapshot_root") || return 1
-
   local abs_lower
   abs_lower=$(abspath "$lower")
+  echo "[INFO] Overlay snapshot source for $client (network=${network:-none}): $abs_lower" >&2
   local overlay_base
   overlay_base=$(overlay_base_from_lower "$abs_lower")
 
@@ -373,15 +441,9 @@ prepare_overlay_for_client() {
   local abs_upper abs_work
   abs_upper=$(abspath "$upper")
   abs_work=$(abspath "$work")
-  local mount_opts="lowerdir=$abs_lower,upperdir=$abs_upper,workdir=$abs_work,redirect_dir=on"
-
-  if ! mount -t overlay overlay -o "$mount_opts" "$merged" 2>/dev/null; then
-    if command -v sudo >/dev/null 2>&1; then
-      sudo mount -t overlay overlay -o "$mount_opts" "$merged"
-    else
-      echo "[ERROR] Failed to mount overlay for $client (need elevated permissions)" >&2
-      return 1
-    fi
+  if ! overlay_mount_with_fallback "$client" "$abs_lower" "$abs_upper" "$abs_work" "$merged"; then
+    echo "[ERROR] Failed to mount overlay for $client (all mount option profiles failed)" >&2
+    return 1
   fi
 
   ACTIVE_OVERLAY_MOUNTS["$client"]="$merged"
@@ -759,37 +821,37 @@ docker_compose_down_for_client() {
   local client_base="$1"
   local compose_dir="scripts/$client_base"
 
-  if ! command -v docker >/dev/null 2>&1; then
+  if ! compose_detect >/dev/null 2>&1; then
     return
   fi
 
   if [ -f "$compose_dir/docker-compose.yaml" ]; then
-    docker compose -f "$compose_dir/docker-compose.yaml" down --volumes >/dev/null 2>&1 || \
-      docker compose -f "$compose_dir/docker-compose.yaml" down --volumes
+    compose_cmd -f "$compose_dir/docker-compose.yaml" down --volumes >/dev/null 2>&1 || \
+      compose_cmd -f "$compose_dir/docker-compose.yaml" down --volumes
   elif [ -d "$compose_dir" ]; then
     (
-      cd "$compose_dir" && docker compose down --volumes >/dev/null 2>&1 || docker compose down --volumes
+      cd "$compose_dir" && compose_cmd down --volumes >/dev/null 2>&1 || compose_cmd down --volumes
     )
   fi
 }
 
 docker_container_exists() {
   local name="$1"
-  docker ps -a --format '{{.Names}}' | grep -Fxq "$name"
+  docker_cmd ps -a --format '{{.Names}}' | grep -Fxq "$name"
 }
 
 dump_client_logs() {
   local client_base="$1"
-  if ! command -v docker >/dev/null 2>&1; then
+  if [ -z "$(resolve_docker_bin)" ]; then
     return
   fi
   mkdir -p logs
   local ts=$(date +%s)
   if docker_container_exists "gas-execution-client"; then
-    docker logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
+    docker_cmd logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
   fi
   if docker_container_exists "gas-execution-client-sync"; then
-    docker logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
+    docker_cmd logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
   fi
 }
 
@@ -797,7 +859,7 @@ cleanup_on_exit() {
   local exit_status=$?
   trap - EXIT INT TERM
 
-  if command -v docker >/dev/null 2>&1; then
+  if [ -n "$(resolve_docker_bin)" ]; then
     local client_base client_spec
     if [ "${#RUNNING_CLIENTS[@]}" -gt 0 ]; then
       for client_base in "${!RUNNING_CLIENTS[@]}"; do
@@ -988,8 +1050,25 @@ mkdir -p "$PREPARATION_RESULTS_DIR"
 init_executions_file
 
 # Install dependencies
-pip install -r requirements.txt
-make prepare_tools
+python3 -m pip install --user --ignore-installed -r requirements.txt
+prepare_tools_success=false
+for attempt in 1 2 3; do
+  echo "[INFO] Running make prepare_tools (attempt $attempt/3)"
+  if make prepare_tools; then
+    prepare_tools_success=true
+    break
+  fi
+  if [ "$attempt" -lt 3 ]; then
+    sleep_seconds=$((attempt * 30))
+    echo "[WARN] make prepare_tools failed, retrying in ${sleep_seconds}s..."
+    sleep "$sleep_seconds"
+  fi
+done
+
+if [ "$prepare_tools_success" != true ]; then
+  echo "[ERROR] make prepare_tools failed after 3 attempts"
+  exit 1
+fi
 
 # Find test files and their associated genesis paths
 TEST_FILES=()
@@ -1022,6 +1101,22 @@ for run in $(seq 1 $RUNS); do
     client_base=$(echo "$client" | cut -d '_' -f 1)
     raw_genesis="$DEFAULT_GENESIS"
     genesis_client="$client_base"
+
+    if [ "$NETWORK" = "perf-devnet-2" ]; then
+      case "$client_base" in
+        besu)
+          raw_genesis="bloatnet-osaka.json"
+          genesis_client="besu"
+          ;;
+        geth|reth|erigon|nimbus|ethrex)
+          raw_genesis="bloatnet-osaka.json"
+          genesis_client="geth"
+          ;;
+        nethermind)
+          raw_genesis=""
+          ;;
+      esac
+    fi
 
     if [ -n "$raw_genesis" ]; then
       if [ "$genesis_client" != "besu" ] && [ "$genesis_client" != "nethermind" ]; then
@@ -1088,9 +1183,13 @@ for run in $(seq 1 $RUNS); do
       setup_cmd+=(--dataBackend "direct")
     fi
     if [ -n "$NETWORK" ]; then
-      setup_cmd+=(--network "$NETWORK")
-    fi
-    if [ -z "$NETWORK" ] && [ -n "$genesis_path" ]; then
+      if [ "$NETWORK" = "perf-devnet-2" ] && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
+        echo "Using custom genesis for $client: $genesis_path"
+        setup_cmd+=(--genesisPath "$genesis_path")
+      else
+        setup_cmd+=(--network "$NETWORK")
+      fi
+    elif [ -n "$genesis_path" ]; then
       echo "Using custom genesis for $client: $genesis_path"
       setup_cmd+=(--genesisPath "$genesis_path")
     fi
@@ -1102,7 +1201,7 @@ for run in $(seq 1 $RUNS); do
     "${setup_cmd[@]}"
 
     if declare -f wait_for_rpc >/dev/null 2>&1; then
-      wait_for_rpc "http://127.0.0.1:8545" 300
+      wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
     else
       sleep 5
     fi
@@ -1228,8 +1327,29 @@ for run in $(seq 1 $RUNS); do
           esac
           if (( current_count < OPCODES_WARMUP_COUNT )); then
             for warmup_count in $(seq 1 $OPCODES_WARMUP_COUNT); do
-              echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
-              python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+              if (( OPCODES_WARMUP_COUNT > 1 && warmup_count > 1 )); then
+                # Iterations 2+: create variant with unique prevRandao so the
+                # client treats it as a new block and re-executes the opcodes.
+                variant_file=$(mktemp --suffix=.txt)
+                probe_dir=$(mktemp -d)
+                python3 vary_warmup.py create "$warmup_path" "$warmup_count" "$variant_file"
+
+                echo "[INFO] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: probe send to discover blockHash"
+                python3 run_kute.py --output "$probe_dir" --testsPath "$variant_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+
+                if python3 vary_warmup.py fix-hashes "$variant_file" "$probe_dir" "$client"; then
+                  echo "[INFO] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: re-send with corrected blockHash"
+                  python3 run_kute.py --output warmupresults --testsPath "$variant_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+                else
+                  echo "[WARN] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: hash fix failed, skipping re-send"
+                fi
+
+                rm -f "$variant_file"
+                rm -rf "$probe_dir"
+              else
+                echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+                python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
+              fi
               current_count=$((current_count + 1))
             done
             warmup_run_counts["$warmup_path"]=$current_count
@@ -1346,8 +1466,14 @@ else
 fi
 
 # Prepare and zip the results
-mkdir -p reports/docker
-cp -r results/docker_* reports/docker
-zip -r reports.zip reports
+if ls logs/docker_* 1>/dev/null 2>&1; then
+  mkdir -p reports/docker
+  cp -r logs/docker_* reports/docker
+fi
+if command -v zip &>/dev/null; then
+  zip -r reports.zip reports
+else
+  tar -czf reports.tar.gz reports
+fi
 
 # Print timing summary at the end
