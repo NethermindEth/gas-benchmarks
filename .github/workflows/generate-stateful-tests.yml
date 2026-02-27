@@ -202,7 +202,11 @@ jobs:
               rm -rf "$PAYLOAD_DIR"
             fi
           fi
-          rm -rf "$WARMUP_DIR"
+          if [[ -n "$CFG_PARAMETER_FILTER" ]]; then
+            echo "parameter_filter is set; keeping existing $WARMUP_DIR to preserve other warmups"
+          else
+            rm -rf "$WARMUP_DIR"
+          fi
           rm -f "$TRACES_JSON"
           rm -rf execution-specs
 
@@ -276,6 +280,10 @@ jobs:
           # if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
           #   GENESIS_ARGS=(-g "scripts/genesisfiles/nethermind/bloatnet-prague.json")
           # fi
+          FILTER_ARGS=()
+          if [[ -n "$CFG_PARAMETER_FILTER" ]]; then
+            FILTER_ARGS=(--filter "$CFG_PARAMETER_FILTER")
+          fi
           python3 make_warmup_tests.py \
             -s "$PAYLOAD_DIR" \
             -d "$WARMUP_DIR" \
@@ -284,7 +292,8 @@ jobs:
             --snapshotRoot "$SNAPSHOT_DIR_WARMUP" \
             --overlayRoot "$OVERLAY_ROOT" \
             --snapshotBackend "$CFG_WARMUP_SNAPSHOT_BACKEND" \
-            --network "mainnet"
+            --network "mainnet" \
+            "${FILTER_ARGS[@]}"
 
       - name: Print warmup nethermind log
         if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' }}

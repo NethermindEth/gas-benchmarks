@@ -590,6 +590,11 @@ def main():
         "--network",
         help="Optional network name to resolve snapshot subdirectories (and passed to setup_node.py)",
     )
+    p.add_argument(
+        "--filter",
+        default="",
+        help="Only regenerate warmups for test files whose names contain this substring (preserves existing warmups for other tests)",
+    )
     args = p.parse_args()
     _ensure_kute_binary()
 
@@ -641,9 +646,13 @@ def main():
         sys.exit(1)
 
     dst_root = Path(args.dest)
+    warmup_filter = args.filter.strip() if args.filter else ""
     if dst_root.exists():
-        shutil.rmtree(dst_root)
-    dst_root.mkdir(parents=True)
+        if warmup_filter:
+            print(f"[INFO] --filter is set ('{warmup_filter}'); preserving existing warmup directory")
+        else:
+            shutil.rmtree(dst_root)
+    dst_root.mkdir(parents=True, exist_ok=True)
     pattern = args.pattern
 
     counters = {"total": 0, "bumped": 0, "dropped": 0}
@@ -671,6 +680,8 @@ def main():
             # Skip setup/cleanup; only take testing payloads
             normalized = src.as_posix()
             if "/setup/" in normalized or "/cleanup/" in normalized:
+                continue
+            if warmup_filter and warmup_filter.lower() not in src.name.lower():
                 continue
 
             rel = src.relative_to(src_root)
