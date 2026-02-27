@@ -1349,7 +1349,19 @@ def main():
 
 
     if args.parameter_filter:
-        print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); preserving existing setup/testing/cleanup directories")
+        # Only remove files matching the filter so they get cleanly regenerated;
+        # preserve all other tests.
+        filter_terms = [t.strip().lower() for t in args.parameter_filter.replace(" or ", ",").replace(" and ", ",").split(",") if t.strip()]
+        removed = 0
+        for subdir in ("setup", "testing", "cleanup"):
+            sub_path = payloads_dir / subdir
+            if not sub_path.exists():
+                continue
+            for f in sub_path.rglob("*.txt"):
+                if any(term in f.name.lower() for term in filter_terms):
+                    f.unlink()
+                    removed += 1
+        print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); removed {removed} matching files, preserved the rest")
     else:
         for subdir in ("setup", "testing", "cleanup"):
             sub_path = payloads_dir / subdir
