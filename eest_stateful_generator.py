@@ -1387,6 +1387,7 @@ def main():
             run(["git", "fetch", "origin"], cwd=str(repo_dir))
             run(["git", "checkout", args.eest_branch], cwd=str(repo_dir))
             run(["git", "pull", "origin", args.eest_branch], cwd=str(repo_dir))
+            run(["git", "submodule", "update", "--init", "--recursive"], cwd=str(repo_dir))
         else:
             print("[INFO] --eest-no-pull specified; using existing execution-specs checkout as-is.")
     else:
@@ -1399,6 +1400,7 @@ def main():
             repo_url,
             str(repo_dir),
         ])
+        run(["git", "submodule", "update", "--init", "--recursive"], cwd=str(repo_dir))
     if not check_cmd_exists("uv"):
         run([sys.executable, "-m", "pip", "install", "-U", "uv"])
     run(["uv", "python", "install", "3.11"])
