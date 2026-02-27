@@ -663,6 +663,84 @@ def _generate_preparation_payloads(
         print(f"[WARN] Funding prep failed: {exc}")
     return finalized or ""
 
+def _count_payload_pairs(path: Path) -> int:
+    """Count the number of newPayload+FCU pairs in a payload file."""
+    try:
+        lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    except Exception:
+        return 0
+    count = 0
+    for line in lines:
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        method = obj.get("method", "")
+        if isinstance(method, str) and method.startswith("engine_newPayload"):
+            count += 1
+    return count
+
+
+def _replay_preparation_payloads(
+    engine_url: str,
+    jwt_hex_path: Path,
+    gas_bump_file: Path,
+    funding_file: Path,
+) -> str:
+    """Replay existing gas-bump and funding payload files against the running node."""
+    import hmac, hashlib
+
+    session = _get_http_session()
+
+    def _send_engine_line(line: str) -> dict:
+        secret_hex = Path(jwt_hex_path).read_text().strip().replace("0x", "")
+        header = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"JWT"}').rstrip(b'=')
+        payload = base64.urlsafe_b64encode(json.dumps({"iat": int(time.time())}).encode()).rstrip(b'=')
+        unsigned = header + b"." + payload
+        sig = hmac.new(bytes.fromhex(secret_hex), unsigned, hashlib.sha256).digest()
+        token = (unsigned + b"." + base64.urlsafe_b64encode(sig).rstrip(b'=')).decode()
+        body = json.loads(line)
+        r = session.post(engine_url, json=body, headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        r.raise_for_status()
+        j = r.json()
+        if "error" in j:
+            raise RuntimeError(f"Engine error replaying {body.get('method')}: {j['error']}")
+        return j
+
+    finalized = ""
+    for label, path in [("gas-bump", gas_bump_file), ("funding", funding_file)]:
+        if not path.exists():
+            print(f"[WARN] {label} file not found: {path}")
+            continue
+        lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        if not lines:
+            print(f"[INFO] {label} file is empty; skipping replay.")
+            continue
+        np_count = sum(1 for ln in lines if '"engine_newPayload' in ln)
+        print(f"[INFO] Replaying {np_count} payloads from {label} file: {path}")
+        last_log = time.monotonic()
+        replayed = 0
+        for line in lines:
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            method = obj.get("method", "")
+            if isinstance(method, str) and method.startswith("engine_newPayload"):
+                replayed += 1
+                now = time.monotonic()
+                if replayed == 1 or replayed == np_count or now - last_log >= 5:
+                    print(f"[DEBUG] Replaying {label} payload {replayed}/{np_count}")
+                    last_log = now
+                params = obj.get("params", [])
+                if params and isinstance(params[0], dict):
+                    block_hash = params[0].get("blockHash")
+                    if isinstance(block_hash, str):
+                        finalized = block_hash
+            _send_engine_line(line)
+    return finalized
+
+
 def _latest_block_hash_from_payload_file(path: Path) -> Optional[str]:
     try:
         lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
@@ -1441,7 +1519,19 @@ def main():
 
     finalized_hash = ""
     rpc_url = "http://127.0.0.1:8545"
-    if reuse_preparation:
+    engine_url = "http://127.0.0.1:8551"
+    if reuse_preparation and args.parameter_filter:
+        # When filter is set, replay existing payloads instead of regenerating — but only
+        # if the gas-bump count matches what was requested.
+        existing_bump_count = _count_payload_pairs(gas_bump_file)
+        requested_bump_count = int(args.gas_bump_count) if int(args.gas_bump_count) >= 0 else 0
+        if existing_bump_count != requested_bump_count:
+            print(f"[INFO] Gas-bump count mismatch: file has {existing_bump_count} but requested {requested_bump_count}; regenerating.")
+            reuse_preparation = False
+        else:
+            print(f"[INFO] Replaying {existing_bump_count} existing gas-bump + funding payloads (parameter_filter is set).")
+            finalized_hash = _replay_preparation_payloads(engine_url, jwt_path, gas_bump_file, funding_file)
+    elif reuse_preparation:
         print("[INFO] Reusing existing gas-bump and funding payloads.")
         finalized_hash = _latest_block_hash_from_payload_file(funding_file) or ""
         if not finalized_hash or not _block_exists(rpc_url, finalized_hash):
