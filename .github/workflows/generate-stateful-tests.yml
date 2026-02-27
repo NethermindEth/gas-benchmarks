@@ -41,7 +41,7 @@ on:
         required: true
         default: "30,60,90,120,150,180,210,240,270,300"
       gas_bump_count:
-        description: "Gas bump count (-1 = chain default: 0 for perf-devnet-2, 2000 for mainnet)"
+        description: "Gas bump count (-1 = chain default: 5000 for perf-devnet-2, 10000 for mainnet)"
         required: true
         default: "-1"
       eest_mode:
@@ -66,6 +66,14 @@ on:
           - warmup_only
           - stateful_only
         default: "full"
+      warmup_snapshot_backend:
+        description: "Snapshot backend for warmup generation"
+        required: true
+        type: choice
+        options:
+          - overlay
+          - zfs
+        default: "overlay"
 
 permissions:
   contents: write
@@ -95,6 +103,7 @@ jobs:
       CFG_RPC_ADDRESS: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
       CFG_PARAMETER_FILTER: ${{ github.event.inputs.parameter_filter || '' }}
       CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
+      CFG_WARMUP_SNAPSHOT_BACKEND: ${{ github.event.inputs.warmup_snapshot_backend || 'overlay' }}
 
     steps:
       - name: Checkout gas-benchmarks repository from triggering branch
@@ -158,7 +167,7 @@ jobs:
           GAS_BUMP_COUNT="$CFG_GAS_BUMP_COUNT"
           if [[ "$GAS_BUMP_COUNT" == "-1" ]]; then
             if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
-              GAS_BUMP_COUNT="0"
+              GAS_BUMP_COUNT="5000"
             else
               GAS_BUMP_COUNT="10000"
             fi
@@ -187,9 +196,17 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$CFG_GENERATION_MODE" != "warmup_only" ]]; then
-            rm -rf "$PAYLOAD_DIR"
+            if [[ -n "$CFG_PARAMETER_FILTER" ]]; then
+              echo "parameter_filter is set ('$CFG_PARAMETER_FILTER'); keeping existing $PAYLOAD_DIR to preserve other tests"
+            else
+              rm -rf "$PAYLOAD_DIR"
+            fi
           fi
-          rm -rf "$WARMUP_DIR"
+          if [[ -n "$CFG_PARAMETER_FILTER" ]]; then
+            echo "parameter_filter is set; keeping existing $WARMUP_DIR to preserve other warmups"
+          else
+            rm -rf "$WARMUP_DIR"
+          fi
           rm -f "$TRACES_JSON"
           rm -rf execution-specs
 
@@ -263,6 +280,10 @@ jobs:
           # if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
           #   GENESIS_ARGS=(-g "scripts/genesisfiles/nethermind/bloatnet-prague.json")
           # fi
+          FILTER_ARGS=()
+          if [[ -n "$CFG_PARAMETER_FILTER" ]]; then
+            FILTER_ARGS=(--filter "$CFG_PARAMETER_FILTER")
+          fi
           python3 make_warmup_tests.py \
             -s "$PAYLOAD_DIR" \
             -d "$WARMUP_DIR" \
@@ -270,7 +291,9 @@ jobs:
             "${GENESIS_ARGS[@]}" \
             --snapshotRoot "$SNAPSHOT_DIR_WARMUP" \
             --overlayRoot "$OVERLAY_ROOT" \
-            --network "mainnet"
+            --snapshotBackend "$CFG_WARMUP_SNAPSHOT_BACKEND" \
+            --network "mainnet" \
+            "${FILTER_ARGS[@]}"
 
       - name: Print warmup nethermind log
         if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' }}
@@ -398,21 +421,33 @@ jobs:
           docker ps -q | xargs -r docker rm -f
           docker system prune -af --volumes || true
 
-      - name: Purge stale overlay mounts and dirs
+      - name: Purge stale snapshot runtime mounts and dirs
         if: always()
         shell: bash
         run: |
           set +e
 
-          # Warmup overlays: /mnt/sda/overlay-workspace/<client>/<overlay_id>/{merged,upper,work}
-          for client in nethermind geth; do
-            if [ -d "$OVERLAY_ROOT/$client" ]; then
-              find "$OVERLAY_ROOT/$client" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
-                mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+          if [ "$CFG_WARMUP_SNAPSHOT_BACKEND" = "zfs" ]; then
+            if command -v zfs >/dev/null 2>&1; then
+              zfs list -H -o name -t filesystem 2>/dev/null | grep '/gasbench-runtime/' | sort -r | while read -r ds; do
+                [ -n "$ds" ] && (zfs destroy -r -f "$ds" || sudo zfs destroy -r -f "$ds" || true)
               done
-              rm -rf "$OVERLAY_ROOT/$client" || true
+              zfs list -H -o name -t snapshot 2>/dev/null | grep '@gasbench_tmp_' | while read -r snap; do
+                [ -n "$snap" ] && (zfs destroy "$snap" || sudo zfs destroy "$snap" || true)
+              done
             fi
-          done
+            rm -rf "$OVERLAY_ROOT"/nethermind "$OVERLAY_ROOT"/geth || true
+          else
+            # Warmup overlays: /mnt/sda/overlay-workspace/<client>/<overlay_id>/{merged,upper,work}
+            for client in nethermind geth; do
+              if [ -d "$OVERLAY_ROOT/$client" ]; then
+                find "$OVERLAY_ROOT/$client" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
+                  mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
+                done
+                rm -rf "$OVERLAY_ROOT/$client" || true
+              fi
+            done
+          fi
 
           # Stateful generator primary overlay mountpoints if a run was interrupted
           for mp in "$OVERLAY_ROOT/overlay-merged" "$OVERLAY_ROOT/scenario-merged"; do

@@ -1,0 +1,52 @@
+name: Repricing - Geth
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Path(s) to repricing test directories (comma-separated) or 'all'"
+        default: 'all'
+      runs:
+        description: 'Number of runs for the application'
+        default: '1'
+      images:
+        description: 'JSON map of images for the clients'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+      opcodes_warmup_count:
+        description: 'Number of opcode-warmup iterations'
+        default: '1'
+      filter:
+        description: 'Comma-separated include-only filename patterns'
+        default: ''
+      txt_report:
+        description: 'Mark as true to generate txt report'
+        default: 'false'
+
+concurrency:
+  group: repricing-geth-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repricing:
+    uses: ./.github/workflows/repricing-client.yml
+    with:
+      client: geth
+      test: ${{ inputs.test || 'all' }}
+      runs: ${{ inputs.runs || '1' }}
+      images: ${{ inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
+      opcodes_warmup_count: ${{ inputs.opcodes_warmup_count || '1' }}
+      filter: ${{ inputs.filter || '' }}
+      txt_report: ${{ inputs.txt_report || 'false' }}
+    secrets: inherit
+
+  retrigger:
+    needs: repricing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrigger workflow
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: repricing-geth.yml
+          ref: "${{ github.ref }}"
+          token: "${{ secrets.GH_TOKEN }}"
+          inputs: ${{ toJson(github.event.inputs) }}

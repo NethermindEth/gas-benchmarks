@@ -197,12 +197,12 @@ def evaluate_flag(flag_entry: Dict[str, Any], network: Optional[str], use_custom
     return value or ""
 
 
-INIT_SKIP_ON_OVERLAY: Dict[str, Dict[str, str]] = {
+INIT_SKIP_ON_SNAPSHOT_BACKEND: Dict[str, Dict[str, str]] = {
     "geth": {"GETH_INIT_COMMAND": "true"},
 }
 
 
-def _is_overlay_path(candidate: Optional[str]) -> bool:
+def _is_snapshot_clone_path(candidate: Optional[str]) -> bool:
     if not candidate:
         return False
     try:
@@ -210,7 +210,9 @@ def _is_overlay_path(candidate: Optional[str]) -> bool:
     except Exception:
         return False
     lowercase_parts = [part.lower() for part in resolved.parts]
-    return "merged" in lowercase_parts and any("overlay" in part for part in lowercase_parts)
+    if "merged" in lowercase_parts and any("overlay" in part for part in lowercase_parts):
+        return True
+    return any("gasbench-runtime" in part for part in lowercase_parts)
 
 
 def set_env(
@@ -218,6 +220,7 @@ def set_env(
     el_images: Dict[str, str],
     run_path: str,
     data_dir: Optional[str],
+    data_backend: Optional[str],
     network: Optional[str],
     use_custom_genesis: bool,
     genesis_host_path: Path,
@@ -237,6 +240,7 @@ def set_env(
         metadata["env_key"]: genesis_host_path.as_posix(),
         "USE_CUSTOM_GENESIS": "true" if use_custom_genesis else "false",
         "NETWORK_NAME": network or "",
+        "EC_DATA_BACKEND": (data_backend or "direct"),
     }
 
     sanitized_volume = sanitize_volume_name(volume_name) if volume_name else sanitize_volume_name(
@@ -255,8 +259,10 @@ def set_env(
     for extra_key, extra_value in metadata.get("extra_env", {}).items():
         env_map[extra_key] = extra_value
 
-    if _is_overlay_path(data_dir):
-        overrides = INIT_SKIP_ON_OVERLAY.get(client, {})
+    normalized_backend = (data_backend or "").strip().lower()
+    is_snapshot_clone = normalized_backend in {"overlay", "zfs"} or _is_snapshot_clone_path(data_dir)
+    if is_snapshot_clone:
+        overrides = INIT_SKIP_ON_SNAPSHOT_BACKEND.get(client, {})
         for env_key, override in overrides.items():
             env_map[env_key] = override
 
@@ -271,16 +277,16 @@ def set_env(
 
 def copy_genesis_file(source: Path, target: Path) -> None:
     if not source.is_file():
-        print(f"âťŚ Genesis file not found at: {source}")
+        print(f"[error] Genesis file not found at: {source}")
         exit(1)
 
     target.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         shutil.copy(source, target)
-        print(f"âś… Copied genesis file: {source} â†’ {target}")
+        print(f"[info] Copied genesis file: {source} -> {target}")
     except Exception as exc:
-        print(f"âťŚ Failed to copy genesis file from {source} to {target}: {exc}")
+        print(f"[error] Failed to copy genesis file from {source} to {target}: {exc}")
         exit(1)
 
 
@@ -302,6 +308,13 @@ def main():
         help="Host directory to bind into the client as data dir",
     )
     parser.add_argument(
+        "--dataBackend",
+        type=str,
+        choices=["direct", "overlay", "zfs"],
+        default="direct",
+        help="Data directory backend mode (direct, overlay, zfs)",
+    )
+    parser.add_argument(
         "--volumeName",
         type=str,
         help="Docker volume name override",
@@ -317,13 +330,14 @@ def main():
     genesis_path = args.genesisPath
     network = args.network
     data_dir = args.dataDir
+    data_backend = args.dataBackend
     volume_name = args.volumeName
 
     with open(REPO_ROOT / "images.yaml", "r", encoding="utf-8") as f:
         el_images = yaml.safe_load(f)["images"]
 
     if client_without_tag not in el_images:
-        print("âťŚ Client not supported:", client_without_tag)
+        print("[error] Client not supported:", client_without_tag)
         return
 
     # Override image from bulk if needed
@@ -358,6 +372,7 @@ def main():
         el_images=el_images,
         run_path=run_path,
         data_dir=data_dir,
+        data_backend=data_backend,
         network=network,
         use_custom_genesis=use_custom_genesis,
         genesis_host_path=genesis_target,

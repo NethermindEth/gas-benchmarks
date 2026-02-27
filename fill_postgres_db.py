@@ -539,10 +539,19 @@ def populate_data_for_client(
 
                 agg_stats = aggregated_stats_map.get(test_case_name_raw, {})
 
-                if not run_values_str and len(header) == 2: # Handle case with only 'Test Case', 'Gas'
+                # Skip rows where no run was actually executed (all values are 0)
+                numeric_runs = []
+                for v in run_values_str:
+                    try:
+                        numeric_runs.append(float(v) if v.strip() else 0.0)
+                    except ValueError:
+                        numeric_runs.append(0.0)
+                if all(v == 0 for v in numeric_runs):
+                    logging.debug(f"Skipping unexecuted scenario '{test_case_name_raw}': all run values are zero.")
+                    continue
+
+                if not run_values_str and len(header) == 2:
                      logging.debug(f"Row for '{test_case_name_raw}' seems to only have Test Case and Gas value, no individual runs. Skipping run processing.")
-                     # Decide if you want to insert a record with just this minimal info
-                     # For now, we expect run values to insert.
 
                 gas_value_float: Optional[float] = None
                 if raw_gas_value not in ("", None):

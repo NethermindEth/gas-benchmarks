@@ -7,9 +7,9 @@ services:
     networks:
       - gas
     volumes:
-      - execution_data:/var/lib/erigon
+      - execution_data:/data
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${EC_JWT_SECRET_PATH}:/tmp/jwtsecret
     entrypoint:
       - /bin/sh
       - -c
@@ -27,40 +27,45 @@ services:
     networks:
       - gas
     volumes:
-      - execution_data:/var/lib/erigon
+      - execution_data:/data
       - ${GENESIS_PATH}:/tmp/genesis/genesis.json
-      - ${EC_JWT_SECRET_PATH}:/tmp/jwt/jwtsecret
+      - ${EC_JWT_SECRET_PATH}:/tmp/jwtsecret
     ports:
       - "8008:8008/tcp"
       - "8551:8551"
       - "8545:8545"
     command:
-      - --externalcl
-      - --private.api.addr=0.0.0.0:9090
-      - --nat=any
+      - --datadir=/data
+      - --nat=none
+      - --maxpeers=0
+      - --txpool.disable
+      - --nodiscover
+      - --no-downloader
+      - --torrent.download.rate=0
+      - --torrent.upload.rate=0
       - --http
       - --http.addr=0.0.0.0
       - --http.port=8545
       - --http.vhosts=*
       - --http.corsdomain=*
-      - --http.api=web3,eth,net,engine
-      - --txpool.disable
+      - --http.api=web3,eth,net,engine,debug
       - --authrpc.addr=0.0.0.0
       - --authrpc.port=8551
       - --authrpc.vhosts=*
-      - --authrpc.jwtsecret=/tmp/jwt/jwtsecret
-      - --datadir=/var/lib/erigon
-      - ${ERIGON_CHAIN_FLAG}
-      - --healthcheck
+      - --authrpc.jwtsecret=/tmp/jwtsecret
       - --metrics
       - --metrics.addr=0.0.0.0
       - --metrics.port=8008
-      - --db.size.limit=20GB
+      - --prune.mode=full
+      - --log.dir.disable
+      - --private.api.addr=0.0.0.0:9090
+      - --externalcl
       - --fcu.timeout=0
       - --fcu.background.prune=false
       - --fcu.background.commit=false
       - --sync.parallel-state-flushing=false
-      - --experimental.always-generate-changesets
+      - ${ERIGON_CHAIN_FLAG}
+      - --log.console.verbosity=debug
     logging:
       driver: json-file
       options:
