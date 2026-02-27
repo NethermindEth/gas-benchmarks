@@ -393,7 +393,7 @@ def _snapshot_trace_files_worker(stop_event: threading.Event, opcode_tracing_dir
     _snapshot_trace_files_once(opcode_tracing_dir, history_dir, seen_state)
 
 
-def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, output_path: Path) -> None:
+def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, output_path: Path, parameter_filter: str = "") -> None:
     """
     Process test files in testing_dir and create a JSON mapping test names to opcode counts.
 
@@ -499,6 +499,10 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         return None
 
     testing_files = sorted([p for p in testing_dir.rglob("*.txt") if p.is_file()])
+    if parameter_filter:
+        filter_terms = [t.strip().lower() for t in parameter_filter.replace(" or ", ",").replace(" and ", ",").split(",") if t.strip()]
+        testing_files = [f for f in testing_files if any(term in f.name.lower() for term in filter_terms)]
+        print(f"[INFO] Trace matching filtered to {len(testing_files)} files (parameter_filter='{parameter_filter}')")
     for txt_file in testing_files:
         test_name = txt_file.stem
 
@@ -1697,6 +1701,7 @@ def main():
                 testing_dir=Path(payloads_dir / "testing"),
                 opcode_tracing_dir=opcode_tracing_dir,
                 output_path=Path(args.trace_json_output),
+                parameter_filter=args.parameter_filter or "",
             )
         if return_code != 0:
             generated_phase_payloads = _has_phase_payloads(payloads_dir)
