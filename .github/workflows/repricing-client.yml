@@ -76,7 +76,7 @@ jobs:
 
           matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
 
-          echo "::set-output name=matrix::$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   build:
     needs: set-matrix

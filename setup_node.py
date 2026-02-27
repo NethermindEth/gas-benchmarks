@@ -115,12 +115,12 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "ERIGON_CHAIN_FLAG",
-                "custom": "--chain=/tmp/genesis/genesis.json",
+                "custom": "--keep.stored.chain.config",
                 "network": lambda net: f"--chain={net.lower()}",
             },
             {
                 "env": "ERIGON_INIT_COMMAND",
-                "custom": "erigon init --datadir=/var/lib/erigon /tmp/genesis/genesis.json",
+                "custom": "erigon init --datadir=/data /tmp/genesis/genesis.json",
                 "network": "",
             },
         ],
@@ -199,6 +199,7 @@ def evaluate_flag(flag_entry: Dict[str, Any], network: Optional[str], use_custom
 
 INIT_SKIP_ON_SNAPSHOT_BACKEND: Dict[str, Dict[str, str]] = {
     "geth": {"GETH_INIT_COMMAND": "true"},
+    "erigon": {"ERIGON_INIT_COMMAND": "true"},
 }
 
 
