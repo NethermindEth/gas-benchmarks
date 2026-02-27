@@ -1,46 +1,39 @@
-name: Run Parallel Benchmarks (Repricing)
+name: Repricing Client (Reusable)
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_call:
     inputs:
+      client:
+        description: 'Client name (besu, erigon, geth, nethermind, reth)'
+        required: true
+        type: string
       test:
         description: "Path(s) to repricing test directories (comma-separated) or 'all'"
         default: 'all'
+        type: string
       runs:
         description: 'Number of runs for the application'
-        default: 1
+        default: '1'
+        type: string
       images:
         description: 'JSON map of images for the clients'
         default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+        type: string
       opcodes_warmup_count:
         description: 'Number of opcode-warmup iterations'
-        default: 1
+        default: '1'
+        type: string
       filter:
         description: 'Comma-separated include-only filename patterns'
         default: ''
+        type: string
       txt_report:
         description: 'Mark as true to generate txt report'
         default: 'false'
-
-concurrency:
-  group: repricing-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  INPUT_TEST: ${{ github.event.inputs.test || 'all' }}
-  INPUT_RUNS: ${{ github.event.inputs.runs || 1 }}
-  INPUT_IMAGES: ${{ github.event.inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
-  INPUT_OPCODES_WARMUP: ${{ github.event.inputs.opcodes_warmup_count || 1 }}
-  INPUT_FILTER: ${{ github.event.inputs.filter || '' }}
-  INPUT_TXT_REPORT: ${{ github.event.inputs.txt_report || 'false' }}
-
+        type: string
 
 jobs:
   set-matrix:
-    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -56,13 +49,11 @@ jobs:
       - name: Set matrix dynamically
         id: set-matrix
         run: |
-          runs="${{ env.INPUT_RUNS }}"
+          runs="${{ inputs.runs }}"
           if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
             runs=1
           fi
-          clients="besu,erigon,geth,nethermind,reth"
-          IFS=',' read -ra client_array <<< "$clients"
-          tests_input="${{ env.INPUT_TEST }}"
+          tests_input="${{ inputs.test }}"
           targets=()
 
           if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
@@ -86,20 +77,18 @@ jobs:
           fi
 
           matrix_elements=()
-          
+
           for ((i=1; i<=runs; i++)); do
             for target in "${targets[@]}"; do
-              for client in "${client_array[@]}"; do
-                test_path="${target%%|*}"
-                network="${target##*|}"
-                element="{'run': '$i', 'client': '$client', 'test_path': '$test_path', 'network': '$network'}"
-                matrix_elements+=("$element")
-              done
+              test_path="${target%%|*}"
+              network="${target##*|}"
+              element="{'run': '$i', 'test_path': '$test_path', 'network': '$network'}"
+              matrix_elements+=("$element")
             done
           done
-          
+
           matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
-          
+
           echo "::set-output name=matrix::$matrix"
 
   build:
@@ -107,11 +96,10 @@ jobs:
     runs-on:
       - self-hosted
       - repricing
-      - ${{ matrix.client }}
+      - ${{ inputs.client }}
     timeout-minutes: 10080
 
     strategy:
-      # Consume the JSON matrix we just emitted
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
       fail-fast: false
 
@@ -342,11 +330,11 @@ jobs:
       - name: Make run.sh executable
         run: chmod +x ./run.sh
 
-      - name: Run benchmarks for client=${{ matrix.client }}
+      - name: Run benchmarks for client=${{ inputs.client }}
         run: |
           TEST_PATH="${{ matrix.test_path }}"
           NETWORK="${{ matrix.network }}"
-          CLIENT="${{ matrix.client }}"
+          CLIENT="${{ inputs.client }}"
           WARMUP_PATH="${TEST_PATH}_warmup"
 
           if [ ! -d "$TEST_PATH" ]; then
@@ -361,7 +349,7 @@ jobs:
             echo "Warmup path not found: $WARMUP_PATH; continuing without explicit warmup path"
           fi
 
-          EFFECTIVE_FILTER="${{ env.INPUT_FILTER }}"
+          EFFECTIVE_FILTER="${{ inputs.filter }}"
           echo "Using filter: '${EFFECTIVE_FILTER}' for test path: $TEST_PATH"
 
           # Per-client snapshot backend selection
@@ -374,8 +362,8 @@ jobs:
                 -B "/data-zfs/eth/<<CLIENT>>/<<NETWORK>>" \
                 -c "$CLIENT" \
                 -r 1 \
-                -i '${{ env.INPUT_IMAGES }}' \
-                -o "${{ env.INPUT_OPCODES_WARMUP }}" \
+                -i '${{ inputs.images }}' \
+                -o "${{ inputs.opcodes_warmup_count }}" \
                 -f "$EFFECTIVE_FILTER" \
                 "${WARMUP_ARGS[@]}"
               ;;
@@ -387,39 +375,39 @@ jobs:
                 -O "/data/overlay-workspace" \
                 -c "$CLIENT" \
                 -r 1 \
-                -i '${{ env.INPUT_IMAGES }}' \
-                -o "${{ env.INPUT_OPCODES_WARMUP }}" \
+                -i '${{ inputs.images }}' \
+                -o "${{ inputs.opcodes_warmup_count }}" \
                 -f "$EFFECTIVE_FILTER" \
                 "${WARMUP_ARGS[@]}"
               ;;
           esac
 
-      - name: Dump latest Docker logs for ${{ matrix.client }}
+      - name: Dump latest Docker logs for ${{ inputs.client }}
         if: always()
         run: |
           # Find the newest docker log file for this client
-          LATEST=$(ls -1t logs/docker_${{ matrix.client }}_*.log | head -n1 || true)
-          LATEST_SYNC=$(ls -1t logs/docker_sync_${{ matrix.client }}_*.log | head -n1 || true)
+          LATEST=$(ls -1t logs/docker_${{ inputs.client }}_*.log | head -n1 || true)
+          LATEST_SYNC=$(ls -1t logs/docker_sync_${{ inputs.client }}_*.log | head -n1 || true)
           if [[ -n "$LATEST" ]]; then
             echo "=== Dumping $LATEST ==="
             cat "$LATEST"
           else
-            echo "No docker_*.log files found for client=${{ matrix.client }}"
+            echo "No docker_*.log files found for client=${{ inputs.client }}"
           fi
 
           if [[ -n "$LATEST_SYNC" ]]; then
             echo "=== Dumping $LATEST_SYNC ==="
             cat "$LATEST_SYNC"
           else
-            echo "No docker_sync_*.log files found for client=${{ matrix.client }}"
+            echo "No docker_sync_*.log files found for client=${{ inputs.client }}"
           fi
 
       - name: Generate per-client report CSVs
         run: |
           TEST_PATH="${{ matrix.test_path }}"
-          CLIENT="${{ matrix.client }}"
-          IMAGES='${{ env.INPUT_IMAGES }}'
-          RUNS="${{ env.INPUT_RUNS }}"
+          CLIENT="${{ inputs.client }}"
+          IMAGES='${{ inputs.images }}'
+          RUNS="${{ inputs.runs }}"
 
           python3 report_html.py \
             --resultsPath "results" \
@@ -466,7 +454,7 @@ jobs:
       - name: Zip the results folder
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
-          CLEANED_CLIENT=$(echo "${{ matrix.client }}" | tr -d '\n')
+          CLEANED_CLIENT=$(echo "${{ inputs.client }}" | tr -d '\n')
           CLEANED_TEST_PATH=$(echo "${{ matrix.test_path }}" | tr -d '\n' | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
           echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
           echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
@@ -485,6 +473,7 @@ jobs:
           docker ps -q | xargs -r docker stop || true
           docker ps -aq | xargs -r docker rm -f || true
           docker system prune -af --volumes || true
+
   combine-results:
     needs: build
     runs-on: ubuntu-latest
@@ -522,17 +511,18 @@ jobs:
           rm -rf reports extracted-results/by_test
           mkdir -p reports extracted-results/by_test
 
-          RUNS="${{ env.INPUT_RUNS }}"
-          IMAGES='${{ env.INPUT_IMAGES }}'
+          CLIENT="${{ inputs.client }}"
+          RUNS="${{ inputs.runs }}"
+          IMAGES='${{ inputs.images }}'
 
           TEST_PATHS=()
-          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
+          if [ "${{ inputs.test }}" = "all" ]; then
             TEST_PATHS+=("repricings_compute/mainnet")
             TEST_PATHS+=("repricings_compute/perf-devnet-2")
             TEST_PATHS+=("repricings_stateful/mainnet")
             TEST_PATHS+=("repricings_stateful/perf-devnet-2")
           else
-            IFS=',' read -ra TEST_PATHS <<< "${{ env.INPUT_TEST }}"
+            IFS=',' read -ra TEST_PATHS <<< "${{ inputs.test }}"
           fi
 
           generated=false
@@ -565,28 +555,11 @@ jobs:
               continue
             fi
 
-            mapfile -t TEST_CLIENT_FILES < <(find "$TEST_RESULTS_ROOT" -maxdepth 1 -type f -name '*_results_*.txt' | sort)
-            if [ "${#TEST_CLIENT_FILES[@]}" -eq 0 ]; then
-              echo "Skipping $TESTS - no client result files under ${TEST_RESULTS_ROOT}"
-              continue
-            fi
-            TEST_CLIENT_LIST=$(
-              printf "%s\n" "${TEST_CLIENT_FILES[@]}" \
-                | awk -F/ '{print $NF}' \
-                | sed -nE 's/^([A-Za-z0-9_-]+)_results_[0-9]+_.*\.txt$/\1/p' \
-                | sort -u \
-                | paste -sd',' -
-            )
-            if [ -z "$TEST_CLIENT_LIST" ]; then
-              echo "Skipping $TESTS - unable to derive clients from ${TEST_RESULTS_ROOT}"
-              continue
-            fi
-
-            echo "Generating reports for ${TESTS} with clients: ${TEST_CLIENT_LIST}"
-            python3 report_tables.py --resultsPath "$TEST_RESULTS_ROOT" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+            echo "Generating reports for ${TESTS} with client: ${CLIENT}"
+            python3 report_tables.py --resultsPath "$TEST_RESULTS_ROOT" --clients "$CLIENT" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
             cp reports/tables_norm.txt "reports/tables_norm_${SAFE_TESTS}.txt"
 
-            python3 report_html.py --resultsPath "$TEST_RESULTS_ROOT" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
+            python3 report_html.py --resultsPath "$TEST_RESULTS_ROOT" --clients "$CLIENT" --testsPath "$TESTS" --runs "$RUNS" --images "$IMAGES"
             cp reports/index.html "reports/index_${SAFE_TESTS}.html"
 
             rm -rf "$PER_TEST_REPORT_DIR"
@@ -612,16 +585,16 @@ jobs:
           fi
 
       - name: Generate Report
-        if: ${{ env.INPUT_TXT_REPORT == 'true' }}
+        if: ${{ inputs.txt_report == 'true' }}
         run: |
           TXT_TEST_PATHS=()
-          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
+          if [ "${{ inputs.test }}" = "all" ]; then
             TXT_TEST_PATHS+=("repricings_compute/mainnet")
             TXT_TEST_PATHS+=("repricings_compute/perf-devnet-2")
             TXT_TEST_PATHS+=("repricings_stateful/mainnet")
             TXT_TEST_PATHS+=("repricings_stateful/perf-devnet-2")
           else
-            IFS=',' read -ra TXT_TEST_PATHS <<< "${{ env.INPUT_TEST }}"
+            IFS=',' read -ra TXT_TEST_PATHS <<< "${{ inputs.test }}"
           fi
 
           for raw_test_path in "${TXT_TEST_PATHS[@]}"; do
@@ -642,14 +615,7 @@ jobs:
               echo "Skipping txt report for ${TESTS} - no client result files"
               continue
             fi
-            TEST_CLIENT_LIST=$(
-              printf "%s\n" "${TEST_CLIENT_FILES[@]}" \
-                | awk -F/ '{print $NF}' \
-                | sed -nE 's/^([A-Za-z0-9_-]+)_results_[0-9]+_.*\.txt$/\1/p' \
-                | sort -u \
-                | paste -sd',' -
-            )
-            python3 report_txt.py --resultsPath "${TEST_RESULTS_ROOT}/" --clients "$TEST_CLIENT_LIST" --testsPath "$TESTS"
+            python3 report_txt.py --resultsPath "${TEST_RESULTS_ROOT}/" --clients "$CLIENT" --testsPath "$TESTS"
             cp "${TEST_RESULTS_ROOT}/transition_report_engine_newPayloadV4.txt" "reports/transition_report_engine_newPayloadV4_${SAFE_TESTS}.txt"
           done
 
@@ -662,16 +628,3 @@ jobs:
         with:
           name: reports
           path: reports.zip
-
-  retrigger:
-    needs: combine-results
-    runs-on: ubuntu-latest
-    steps:
-      - name: Retrigger workflow
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: multi-parallel-repricing.yml
-          ref: "${{ github.ref }}"
-          token: "${{ secrets.GH_TOKEN }}"
-          inputs: ${{ toJson(github.event.inputs) }}
-

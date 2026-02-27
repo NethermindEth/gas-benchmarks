@@ -196,7 +196,11 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$CFG_GENERATION_MODE" != "warmup_only" ]]; then
-            rm -rf "$PAYLOAD_DIR"
+            if [[ -n "$CFG_PARAMETER_FILTER" ]]; then
+              echo "parameter_filter is set ('$CFG_PARAMETER_FILTER'); keeping existing $PAYLOAD_DIR to preserve other tests"
+            else
+              rm -rf "$PAYLOAD_DIR"
+            fi
           fi
           rm -rf "$WARMUP_DIR"
           rm -f "$TRACES_JSON"

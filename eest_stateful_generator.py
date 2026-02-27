@@ -1266,10 +1266,13 @@ def main():
             pass
 
 
-    for subdir in ("setup", "testing", "cleanup"):
-        sub_path = payloads_dir / subdir
-        if sub_path.exists():
-            shutil.rmtree(sub_path)
+    if args.parameter_filter:
+        print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); preserving existing setup/testing/cleanup directories")
+    else:
+        for subdir in ("setup", "testing", "cleanup"):
+            sub_path = payloads_dir / subdir
+            if sub_path.exists():
+                shutil.rmtree(sub_path)
 
     control_dir = payloads_dir / "_control"
     if control_dir.exists():
