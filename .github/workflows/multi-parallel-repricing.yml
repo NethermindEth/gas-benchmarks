@@ -60,7 +60,7 @@ jobs:
           if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
             runs=1
           fi
-          clients="geth,nethermind,besu,erigon,reth"
+          clients="besu,erigon,geth,nethermind,reth"
           IFS=',' read -ra client_array <<< "$clients"
           tests_input="${{ env.INPUT_TEST }}"
           targets=()
@@ -414,6 +414,55 @@ jobs:
             echo "No docker_sync_*.log files found for client=${{ matrix.client }}"
           fi
 
+      - name: Generate per-client report CSVs
+        run: |
+          TEST_PATH="${{ matrix.test_path }}"
+          CLIENT="${{ matrix.client }}"
+          IMAGES='${{ env.INPUT_IMAGES }}'
+          RUNS="${{ env.INPUT_RUNS }}"
+
+          python3 report_html.py \
+            --resultsPath "results" \
+            --clients "$CLIENT" \
+            --testsPath "$TEST_PATH" \
+            --runs "$RUNS" \
+            --images "$IMAGES"
+
+      - name: Publish results to DB
+        env:
+          PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+          PERFNET_DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+          PERFNET_DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+          PERFNET_DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          TEST_PATH="${{ matrix.test_path }}"
+
+          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2)$ ]]; then
+            SUITE="${BASH_REMATCH[1]}"
+            NETWORK="${BASH_REMATCH[2]}"
+            DB_NETWORK="${NETWORK//-/_}"
+            DB_NAME="monitoring"
+          else
+            echo "Skipping DB upload for non-repricing path: $TEST_PATH"
+            exit 0
+          fi
+
+          if [ ! -d "reports" ]; then
+            echo "No reports directory found, skipping DB upload"
+            exit 0
+          fi
+
+          python3 fill_postgres_db.py \
+            --db-host "$PERFNET_DB_HOST" \
+            --db-port "$PERFNET_DB_PORT" \
+            --db-user "$PERFNET_DB_USER" \
+            --db-name "$DB_NAME" \
+            --table-name "${SUITE}_${DB_NETWORK}" \
+            --db-password "$PERFNET_DB_PASSWORD" \
+            --log-level DEBUG \
+            --reports-dir "reports"
+
       - name: Zip the results folder
         run: |
           CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
@@ -614,131 +663,8 @@ jobs:
           name: reports
           path: reports.zip
 
-  populate-db:
-    needs: combine-results
-    runs-on: ubuntu-latest
-    env:
-      PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
-      PERFNET_DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
-      PERFNET_DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
-      PERFNET_DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install python dependencies for submodule
-        run: |
-          pip install -r requirements.txt
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: reports
-          path: combined-results
-
-      - name: Extract all result files
-        run: |
-          mkdir -p extracted-results
-          find combined-results -name '*.zip' -exec unzip -o {} -d extracted-results \;
-
-      - name: Populate Benchmark DB
-        run: |
-          set -euo pipefail
-
-          TEST_PATHS=()
-          if [ "${{ env.INPUT_TEST }}" = "all" ]; then
-            TEST_PATHS+=("repricings_compute/mainnet")
-            TEST_PATHS+=("repricings_compute/perf-devnet-2")
-            TEST_PATHS+=("repricings_stateful/mainnet")
-            TEST_PATHS+=("repricings_stateful/perf-devnet-2")
-          else
-            IFS=',' read -ra TEST_PATHS <<< "${{ env.INPUT_TEST }}"
-          fi
-
-          uploads=0
-          skipped=0
-          targets_count=0
-          for candidate in "${TEST_PATHS[@]}"; do
-            trimmed="$(echo "$candidate" | xargs)"
-            [ -z "$trimmed" ] && continue
-            targets_count=$((targets_count + 1))
-          done
-          for raw_test_path in "${TEST_PATHS[@]}"; do
-            TESTS="$(echo "$raw_test_path" | xargs)"
-            [ -z "$TESTS" ] && continue
-
-            if [[ "$TESTS" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2)$ ]]; then
-              SUITE="${BASH_REMATCH[1]}"
-              NETWORK="${BASH_REMATCH[2]}"
-              DB_NETWORK="${NETWORK//-/_}"
-              DB_NAME="monitoring"
-            else
-              echo "Skipping DB upload for non-repricing path: $TESTS"
-              skipped=$((skipped + 1))
-              continue
-            fi
-
-            SAFE_TESTS=$(echo "$TESTS" | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
-            REPORTS_DIR="extracted-results/reports/by_test/${SAFE_TESTS}"
-            if [ ! -d "$REPORTS_DIR" ]; then
-              FALLBACK_DIR="extracted-results/reports"
-              if [ -d "$FALLBACK_DIR" ]; then
-                echo "Per-test report dir missing for ${TESTS}, falling back to ${FALLBACK_DIR}"
-                REPORTS_DIR="$FALLBACK_DIR"
-              else
-                echo "Skipping DB upload: missing report dir ${REPORTS_DIR}"
-                continue
-              fi
-            fi
-            echo "DB upload source dir: ${REPORTS_DIR}"
-            find "$REPORTS_DIR" -maxdepth 1 -type f \( -name 'output_*.csv' -o -name 'raw_results_*.csv' -o -name 'computer_specs.txt' -o -name 'index.html' \) -print | sort || true
-            mapfile -t OUTPUT_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'output_*.csv' | sort)
-            mapfile -t RAW_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'raw_results_*.csv' | sort)
-            if [ "${#OUTPUT_CSFS[@]}" -eq 0 ] && [ "${#RAW_CSFS[@]}" -eq 0 ]; then
-              FALLBACK_DIR="extracted-results/reports"
-              if [ "$REPORTS_DIR" != "$FALLBACK_DIR" ] && [ -d "$FALLBACK_DIR" ]; then
-                echo "No report CSVs in ${REPORTS_DIR}; retrying with fallback ${FALLBACK_DIR}"
-                REPORTS_DIR="$FALLBACK_DIR"
-                mapfile -t OUTPUT_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'output_*.csv' | sort)
-                mapfile -t RAW_CSFS < <(find "$REPORTS_DIR" -maxdepth 1 -type f -name 'raw_results_*.csv' | sort)
-              fi
-            fi
-            echo "output_csv_count=${#OUTPUT_CSFS[@]} raw_csv_count=${#RAW_CSFS[@]}"
-            for csv in "${OUTPUT_CSFS[@]}" "${RAW_CSFS[@]}"; do
-              [ -f "$csv" ] || continue
-              echo "$(basename "$csv"): lines=$(wc -l < "$csv")"
-            done
-            if [ "${#OUTPUT_CSFS[@]}" -eq 0 ] && [ "${#RAW_CSFS[@]}" -eq 0 ]; then
-              echo "Skipping DB upload for ${TESTS}: no CSV inputs available even after fallback."
-              continue
-            fi
-
-            DB_HOST="${{ env.PERFNET_DB_HOST }}"
-            DB_PORT="${{ env.PERFNET_DB_PORT }}"
-            DB_USER="${{ env.PERFNET_DB_USER }}"
-            DB_PASSWORD="${{ env.PERFNET_DB_PASSWORD }}"
-
-            python fill_postgres_db.py \
-              --db-host "$DB_HOST" \
-              --db-port "$DB_PORT" \
-              --db-user "$DB_USER" \
-              --db-name "$DB_NAME" \
-              --table-name "${SUITE}_${DB_NETWORK}" \
-              --db-password "$DB_PASSWORD" \
-              --log-level DEBUG \
-              --reports-dir "$REPORTS_DIR"
-            uploads=$((uploads + 1))
-          done
-
-          if [ "$uploads" -eq 0 ]; then
-            echo "No DB uploads were performed. skipped_non_matching=$skipped"
-            exit 0
-          fi
-
   retrigger:
-    needs: populate-db
+    needs: combine-results
     runs-on: ubuntu-latest
     steps:
       - name: Retrigger workflow
