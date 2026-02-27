@@ -18,10 +18,6 @@ on:
       filter:
         description: 'Comma-separated include-only filename patterns'
         default: ''
-      txt_report:
-        description: 'Mark as true to generate txt report'
-        default: 'false'
-
 concurrency:
   group: repricing-besu-${{ github.ref }}
   cancel-in-progress: true
@@ -36,7 +32,6 @@ jobs:
       images: ${{ inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
       opcodes_warmup_count: ${{ inputs.opcodes_warmup_count || '1' }}
       filter: ${{ inputs.filter || '' }}
-      txt_report: ${{ inputs.txt_report || 'false' }}
     secrets: inherit
 
   retrigger:

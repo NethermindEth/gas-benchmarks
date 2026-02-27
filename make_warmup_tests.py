@@ -132,20 +132,18 @@ def _parse_response_payloads(raw: str):
         return []
 
     payloads = []
-    try:
-        payloads.append(json.loads(raw))
-        return payloads
-    except Exception:
-        pass
-
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
+    decoder = json.JSONDecoder()
+    idx = 0
+    while idx < len(raw):
+        if raw[idx] in (' ', '\t', '\n', '\r'):
+            idx += 1
             continue
         try:
-            payloads.append(json.loads(line))
-        except Exception:
-            continue
+            obj, end = decoder.raw_decode(raw, idx)
+            payloads.append(obj)
+            idx = end
+        except json.JSONDecodeError:
+            idx += 1
     return payloads
 
 
