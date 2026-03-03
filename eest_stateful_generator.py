@@ -1534,6 +1534,7 @@ def main():
                 chain_id = 1
 
     ensure_pip_pkg("mitmproxy")
+    ensure_pip_pkg("pycryptodome")
 
     finalized_hash = ""
     rpc_url = "http://127.0.0.1:8545"
