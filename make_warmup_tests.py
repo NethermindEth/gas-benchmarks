@@ -245,6 +245,34 @@ def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
     return replaced_files
 
 
+def _parse_k_filter(expr: str) -> list:
+    """Parse a pytest -k style filter into a list of OR-groups of AND-terms.
+
+    Returns a list of groups (OR). Each group is a list of terms (AND).
+    A filename matches if ANY group matches, where a group matches when ALL
+    its terms are substrings of the filename (case-insensitive).
+    """
+    if not expr:
+        return []
+    groups = []
+    for or_part in re.split(r'\s+or\s+', expr, flags=re.IGNORECASE):
+        terms = [t.strip() for t in re.split(r'\s+and\s+', or_part, flags=re.IGNORECASE) if t.strip()]
+        if terms:
+            groups.append(terms)
+    return groups
+
+
+def _matches_k_filter(name: str, filter_groups: list) -> bool:
+    """Check if a filename matches parsed -k filter groups."""
+    if not filter_groups:
+        return True
+    name_lower = name.lower()
+    return any(
+        all(term.lower() in name_lower for term in group)
+        for group in filter_groups
+    )
+
+
 def _dir_has_content(path: Path) -> bool:
     return path.is_dir() and any(path.iterdir())
 
@@ -644,10 +672,11 @@ def main():
         sys.exit(1)
 
     dst_root = Path(args.dest)
-    warmup_filter = args.filter.strip() if args.filter else ""
+    warmup_filter_raw = args.filter.strip() if args.filter else ""
+    warmup_filter_parts = _parse_k_filter(warmup_filter_raw)
     if dst_root.exists():
-        if warmup_filter:
-            print(f"[INFO] --filter is set ('{warmup_filter}'); preserving existing warmup directory")
+        if warmup_filter_parts:
+            print(f"[INFO] --filter is set ('{warmup_filter_raw}'); preserving existing warmup directory")
         else:
             shutil.rmtree(dst_root)
     dst_root.mkdir(parents=True, exist_ok=True)
@@ -679,7 +708,7 @@ def main():
             normalized = src.as_posix()
             if "/setup/" in normalized or "/cleanup/" in normalized:
                 continue
-            if warmup_filter and warmup_filter.lower() not in src.name.lower():
+            if warmup_filter_parts and not _matches_k_filter(src.name, warmup_filter_parts):
                 continue
 
             rel = src.relative_to(src_root)
