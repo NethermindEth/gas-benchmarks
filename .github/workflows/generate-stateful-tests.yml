@@ -1,9 +1,25 @@
 name: Generate Stateful Tests
-run-name: Generate Stateful Tests [${{ inputs.payload_dir || 'repricings_compute/mainnet' }}]
+run-name: "Generate Stateful Tests [repricings_${{ inputs.mode || 'compute' }}/${{ inputs.chain || 'mainnet' }}]"
 
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Test mode (auto-sets payload_dir, test_path, eest_mode)"
+        required: true
+        type: choice
+        options:
+          - compute
+          - stateful
+        default: "compute"
+      chain:
+        description: "Target network"
+        required: true
+        type: choice
+        options:
+          - mainnet
+          - perf-devnet-2
+        default: "mainnet"
       nethermind_image:
         description: "Nethermind Docker image"
         required: true
@@ -12,22 +28,6 @@ on:
         description: "Fork name"
         required: true
         default: "Osaka"
-      chain:
-        description: "Chain name (drives snapshot path selection)"
-        required: true
-        type: choice
-        options:
-          - mainnet
-          - perf-devnet-2
-        default: "mainnet"
-      payload_dir:
-        description: "Output directory for generated tests"
-        required: true
-        default: "repricings_compute/mainnet"
-      test_path:
-        description: "EEST test path passed to eest_stateful_generator.py"
-        required: true
-        default: "tests/benchmark/compute/"
       eest_repo:
         description: "execution-specs repository"
         required: true
@@ -48,15 +48,6 @@ on:
         description: "Gas bump count (-1 = chain default: 5000 for perf-devnet-2, 10000 for mainnet)"
         required: true
         default: "-1"
-      eest_mode:
-        description: "EEST mode"
-        required: true
-        type: choice
-        options:
-          - stateful
-          - repricing
-          - benchmark
-        default: "repricing"
       parameter_filter:
         description: "pytest -k filter expression (e.g. 'test_add_op or test_mul_op')"
         required: false
@@ -97,14 +88,15 @@ jobs:
       CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:testing-rpc' }}
       CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
       CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
-      CFG_PAYLOAD_DIR: ${{ github.event.inputs.payload_dir || 'test-not-op' }}
-      CFG_TEST_PATH: ${{ github.event.inputs.test_path || 'tests/benchmark/compute/instruction/test_bitwise.py::test_not_op' }}
+      CFG_MODE: ${{ github.event.inputs.mode || 'compute' }}
+      CFG_PAYLOAD_DIR: ${{ format('repricings_{0}/{1}', github.event.inputs.mode || 'compute', github.event.inputs.chain || 'mainnet') }}
+      CFG_TEST_PATH: ${{ (github.event.inputs.mode || 'compute') == 'stateful' && 'tests/benchmark/stateful/' || 'tests/benchmark/compute/' }}
+      CFG_EEST_MODE: ${{ (github.event.inputs.mode || 'compute') == 'stateful' && 'stateful' || 'repricing' }}
       CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/ethereum/execution-specs' }}
       CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'forks/amsterdam' }}
       CFG_EEST_COMMIT: ${{ github.event.inputs.eest_commit || '' }}
       CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
       CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
-      CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
       CFG_RPC_ADDRESS: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
       CFG_PARAMETER_FILTER: ${{ github.event.inputs.parameter_filter || '' }}
       CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
