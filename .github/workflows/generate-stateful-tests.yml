@@ -36,6 +36,10 @@ on:
         description: "execution-specs branch"
         required: true
         default: "forks/amsterdam"
+      eest_commit:
+        description: "Pin execution-specs to a specific commit SHA (optional, leave empty for branch HEAD)"
+        required: false
+        default: ""
       gas_benchmark_values:
         description: "Comma-separated benchmark values"
         required: true
@@ -97,6 +101,7 @@ jobs:
       CFG_TEST_PATH: ${{ github.event.inputs.test_path || 'tests/benchmark/compute/instruction/test_bitwise.py::test_not_op' }}
       CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/ethereum/execution-specs' }}
       CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'forks/amsterdam' }}
+      CFG_EEST_COMMIT: ${{ github.event.inputs.eest_commit || '' }}
       CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
       CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
       CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'benchmark' }}
@@ -232,6 +237,7 @@ jobs:
             --payload-dir "$PAYLOAD_DIR" \
             --eest-repo "$CFG_EEST_REPO" \
             --eest-branch "$CFG_EEST_BRANCH" \
+            ${CFG_EEST_COMMIT:+--eest-commit "$CFG_EEST_COMMIT"} \
             --eest-clean-clone \
             --gas-bump-count "$GAS_BUMP_COUNT" \
             --eest_mode "$CFG_EEST_MODE" \

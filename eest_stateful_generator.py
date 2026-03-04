@@ -1281,6 +1281,11 @@ def main():
         help="Git branch of execution-specs to checkout before running (default: main).",
     )
     parser.add_argument(
+        "--eest-commit",
+        default="",
+        help="Pin execution-specs to a specific commit SHA after checkout (optional).",
+    )
+    parser.add_argument(
         "--eest-no-pull",
         action="store_true",
         help="Skip fetching/pulling execution-specs when the repo already exists.",
@@ -1400,6 +1405,10 @@ def main():
             repo_url,
             str(repo_dir),
         ])
+        run(["git", "submodule", "update", "--init", "--recursive"], cwd=str(repo_dir))
+    if args.eest_commit:
+        print(f"[INFO] Pinning execution-specs to commit {args.eest_commit}")
+        run(["git", "checkout", args.eest_commit], cwd=str(repo_dir))
         run(["git", "submodule", "update", "--init", "--recursive"], cwd=str(repo_dir))
     if not check_cmd_exists("uv"):
         run([sys.executable, "-m", "pip", "install", "-U", "uv"])
