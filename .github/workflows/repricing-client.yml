@@ -89,6 +89,7 @@ jobs:
     strategy:
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
       fail-fast: false
+      max-parallel: 1
 
     env:
       PIP_BREAK_SYSTEM_PACKAGES: "1"
