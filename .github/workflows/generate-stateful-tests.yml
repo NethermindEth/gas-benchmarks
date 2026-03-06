@@ -19,6 +19,7 @@ on:
         options:
           - mainnet
           - perf-devnet-2
+          - perf-devnet-3
         default: "mainnet"
       nethermind_image:
         description: "Nethermind Docker image"
@@ -45,7 +46,7 @@ on:
         required: true
         default: "30,60,90,120,150,180,210,240,270,300"
       gas_bump_count:
-        description: "Gas bump count (-1 = chain default: 5000 for perf-devnet-2, 10000 for mainnet)"
+        description: "Gas bump count (-1 = chain default: 5000 for perf-devnet-2/3, 10000 for mainnet)"
         required: true
         default: "-1"
       parameter_filter:
@@ -153,6 +154,12 @@ jobs:
               EXECUTION_CHAIN="mainnet"
               STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_bloatnet.json"
               ;;
+            perf-devnet-3)
+              SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-3/nethermind"
+              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              EXECUTION_CHAIN="mainnet"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_bloatnet.json"
+              ;;
             *)
               echo "Unsupported chain: $CFG_CHAIN" >&2
               exit 1
@@ -163,7 +170,7 @@ jobs:
           WARMUP_DIR="${PAYLOAD_DIR}_warmup"
           GAS_BUMP_COUNT="$CFG_GAS_BUMP_COUNT"
           if [[ "$GAS_BUMP_COUNT" == "-1" ]]; then
-            if [[ "$CFG_CHAIN" == "perf-devnet-2" ]]; then
+            if [[ "$CFG_CHAIN" == "perf-devnet-2" || "$CFG_CHAIN" == "perf-devnet-3" ]]; then
               GAS_BUMP_COUNT="5000"
             else
               GAS_BUMP_COUNT="10000"
