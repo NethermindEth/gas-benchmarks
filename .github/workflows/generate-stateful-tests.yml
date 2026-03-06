@@ -92,7 +92,7 @@ jobs:
       CFG_MODE: ${{ github.event.inputs.mode || 'compute' }}
       CFG_PAYLOAD_DIR: ${{ format('repricings_{0}/{1}', github.event.inputs.mode || 'compute', github.event.inputs.chain || 'mainnet') }}
       CFG_TEST_PATH: ${{ (github.event.inputs.mode || 'compute') == 'stateful' && 'tests/benchmark/stateful/' || 'tests/benchmark/compute/' }}
-      CFG_EEST_MODE: ${{ (github.event.inputs.mode || 'compute') == 'stateful' && 'stateful' || 'repricing' }}
+      CFG_EEST_MODE: repricing
       CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/ethereum/execution-specs' }}
       CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'forks/amsterdam' }}
       CFG_EEST_COMMIT: ${{ github.event.inputs.eest_commit || '' }}
