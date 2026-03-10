@@ -43,18 +43,38 @@ jobs:
           tests_input="${{ inputs.test }}"
           targets=()
 
+          ALL_TARGETS=(
+            "repricings_compute/mainnet|mainnet"
+            "repricings_compute/perf-devnet-2|perf-devnet-2"
+            "repricings_compute/perf-devnet-3|perf-devnet-3"
+            "repricings_stateful/mainnet|mainnet"
+            "repricings_stateful/perf-devnet-2|perf-devnet-2"
+            "repricings_stateful/perf-devnet-3|perf-devnet-3"
+          )
+
           if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
-            targets+=("repricings_compute/mainnet|mainnet")
-            targets+=("repricings_compute/perf-devnet-2|perf-devnet-2")
-            targets+=("repricings_stateful/mainnet|mainnet")
-            targets+=("repricings_stateful/perf-devnet-2|perf-devnet-2")
+            targets=("${ALL_TARGETS[@]}")
           else
             IFS=',' read -ra requested_paths <<< "$tests_input"
             for raw_path in "${requested_paths[@]}"; do
               test_path="$(echo "$raw_path" | xargs)"
+              test_path="${test_path%/}"
               [ -z "$test_path" ] && continue
-              network="$(basename "$test_path")"
-              targets+=("${test_path}|${network}")
+
+              # Check if this is a parent folder (e.g. "repricings_stateful") — expand to all matching network targets
+              matched=false
+              for candidate in "${ALL_TARGETS[@]}"; do
+                candidate_path="${candidate%%|*}"
+                if [[ "$candidate_path" == "$test_path/"* ]]; then
+                  targets+=("$candidate")
+                  matched=true
+                fi
+              done
+
+              if [ "$matched" = false ]; then
+                network="$(basename "$test_path")"
+                targets+=("${test_path}|${network}")
+              fi
             done
           fi
 
@@ -414,7 +434,7 @@ jobs:
           set -euo pipefail
           TEST_PATH="${{ matrix.test_path }}"
 
-          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2)$ ]]; then
+          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2|perf-devnet-3)$ ]]; then
             SUITE="${BASH_REMATCH[1]}"
             NETWORK="${BASH_REMATCH[2]}"
             DB_NETWORK="${NETWORK//-/_}"
