@@ -1186,14 +1186,18 @@ for run in $(seq 1 $RUNS); do
     raw_genesis="$DEFAULT_GENESIS"
     genesis_client="$client_base"
 
-    if [ "$NETWORK" = "perf-devnet-2" ]; then
+    if [ "$NETWORK" = "perf-devnet-2" ] || [ "$NETWORK" = "perf-devnet-3" ]; then
+      devnet_genesis="perf-devnet-2-osaka.json"
+      if [ "$NETWORK" = "perf-devnet-3" ]; then
+        devnet_genesis="perf-devnet-3-osaka.json"
+      fi
       case "$client_base" in
         besu)
-          raw_genesis="bloatnet-osaka.json"
+          raw_genesis="$devnet_genesis"
           genesis_client="besu"
           ;;
         geth|reth|erigon|nimbus|ethrex)
-          raw_genesis="bloatnet-osaka.json"
+          raw_genesis="$devnet_genesis"
           genesis_client="geth"
           ;;
         nethermind)
