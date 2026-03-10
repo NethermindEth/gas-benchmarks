@@ -56,26 +56,35 @@ jobs:
           else
             IFS=',' read -ra requested_paths <<< "$tests_input"
             for raw_path in "${requested_paths[@]}"; do
-              test_path="$(echo "$raw_path" | xargs)"
+              test_path="$(printf '%s' "$raw_path" | xargs)"
               test_path="${test_path%/}"
               [ -z "$test_path" ] && continue
+
+              echo "Processing test_path='$test_path'"
 
               # Check if this is a parent folder (e.g. "repricings_stateful") — expand to all matching network targets
               matched=false
               for candidate in "${ALL_TARGETS[@]}"; do
                 candidate_path="${candidate%%|*}"
-                if [[ "$candidate_path" == "$test_path/"* ]]; then
-                  targets+=("$candidate")
-                  matched=true
-                fi
+                case "$candidate_path" in
+                  "${test_path}"/*)
+                    echo "  Folder expansion: matched '$candidate_path' under '$test_path'"
+                    targets+=("$candidate")
+                    matched=true
+                    ;;
+                esac
               done
 
               if [ "$matched" = false ]; then
                 network="$(basename "$test_path")"
+                echo "  No folder expansion; using as-is: path='$test_path' network='$network'"
                 targets+=("${test_path}|${network}")
               fi
             done
           fi
+
+          echo "Final targets (${#targets[@]}):"
+          for t in "${targets[@]}"; do echo "  - $t"; done
 
           if [ "${#targets[@]}" -eq 0 ]; then
             echo "No test targets selected"
