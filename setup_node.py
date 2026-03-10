@@ -267,6 +267,11 @@ def set_env(
         for env_key, override in overrides.items():
             env_map[env_key] = override
 
+    # Nethermind on perf-devnet-3 requires FlatDb state format
+    normalized_network = (network or "").strip().lower()
+    if client == "nethermind" and normalized_network == "perf-devnet-3":
+        env_map["NETHERMIND_EXTRA_OPTS"] = "--FlatDb.Enabled=true"
+
     env_lines = [f"{key}={value}" for key, value in env_map.items()]
 
     env_file_path = run_path_obj / ".env"
