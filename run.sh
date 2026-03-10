@@ -1271,7 +1271,7 @@ for run in $(seq 1 $RUNS); do
       setup_cmd+=(--dataBackend "direct")
     fi
     if [ -n "$NETWORK" ]; then
-      if [ "$NETWORK" = "perf-devnet-2" ] && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
+      if { [ "$NETWORK" = "perf-devnet-2" ] || [ "$NETWORK" = "perf-devnet-3" ]; } && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
         echo "Using custom genesis for $client: $genesis_path"
         setup_cmd+=(--genesisPath "$genesis_path")
       else
@@ -1287,6 +1287,11 @@ for run in $(seq 1 $RUNS); do
 
     echo "[INFO] Running setup_node command: ${setup_cmd[*]}"
     "${setup_cmd[@]}"
+
+    # Nethermind on perf-devnet-3 requires FlatDb state format
+    if [ "$client_base" = "nethermind" ] && [ "$NETWORK" = "perf-devnet-3" ]; then
+      echo "NETHERMIND_EXTRA_OPTS=--FlatDb.Enabled=true" >> "scripts/nethermind/.env"
+    fi
 
     if declare -f wait_for_rpc >/dev/null 2>&1; then
       wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"

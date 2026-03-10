@@ -51,6 +51,7 @@ services:
       - --Blocks.CachePrecompilesOnBlockProcessing=false
       - --Init.BaseDbPath=/nethermind/data/mainnet
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
+      - ${NETHERMIND_EXTRA_OPTS:---log=INFO}
     logging:
       driver: json-file
       options:
