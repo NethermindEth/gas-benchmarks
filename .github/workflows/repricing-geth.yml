@@ -13,8 +13,8 @@ on:
         description: 'JSON map of images for the clients'
         default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
       opcodes_warmup_count:
-        description: 'Number of opcode-warmup iterations'
-        default: '1'
+        description: 'Number of opcode-warmup iterations (empty = auto: 1 for compute, 0 for stateful)'
+        default: ''
       filter:
         description: 'Comma-separated include-only filename patterns'
         default: ''
@@ -30,7 +30,7 @@ jobs:
       test: ${{ inputs.test || 'all' }}
       runs: ${{ inputs.runs || '1' }}
       images: ${{ inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
-      opcodes_warmup_count: ${{ inputs.opcodes_warmup_count || '1' }}
+      opcodes_warmup_count: ${{ inputs.opcodes_warmup_count }}
       filter: ${{ inputs.filter || '' }}
     secrets: inherit
 

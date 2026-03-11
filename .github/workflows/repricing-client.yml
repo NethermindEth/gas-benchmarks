@@ -20,8 +20,8 @@ on:
         default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
         type: string
       opcodes_warmup_count:
-        description: 'Number of opcode-warmup iterations'
-        default: '1'
+        description: 'Number of opcode-warmup iterations (empty = auto: 1 for compute, 0 for stateful)'
+        default: ''
         type: string
       filter:
         description: 'Comma-separated include-only filename patterns'
@@ -353,6 +353,15 @@ jobs:
           CLIENT="${{ inputs.client }}"
           WARMUP_PATH="${TEST_PATH}_warmup"
 
+          WARMUP_COUNT="${{ inputs.opcodes_warmup_count }}"
+          if [ -z "$WARMUP_COUNT" ]; then
+            case "$TEST_PATH" in
+              repricings_stateful/*) WARMUP_COUNT="0" ;;
+              *) WARMUP_COUNT="1" ;;
+            esac
+            echo "Auto-resolved opcodes_warmup_count=$WARMUP_COUNT for $TEST_PATH"
+          fi
+
           if [ ! -d "$TEST_PATH" ]; then
             echo "Test path does not exist: $TEST_PATH"
             exit 1
@@ -379,7 +388,7 @@ jobs:
                 -c "$CLIENT" \
                 -r 1 \
                 -i '${{ inputs.images }}' \
-                -o "${{ inputs.opcodes_warmup_count }}" \
+                -o "$WARMUP_COUNT" \
                 -f "$EFFECTIVE_FILTER" \
                 "${WARMUP_ARGS[@]}"
               ;;
@@ -392,7 +401,7 @@ jobs:
                 -c "$CLIENT" \
                 -r 1 \
                 -i '${{ inputs.images }}' \
-                -o "${{ inputs.opcodes_warmup_count }}" \
+                -o "$WARMUP_COUNT" \
                 -f "$EFFECTIVE_FILTER" \
                 "${WARMUP_ARGS[@]}"
               ;;
