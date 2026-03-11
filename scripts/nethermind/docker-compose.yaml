@@ -50,6 +50,7 @@ services:
       - --Init.LogRules=Consensus.Processing.ProcessingStats:Debug
       - --Blocks.CachePrecompilesOnBlockProcessing=false
       - --Init.BaseDbPath=/nethermind/data/mainnet
+      - --FlatDb.Enabled=true
       - ${NETHERMIND_GENESIS_FLAG:---log=INFO}
     logging:
       driver: json-file

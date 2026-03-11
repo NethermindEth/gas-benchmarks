@@ -24,7 +24,7 @@ on:
       nethermind_image:
         description: "Nethermind Docker image"
         required: true
-        default: "nethermindeth/nethermind:testing-rpc"
+        default: "nethermindeth/nethermind:flat"
       fork:
         description: "Fork name"
         required: true
@@ -90,7 +90,7 @@ jobs:
       DB_PORT: ${{ secrets.PERFNET_0_DB_PORT }}
       DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
       DB_NAME: ${{ secrets.PERFNET_0_DB_NAME }}
-      CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:testing-rpc' }}
+      CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:flat' }}
       CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
       CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
       CFG_MODE: ${{ github.event.inputs.mode || 'compute' }}

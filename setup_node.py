@@ -267,10 +267,6 @@ def set_env(
         for env_key, override in overrides.items():
             env_map[env_key] = override
 
-    # Nethermind requires FlatDb state format
-    if client == "nethermind":
-        env_map["NETHERMIND_GENESIS_FLAG"] = "--FlatDb.Enabled=true"
-
     env_lines = [f"{key}={value}" for key, value in env_map.items()]
 
     env_file_path = run_path_obj / ".env"
