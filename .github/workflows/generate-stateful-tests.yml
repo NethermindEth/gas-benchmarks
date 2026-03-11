@@ -24,7 +24,7 @@ on:
       nethermind_image:
         description: "Nethermind Docker image"
         required: true
-        default: "nethermindeth/nethermind:flat"
+        default: "nethermindeth/nethermind:testing-rpc"
       fork:
         description: "Fork name"
         required: true
