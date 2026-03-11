@@ -1350,7 +1350,6 @@ for run in $(seq 1 $RUNS); do
 
       if [ "$measured" = false ]; then
         echo "[INFO] ${PROGRESS} [SETUP] $filename"
-        echo "[INFO] ${PROGRESS} [SETUP] Running: python3 run_kute.py --output \"$PREPARATION_RESULTS_DIR\" --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT"
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT
         echo ""
         continue
@@ -1428,20 +1427,20 @@ for run in $(seq 1 $RUNS); do
                 probe_dir=$(mktemp -d)
                 python3 vary_warmup.py create "$warmup_path" "$warmup_count" "$variant_file"
 
-                echo "[INFO] ${PROGRESS} [WARMUP] $warmup_count/$OPCODES_WARMUP_COUNT: probe send to discover blockHash"
+                echo "[INFO] ${PROGRESS} [WARMUP] $filename ($warmup_count/$OPCODES_WARMUP_COUNT probe)"
                 python3 run_kute.py --output "$probe_dir" --testsPath "$variant_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
 
                 if python3 vary_warmup.py fix-hashes "$variant_file" "$probe_dir" "$client"; then
-                  echo "[INFO] ${PROGRESS} [WARMUP] $warmup_count/$OPCODES_WARMUP_COUNT: re-send with corrected blockHash"
+                  echo "[INFO] ${PROGRESS} [WARMUP] $filename ($warmup_count/$OPCODES_WARMUP_COUNT re-send)"
                   python3 run_kute.py --output warmupresults --testsPath "$variant_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
                 else
-                  echo "[WARN] ${PROGRESS} [WARMUP] $warmup_count/$OPCODES_WARMUP_COUNT: hash fix failed, skipping re-send"
+                  echo "[WARN] ${PROGRESS} [WARMUP] $filename ($warmup_count/$OPCODES_WARMUP_COUNT hash fix failed)"
                 fi
 
                 rm -f "$variant_file"
                 rm -rf "$probe_dir"
               else
-                echo "[INFO] ${PROGRESS} [WARMUP] Running: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+                echo "[INFO] ${PROGRESS} [WARMUP] $filename"
                 python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
               fi
               current_count=$((current_count + 1))
@@ -1453,7 +1452,7 @@ for run in $(seq 1 $RUNS); do
 
       # Actual measured run
       drop_host_caches || true
-      echo "[INFO] ${PROGRESS} [TESTING] Running: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
+      echo "[INFO] ${PROGRESS} [TESTING] $filename"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
 
       # Capture debug_traceBlockByNumber for the testing payload (unigramTracer) when enabled
