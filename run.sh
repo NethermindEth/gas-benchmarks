@@ -1545,6 +1545,10 @@ EOF
   done
 done
 
+# All clients were torn down inside the loop; clear the array so the EXIT
+# trap does not redundantly run docker_compose_down / overlay cleanup again.
+CLIENT_ARRAY=()
+
 SKIP_EMPTY_OPT=""
 if [ "$SKIP_EMPTY" = true ]; then
   SKIP_EMPTY_OPT="--skipEmpty"
