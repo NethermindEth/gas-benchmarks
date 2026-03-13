@@ -20,8 +20,8 @@ on:
         default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
         type: string
       opcodes_warmup_count:
-        description: 'Number of opcode-warmup iterations'
-        default: '1'
+        description: 'Number of opcode-warmup iterations (empty = auto: 1 for compute, 0 for stateful)'
+        default: ''
         type: string
       filter:
         description: 'Comma-separated include-only filename patterns'
@@ -43,20 +43,48 @@ jobs:
           tests_input="${{ inputs.test }}"
           targets=()
 
+          ALL_TARGETS=(
+            "repricings_compute/mainnet|mainnet"
+            "repricings_compute/perf-devnet-2|perf-devnet-2"
+            "repricings_compute/perf-devnet-3|perf-devnet-3"
+            "repricings_stateful/mainnet|mainnet"
+            "repricings_stateful/perf-devnet-3|perf-devnet-3"
+          )
+
           if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
-            targets+=("repricings_compute/mainnet|mainnet")
-            targets+=("repricings_compute/perf-devnet-2|perf-devnet-2")
-            targets+=("repricings_stateful/mainnet|mainnet")
-            targets+=("repricings_stateful/perf-devnet-2|perf-devnet-2")
+            targets=("${ALL_TARGETS[@]}")
           else
             IFS=',' read -ra requested_paths <<< "$tests_input"
             for raw_path in "${requested_paths[@]}"; do
-              test_path="$(echo "$raw_path" | xargs)"
+              test_path="$(printf '%s' "$raw_path" | xargs)"
+              test_path="${test_path%/}"
               [ -z "$test_path" ] && continue
-              network="$(basename "$test_path")"
-              targets+=("${test_path}|${network}")
+
+              echo "Processing test_path='$test_path'"
+
+              # Check if this is a parent folder (e.g. "repricings_stateful") — expand to all matching network targets
+              matched=false
+              for candidate in "${ALL_TARGETS[@]}"; do
+                candidate_path="${candidate%%|*}"
+                case "$candidate_path" in
+                  "${test_path}"/*)
+                    echo "  Folder expansion: matched '$candidate_path' under '$test_path'"
+                    targets+=("$candidate")
+                    matched=true
+                    ;;
+                esac
+              done
+
+              if [ "$matched" = false ]; then
+                network="$(basename "$test_path")"
+                echo "  No folder expansion; using as-is: path='$test_path' network='$network'"
+                targets+=("${test_path}|${network}")
+              fi
             done
           fi
+
+          echo "Final targets (${#targets[@]}):"
+          for t in "${targets[@]}"; do echo "  - $t"; done
 
           if [ "${#targets[@]}" -eq 0 ]; then
             echo "No test targets selected"
@@ -325,6 +353,15 @@ jobs:
           CLIENT="${{ inputs.client }}"
           WARMUP_PATH="${TEST_PATH}_warmup"
 
+          WARMUP_COUNT="${{ inputs.opcodes_warmup_count }}"
+          if [ -z "$WARMUP_COUNT" ]; then
+            case "$TEST_PATH" in
+              repricings_stateful/*) WARMUP_COUNT="0" ;;
+              *) WARMUP_COUNT="1" ;;
+            esac
+            echo "Auto-resolved opcodes_warmup_count=$WARMUP_COUNT for $TEST_PATH"
+          fi
+
           if [ ! -d "$TEST_PATH" ]; then
             echo "Test path does not exist: $TEST_PATH"
             exit 1
@@ -351,7 +388,7 @@ jobs:
                 -c "$CLIENT" \
                 -r 1 \
                 -i '${{ inputs.images }}' \
-                -o "${{ inputs.opcodes_warmup_count }}" \
+                -o "$WARMUP_COUNT" \
                 -f "$EFFECTIVE_FILTER" \
                 "${WARMUP_ARGS[@]}"
               ;;
@@ -364,7 +401,7 @@ jobs:
                 -c "$CLIENT" \
                 -r 1 \
                 -i '${{ inputs.images }}' \
-                -o "${{ inputs.opcodes_warmup_count }}" \
+                -o "$WARMUP_COUNT" \
                 -f "$EFFECTIVE_FILTER" \
                 "${WARMUP_ARGS[@]}"
               ;;
@@ -414,7 +451,7 @@ jobs:
           set -euo pipefail
           TEST_PATH="${{ matrix.test_path }}"
 
-          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2)$ ]]; then
+          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2|perf-devnet-3)$ ]]; then
             SUITE="${BASH_REMATCH[1]}"
             NETWORK="${BASH_REMATCH[2]}"
             DB_NETWORK="${NETWORK//-/_}"

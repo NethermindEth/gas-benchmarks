@@ -1186,14 +1186,18 @@ for run in $(seq 1 $RUNS); do
     raw_genesis="$DEFAULT_GENESIS"
     genesis_client="$client_base"
 
-    if [ "$NETWORK" = "perf-devnet-2" ]; then
+    if [ "$NETWORK" = "perf-devnet-2" ] || [ "$NETWORK" = "perf-devnet-3" ]; then
+      devnet_genesis="perf-devnet-2-osaka.json"
+      if [ "$NETWORK" = "perf-devnet-3" ]; then
+        devnet_genesis="perf-devnet-3-osaka.json"
+      fi
       case "$client_base" in
         besu)
-          raw_genesis="bloatnet-osaka.json"
+          raw_genesis="$devnet_genesis"
           genesis_client="besu"
           ;;
         geth|reth|erigon|nimbus|ethrex)
-          raw_genesis="bloatnet-osaka.json"
+          raw_genesis="$devnet_genesis"
           genesis_client="geth"
           ;;
         nethermind)
@@ -1267,7 +1271,7 @@ for run in $(seq 1 $RUNS); do
       setup_cmd+=(--dataBackend "direct")
     fi
     if [ -n "$NETWORK" ]; then
-      if [ "$NETWORK" = "perf-devnet-2" ] && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
+      if { [ "$NETWORK" = "perf-devnet-2" ] || [ "$NETWORK" = "perf-devnet-3" ]; } && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
         echo "Using custom genesis for $client: $genesis_path"
         setup_cmd+=(--genesisPath "$genesis_path")
       else
@@ -1300,6 +1304,8 @@ for run in $(seq 1 $RUNS); do
 
     declare -A warmup_run_counts=()
 
+    TOTAL_TESTS=${#TEST_FILES[@]}
+    TEST_NUM=0
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
       normalized_path="${test_file//\\/\/}"
@@ -1339,9 +1345,11 @@ for run in $(seq 1 $RUNS); do
         fi
       fi
 
+      TEST_NUM=$((TEST_NUM + 1))
+      PROGRESS="[${TEST_NUM}/${TOTAL_TESTS}]"
+
       if [ "$measured" = false ]; then
-        echo "Executing preparation script (not measured): $filename"
-        echo "[INFO] Running preparation run_kute command: python3 run_kute.py --output \"$PREPARATION_RESULTS_DIR\" --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT"
+        echo "[INFO] ${PROGRESS} [SETUP] $filename"
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT
         echo ""
         continue
@@ -1419,20 +1427,20 @@ for run in $(seq 1 $RUNS); do
                 probe_dir=$(mktemp -d)
                 python3 vary_warmup.py create "$warmup_path" "$warmup_count" "$variant_file"
 
-                echo "[INFO] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: probe send to discover blockHash"
+                echo "[INFO] ${PROGRESS} [WARMUP] $filename ($warmup_count/$OPCODES_WARMUP_COUNT probe)"
                 python3 run_kute.py --output "$probe_dir" --testsPath "$variant_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
 
                 if python3 vary_warmup.py fix-hashes "$variant_file" "$probe_dir" "$client"; then
-                  echo "[INFO] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: re-send with corrected blockHash"
+                  echo "[INFO] ${PROGRESS} [WARMUP] $filename ($warmup_count/$OPCODES_WARMUP_COUNT re-send)"
                   python3 run_kute.py --output warmupresults --testsPath "$variant_file" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
                 else
-                  echo "[WARN] Warmup $warmup_count/$OPCODES_WARMUP_COUNT: hash fix failed, skipping re-send"
+                  echo "[WARN] ${PROGRESS} [WARMUP] $filename ($warmup_count/$OPCODES_WARMUP_COUNT hash fix failed)"
                 fi
 
                 rm -f "$variant_file"
                 rm -rf "$probe_dir"
               else
-                echo "[INFO] Running opcode warmup run_kute command: python3 run_kute.py --output warmupresults --testsPath \"$warmup_path\" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT"
+                echo "[INFO] ${PROGRESS} [WARMUP] $filename"
                 python3 run_kute.py --output warmupresults --testsPath "$warmup_path" --jwtPath /tmp/jwtsecret --client $client --run $run --kuteArguments '-f engine_newPayload'$SKIP_FORKCHOICE_OPT
               fi
               current_count=$((current_count + 1))
@@ -1444,7 +1452,7 @@ for run in $(seq 1 $RUNS); do
 
       # Actual measured run
       drop_host_caches || true
-      echo "[INFO] Running measured run_kute command: python3 run_kute.py --output results --testsPath \"$test_file\" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT"
+      echo "[INFO] ${PROGRESS} [TESTING] $filename"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
 
       # Capture debug_traceBlockByNumber for the testing payload (unigramTracer) when enabled

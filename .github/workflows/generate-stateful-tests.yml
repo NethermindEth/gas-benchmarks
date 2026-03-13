@@ -53,6 +53,10 @@ on:
         description: "pytest -k filter expression (e.g. 'test_add_op or test_mul_op')"
         required: false
         default: ""
+      eest_mode:
+        description: "EEST mode (default: repricing)"
+        required: false
+        default: ""
       generation_mode:
         description: "Generation mode"
         required: true
@@ -86,13 +90,13 @@ jobs:
       DB_PORT: ${{ secrets.PERFNET_0_DB_PORT }}
       DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
       DB_NAME: ${{ secrets.PERFNET_0_DB_NAME }}
-      CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:testing-rpc' }}
+      CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:flat' }}
       CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
       CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
       CFG_MODE: ${{ github.event.inputs.mode || 'compute' }}
       CFG_PAYLOAD_DIR: ${{ format('repricings_{0}/{1}', github.event.inputs.mode || 'compute', github.event.inputs.chain || 'mainnet') }}
       CFG_TEST_PATH: ${{ (github.event.inputs.mode || 'compute') == 'stateful' && 'tests/benchmark/stateful/' || 'tests/benchmark/compute/' }}
-      CFG_EEST_MODE: ${{ (github.event.inputs.mode || 'compute') == 'stateful' && 'stateful' || 'repricing' }}
+      CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || 'repricing' }}
       CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/ethereum/execution-specs' }}
       CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'forks/amsterdam' }}
       CFG_EEST_COMMIT: ${{ github.event.inputs.eest_commit || '' }}
