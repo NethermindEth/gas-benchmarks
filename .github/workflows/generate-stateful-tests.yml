@@ -266,7 +266,7 @@ jobs:
             --trace-json \
             --trace-json-output "$TRACES_JSON" \
             ${CFG_PARAMETER_FILTER:+--parameter_filter "$CFG_PARAMETER_FILTER"} \
-            ${CFG_NETHERMIND_EXTRA_FLAGS:+--nethermind-extra-flags "$CFG_NETHERMIND_EXTRA_FLAGS"} \
+            ${CFG_NETHERMIND_EXTRA_FLAGS:+--nethermind-extra-flags="$CFG_NETHERMIND_EXTRA_FLAGS"} \
             2>&1 | tee -a "$STATEFUL_GENERATOR_LOG"
 
       - name: Print stateful generator log
