@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 import os
+import shlex
 import shutil
 import signal
 import socket
@@ -853,6 +854,7 @@ def start_nethermind_container(
     image: str = "nethermindeth/nethermind:gp-hacked",
     genesis_path: Optional[Path] = None,
     trace_json: bool = False,
+    extra_flags: Optional[list] = None,
 ) -> str:
     subprocess.run(["docker", "pull", image], check=False)
     resolved_db = db_dir.resolve()
@@ -950,6 +952,8 @@ def start_nethermind_container(
             "--OpcodeTracing.EndBlock", "2",
             "--OpcodeTracing.OutputDirectory", "/test-output",
         ]
+    if extra_flags:
+        cmd += extra_flags
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
 
@@ -1270,6 +1274,11 @@ def main():
         help="Docker image to use when launching the Nethermind container.",
     )
     parser.add_argument(
+        "--nethermind-extra-flags",
+        default="",
+        help="Extra CLI flags passed to the Nethermind container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None').",
+    )
+    parser.add_argument(
         "--gas-bump-count",
         type=int,
         default=301,
@@ -1523,6 +1532,9 @@ def main():
     container_name = "eest-nethermind"
     CLEANUP["container"] = container_name
     active_db_dir = primary_merged
+    nm_extra_flags = shlex.split(args.nethermind_extra_flags) if args.nethermind_extra_flags else []
+    if nm_extra_flags:
+        print(f"[INFO] Extra Nethermind flags: {nm_extra_flags}")
 
     def restart_node(db_dir: Path, *, show_logs: bool = False) -> None:
         nonlocal active_db_dir
@@ -1537,6 +1549,7 @@ def main():
             image=args.nethermind_image,
             genesis_path=genesis_file,
             trace_json=args.trace_json,
+            extra_flags=nm_extra_flags,
         )
         if not wait_for_port("127.0.0.1", 8545, timeout=300):
             print("ERROR: 8545 not reachable.")

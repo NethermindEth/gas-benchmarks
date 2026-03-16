@@ -66,6 +66,10 @@ on:
           - warmup_only
           - stateful_only
         default: "full"
+      nethermind_extra_flags:
+        description: "Extra Nethermind CLI flags passed to the container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None')"
+        required: false
+        default: ""
       warmup_snapshot_backend:
         description: "Snapshot backend for warmup generation"
         required: true
@@ -106,6 +110,7 @@ jobs:
       CFG_PARAMETER_FILTER: ${{ github.event.inputs.parameter_filter || '' }}
       CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
       CFG_WARMUP_SNAPSHOT_BACKEND: ${{ github.event.inputs.warmup_snapshot_backend || 'overlay' }}
+      CFG_NETHERMIND_EXTRA_FLAGS: ${{ github.event.inputs.nethermind_extra_flags || '' }}
 
     steps:
       - name: Checkout gas-benchmarks repository from triggering branch
@@ -188,7 +193,14 @@ jobs:
           if [[ "$TABLE_BASE" =~ ^[0-9] ]]; then
             TABLE_BASE="t_${TABLE_BASE}"
           fi
-          DB_TABLE="${TABLE_BASE}_metadata"
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          if [[ "$BRANCH_NAME" != "main" ]]; then
+            BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+            DB_TABLE="${TABLE_BASE}_${BRANCH_SUFFIX}_metadata"
+          else
+            DB_TABLE="${TABLE_BASE}_metadata"
+          fi
 
           echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
           echo "SNAPSHOT_DIR_WARMUP=$SNAPSHOT_DIR_WARMUP" >> "$GITHUB_ENV"
@@ -254,6 +266,7 @@ jobs:
             --trace-json \
             --trace-json-output "$TRACES_JSON" \
             ${CFG_PARAMETER_FILTER:+--parameter_filter "$CFG_PARAMETER_FILTER"} \
+            ${CFG_NETHERMIND_EXTRA_FLAGS:+--nethermind-extra-flags "$CFG_NETHERMIND_EXTRA_FLAGS"} \
             2>&1 | tee -a "$STATEFUL_GENERATOR_LOG"
 
       - name: Print stateful generator log
