@@ -667,6 +667,7 @@ def _generate_preparation_payloads(
                     "EMPTY",
                     save_path=gas_bump_file,
                     timestamp_hack=args.testing_buildblock_timestamp_hack,
+                    fork=args.fork,
                 )
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
@@ -678,6 +679,7 @@ def _generate_preparation_payloads(
             args.rpc_address,
             save_path=funding_file,
             timestamp_hack=args.testing_buildblock_timestamp_hack,
+            fork=args.fork,
         )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
@@ -1052,6 +1054,21 @@ def _extract_execution_requests(payload: Dict[str, Any]) -> List[Any]:
     return []
 
 
+def _extract_block_access_list(payload: Dict[str, Any]) -> List[Any]:
+    for key in ("executionAccessList", "blockAccessList", "accessList",
+                "execution_access_list", "block_access_list", "access_list"):
+        val = payload.get(key)
+        if isinstance(val, list):
+            return val
+    return []
+
+
+def _newpayload_method_for_fork(fork: str) -> str:
+    if fork.lower() in ("amsterdam",):
+        return "engine_newPayloadV5"
+    return "engine_newPayloadV4"
+
+
 def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> Optional[str]:
     for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
         val = payload.get(key)
@@ -1071,9 +1088,10 @@ def preparation_getpayload(
     save_path: Path | None = None,
     *,
     timestamp_hack: bool = False,
+    fork: str = "Prague",
 ):
     """
-    Build a payload on the engine via testing_buildBlockV1, POST engine_newPayloadV4,
+    Build a payload on the engine via testing_buildBlockV1, POST engine_newPayload,
     then engine_forkchoiceUpdatedV3.
     If save_path is provided, append TWO minified JSON-RPC lines to that file:
       1) the engine_newPayloadV4 request body
@@ -1126,13 +1144,19 @@ def preparation_getpayload(
     blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
     parent_beacon_block_root = payload_attributes["parentBeaconBlockRoot"]
     execution_requests = _extract_execution_requests(payload)
+    block_access_list = _extract_block_access_list(payload)
+
+    np_method = _newpayload_method_for_fork(fork)
+    np_params: List[Any] = [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests]
+    if np_method == "engine_newPayloadV5":
+        np_params.append(block_access_list)
 
     # Send NP
     _ = _engine_with_jwt(
         engine_url,
         jwt_hex_path,
-        "engine_newPayloadV4",
-        [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+        np_method,
+        np_params,
     )
     block_hash = exec_payload.get("blockHash")
 
@@ -1157,8 +1181,8 @@ def preparation_getpayload(
         np_body = {
             "jsonrpc": "2.0",
             "id": int(time.time()),
-            "method": "engine_newPayloadV4",
-            "params": [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+            "method": np_method,
+            "params": np_params,
         }
         fcu_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_forkchoiceUpdatedV3","params":[fcs, None]}
         _append_line(save_path, _minified_json_line(np_body))
