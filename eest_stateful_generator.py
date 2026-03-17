@@ -1630,6 +1630,23 @@ def main():
     finalized_hash = ""
     rpc_url = "http://127.0.0.1:8545"
     engine_url = "http://127.0.0.1:8551"
+    target_np_method = _newpayload_method_for_fork(args.fork)
+    if reuse_preparation and gas_bump_file.exists():
+        # Check if the existing gas-bump file uses the correct newPayload version
+        try:
+            first_np_line = next(
+                (ln for ln in gas_bump_file.read_text(encoding="utf-8").splitlines()
+                 if '"engine_newPayload' in ln),
+                None,
+            )
+            if first_np_line:
+                file_method = json.loads(first_np_line).get("method", "")
+                if file_method != target_np_method:
+                    print(f"[INFO] newPayload version mismatch: file has {file_method} but fork {args.fork} requires {target_np_method}; regenerating.")
+                    reuse_preparation = False
+        except Exception:
+            pass
+
     if reuse_preparation and args.parameter_filter:
         # When filter is set, replay existing payloads instead of regenerating — but only
         # if the gas-bump count matches what was requested.
