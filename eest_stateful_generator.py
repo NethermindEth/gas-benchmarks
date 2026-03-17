@@ -738,13 +738,6 @@ def _replay_preparation_payloads(
             if isinstance(method, str) and method.startswith("engine_newPayload"):
                 if method != target_np_method:
                     obj["method"] = target_np_method
-                    params = obj.get("params", [])
-                    # V5 requires block access list as 5th param
-                    if target_np_method == "engine_newPayloadV5" and len(params) == 4:
-                        params.append([])
-                    # Downgrading from V5 to V4: drop the 5th param
-                    elif target_np_method == "engine_newPayloadV4" and len(params) > 4:
-                        obj["params"] = params[:4]
                     line = json.dumps(obj, separators=(",", ":"))
                 replayed += 1
                 now = time.monotonic()
@@ -1051,15 +1044,6 @@ def _extract_execution_requests(payload: Dict[str, Any]) -> List[Any]:
     return []
 
 
-def _extract_block_access_list(payload: Dict[str, Any]) -> List[Any]:
-    for key in ("executionAccessList", "blockAccessList", "accessList",
-                "execution_access_list", "block_access_list", "access_list"):
-        val = payload.get(key)
-        if isinstance(val, list):
-            return val
-    return []
-
-
 def _newpayload_method_for_fork(fork: str) -> str:
     if fork.lower() in ("amsterdam",):
         return "engine_newPayloadV5"
@@ -1141,12 +1125,9 @@ def preparation_getpayload(
     blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
     parent_beacon_block_root = payload_attributes["parentBeaconBlockRoot"]
     execution_requests = _extract_execution_requests(payload)
-    block_access_list = _extract_block_access_list(payload)
 
     np_method = _newpayload_method_for_fork(fork)
-    np_params: List[Any] = [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests]
-    if np_method == "engine_newPayloadV5":
-        np_params.append(block_access_list)
+    np_params = [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests]
 
     # Send NP
     _ = _engine_with_jwt(

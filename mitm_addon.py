@@ -354,9 +354,7 @@ def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
     sep_parent_hash = sep_exec.get("parentHash") or parent_hash
     sep_blob_hashes = _extract_blob_versioned_hashes(sep_payload, sep_exec)
     sep_exec_requests = _extract_execution_requests(sep_payload)
-    sep_block_access_list = _extract_block_access_list(sep_payload)
-    sep_np_params = _build_newpayload_params(sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests, sep_block_access_list)
-    _engine(_NEWPAYLOAD_METHOD, sep_np_params)
+    _engine(_NEWPAYLOAD_METHOD, [sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests])
     _emit_newpayload_event(sep_exec, sep_parent_hash)
     sep_hash = sep_exec.get("blockHash")
     sep_dyn_final = _DYN_FINALIZED or FINALIZED_BLOCK or sep_hash
@@ -370,7 +368,7 @@ def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
         "jsonrpc": "2.0",
         "id": int(time.time()),
         "method": _NEWPAYLOAD_METHOD,
-        "params": sep_np_params,
+        "params": [sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests],
     }
     fcu_body = {
         "jsonrpc": "2.0",
@@ -690,28 +688,6 @@ def _extract_execution_requests(payload: Dict[str, Any]) -> List[Any]:
     return []
 
 
-def _extract_block_access_list(payload: Dict[str, Any]) -> List[Any]:
-    for key in ("executionAccessList", "blockAccessList", "accessList",
-                "execution_access_list", "block_access_list", "access_list"):
-        val = payload.get(key)
-        if isinstance(val, list):
-            return val
-    return []
-
-
-def _build_newpayload_params(
-    exec_payload: Dict[str, Any],
-    blob_versioned_hashes: List[str],
-    parent_beacon_block_root: Optional[str],
-    execution_requests: List[Any],
-    block_access_list: List[Any],
-) -> List[Any]:
-    params: List[Any] = [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests]
-    if _NEWPAYLOAD_METHOD == "engine_newPayloadV5":
-        params.append(block_access_list)
-    return params
-
-
 def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> Optional[str]:
     for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
         val = payload.get(key)
@@ -1012,9 +988,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
                 sep_parent_hash = sep_exec.get("parentHash") or parent_hash
                 sep_blob_hashes = _extract_blob_versioned_hashes(sep_payload, sep_exec)
                 sep_exec_requests = _extract_execution_requests(sep_payload)
-                sep_bal = _extract_block_access_list(sep_payload)
-                sep_np_params = _build_newpayload_params(sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests, sep_bal)
-                _engine(_NEWPAYLOAD_METHOD, sep_np_params)
+                _engine(_NEWPAYLOAD_METHOD, [sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests])
                 _emit_newpayload_event(sep_exec, sep_parent_hash)
                 sep_hash = sep_exec.get("blockHash")
                 sep_dyn_final = _DYN_FINALIZED or FINALIZED_BLOCK or sep_hash
@@ -1029,7 +1003,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
                         "jsonrpc": "2.0",
                         "id": int(time.time()),
                         "method": _NEWPAYLOAD_METHOD,
-                        "params": sep_np_params,
+                        "params": [sep_exec, sep_blob_hashes, separator_attrs["parentBeaconBlockRoot"], sep_exec_requests],
                     },
                     {
                         "jsonrpc": "2.0",
@@ -1085,7 +1059,6 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
         blob_versioned_hashes = _extract_blob_versioned_hashes(payload, exec_payload)
         parent_beacon_block_root = payload_attributes["parentBeaconBlockRoot"]
         execution_requests = _extract_execution_requests(payload)
-        block_access_list = _extract_block_access_list(payload)
         blob_gas_used = exec_payload.get("blobGasUsed")
         if blob_versioned_hashes == [] and blob_gas_used not in (None, 0, "0x0", "0x00"):
             _log("WARN blobGasUsed present but no blobVersionedHashes found")
@@ -1093,15 +1066,14 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
         _STAGE[grp] = next_stage
         idx = next_stage
 
-        np_params = _build_newpayload_params(exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests, block_access_list)
         np_body = {
             "jsonrpc": "2.0",
             "id": int(time.time()),
             "method": _NEWPAYLOAD_METHOD,
-            "params": np_params,
+            "params": [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
         }
 
-        _engine(_NEWPAYLOAD_METHOD, np_params)
+        _engine(_NEWPAYLOAD_METHOD, [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests])
         _emit_newpayload_event(exec_payload, parent_hash)
 
         if file_base == "global-setup":
