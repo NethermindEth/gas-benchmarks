@@ -708,6 +708,7 @@ def _replay_preparation_payloads(
     jwt_hex_path: Path,
     gas_bump_file: Path,
     funding_file: Path,
+    fork: str = "Prague",
 ) -> str:
     """Replay existing gas-bump and funding payload files against the running node."""
     import hmac, hashlib
@@ -729,6 +730,7 @@ def _replay_preparation_payloads(
             raise RuntimeError(f"Engine error replaying {body.get('method')}: {j['error']}")
         return j
 
+    target_np_method = _newpayload_method_for_fork(fork)
     finalized = ""
     for label, path in [("gas-bump", gas_bump_file), ("funding", funding_file)]:
         if not path.exists():
@@ -749,6 +751,16 @@ def _replay_preparation_payloads(
                 continue
             method = obj.get("method", "")
             if isinstance(method, str) and method.startswith("engine_newPayload"):
+                if method != target_np_method:
+                    obj["method"] = target_np_method
+                    params = obj.get("params", [])
+                    # V5 requires block access list as 5th param
+                    if target_np_method == "engine_newPayloadV5" and len(params) == 4:
+                        params.append([])
+                    # Downgrading from V5 to V4: drop the 5th param
+                    elif target_np_method == "engine_newPayloadV4" and len(params) > 4:
+                        obj["params"] = params[:4]
+                    line = json.dumps(obj, separators=(",", ":"))
                 replayed += 1
                 now = time.monotonic()
                 if replayed == 1 or replayed == np_count or now - last_log >= 5:
@@ -1628,7 +1640,7 @@ def main():
             reuse_preparation = False
         else:
             print(f"[INFO] Replaying {existing_bump_count} existing gas-bump + funding payloads (parameter_filter is set).")
-            finalized_hash = _replay_preparation_payloads(engine_url, jwt_path, gas_bump_file, funding_file)
+            finalized_hash = _replay_preparation_payloads(engine_url, jwt_path, gas_bump_file, funding_file, fork=args.fork)
     elif reuse_preparation:
         print("[INFO] Reusing existing gas-bump and funding payloads.")
         finalized_hash = _latest_block_hash_from_payload_file(funding_file) or ""
