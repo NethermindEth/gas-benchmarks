@@ -60,6 +60,13 @@ def _newpayload_method_for_fork(fork: str) -> str:
 
 _NEWPAYLOAD_METHOD = _newpayload_method_for_fork(FORK)
 
+_SLOT_COUNTER: int = 0
+
+def _next_slot() -> str:
+    global _SLOT_COUNTER
+    _SLOT_COUNTER += 1
+    return hex(_SLOT_COUNTER)
+
 _DYN_FINALIZED: str = FINALIZED_BLOCK
 
 _u = urlparse(ENGINE_URL)
@@ -338,6 +345,7 @@ def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
         "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
         "withdrawals": [],
         "parentBeaconBlockRoot": parent_hash,
+        "slotNumber": _next_slot(),
     }
 
     _log(
@@ -979,6 +987,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
                 "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
                 "withdrawals": [],
                 "parentBeaconBlockRoot": parent_hash,
+                "slotNumber": _next_slot(),
             }
             _log(f"inserting empty hook separator block before scenario={scenario} parent={parent_hash}")
             sep_raw = _engine("testing_buildBlockV1", [parent_hash, separator_attrs, [], extra_data])
@@ -1042,6 +1051,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
             "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
             "withdrawals": [],
             "parentBeaconBlockRoot": parent_hash,
+            "slotNumber": _next_slot(),
         }
         _log(
             f"buildBlock parent source={parent_source} hash={parent_hash} phase={phase_lc} stage={next_stage} "
