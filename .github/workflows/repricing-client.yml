@@ -27,6 +27,10 @@ on:
         description: 'Comma-separated include-only filename patterns'
         default: ''
         type: string
+      fork:
+        description: 'Fork name for genesis file selection'
+        default: 'osaka'
+        type: string
 jobs:
   set-matrix:
     runs-on: ubuntu-latest
@@ -377,6 +381,8 @@ jobs:
           EFFECTIVE_FILTER="${{ inputs.filter }}"
           echo "Using filter: '${EFFECTIVE_FILTER}' for test path: $TEST_PATH"
 
+          FORK_NAME="${{ inputs.fork || 'osaka' }}"
+
           # Per-client snapshot backend selection
           case "$CLIENT" in
             erigon|reth)
@@ -390,6 +396,7 @@ jobs:
                 -i '${{ inputs.images }}' \
                 -o "$WARMUP_COUNT" \
                 -f "$EFFECTIVE_FILTER" \
+                -K "$FORK_NAME" \
                 "${WARMUP_ARGS[@]}"
               ;;
             *)
@@ -403,6 +410,7 @@ jobs:
                 -i '${{ inputs.images }}' \
                 -o "$WARMUP_COUNT" \
                 -f "$EFFECTIVE_FILTER" \
+                -K "$FORK_NAME" \
                 "${WARMUP_ARGS[@]}"
               ;;
           esac
@@ -466,12 +474,24 @@ jobs:
             exit 0
           fi
 
+          FORK_NAME="${{ inputs.fork || 'osaka' }}"
+          FORK_SUFFIX=$(echo "$FORK_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+          TABLE_NAME="${SUITE}_${DB_NETWORK}_${FORK_SUFFIX}"
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          if [[ "$BRANCH_NAME" != "main" ]]; then
+            BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+            TABLE_NAME="${TABLE_NAME}_${BRANCH_SUFFIX}"
+          fi
+
+          echo "Publishing results to table: $TABLE_NAME"
+
           python3 fill_postgres_db.py \
             --db-host "$PERFNET_DB_HOST" \
             --db-port "$PERFNET_DB_PORT" \
             --db-user "$PERFNET_DB_USER" \
             --db-name "$DB_NAME" \
-            --table-name "${SUITE}_${DB_NETWORK}" \
+            --table-name "$TABLE_NAME" \
             --db-password "$PERFNET_DB_PASSWORD" \
             --log-level DEBUG \
             --reports-dir "reports"
