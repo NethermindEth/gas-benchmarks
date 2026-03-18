@@ -1642,6 +1642,7 @@ def main():
         "nethermind_container": container_name,
         "light_logs": True,
         "testing_buildblock_timestamp_hack": args.testing_buildblock_timestamp_hack,
+        "slot_counter_start": _PREP_SLOT_COUNTER,
     }
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
