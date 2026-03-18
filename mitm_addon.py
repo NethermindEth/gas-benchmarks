@@ -60,7 +60,7 @@ def _newpayload_method_for_fork(fork: str) -> str:
 
 _NEWPAYLOAD_METHOD = _newpayload_method_for_fork(FORK)
 
-_SLOT_COUNTER: int = 0
+_SLOT_COUNTER: int = int(_CFG.get("slot_counter_start") or 0)
 
 def _next_slot() -> str:
     global _SLOT_COUNTER
