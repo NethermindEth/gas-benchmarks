@@ -18,6 +18,9 @@ on:
       filter:
         description: 'Comma-separated include-only filename patterns'
         default: ''
+      fork:
+        description: 'Fork name (osaka, amsterdam)'
+        default: 'osaka'
 concurrency:
   group: repricing-besu-${{ github.ref }}
   cancel-in-progress: true
@@ -32,6 +35,7 @@ jobs:
       images: ${{ inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
       opcodes_warmup_count: ${{ inputs.opcodes_warmup_count }}
       filter: ${{ inputs.filter || '' }}
+      fork: ${{ inputs.fork || 'osaka' }}
     secrets: inherit
 
   retrigger:
