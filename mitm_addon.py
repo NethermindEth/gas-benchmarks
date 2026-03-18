@@ -1136,6 +1136,23 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
             ph = "setup"
 
         if ph == "setup" and idx == 1:
+            # Flush any leftover testing block to setup BEFORE writing separator/setup
+            # blocks for the new iteration, so block ordering stays monotonic.
+            if not EEST_STATEFUL_TESTING:
+                testing_path = _scenario_file_path("testing", scenario)
+                setup_path = _scenario_file_path("setup", scenario)
+                if testing_path.exists():
+                    try:
+                        with testing_path.open("r", encoding="utf-8") as f:
+                            prev_lines = [ln.rstrip("\n") for ln in f if ln.strip() != ""]
+                        if prev_lines:
+                            for ln in prev_lines:
+                                _append_line(setup_path, ln)
+                            _overwrite_with_lines(testing_path, [])
+                            _log(f"early migrate {len(prev_lines)} testing line(s) → setup for {scenario}")
+                    except Exception as e:
+                        _log(f"early migrate testing→setup failed: {e}")
+
             pending_separator_pair = globals().get("_PENDING_SEPARATOR_PAIR")
             if isinstance(pending_separator_pair, tuple) and len(pending_separator_pair) == 2:
                 sep_np_body, sep_fcu_body = pending_separator_pair
