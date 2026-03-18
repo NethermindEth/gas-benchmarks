@@ -1077,6 +1077,8 @@ def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dic
     return None
 
 
+_PREP_SLOT_COUNTER: int = 0
+
 def preparation_getpayload(
     engine_url: str,
     jwt_hex_path: Path,
@@ -1086,6 +1088,8 @@ def preparation_getpayload(
     timestamp_hack: bool = False,
     fork: str = "Prague",
 ):
+    global _PREP_SLOT_COUNTER
+    _PREP_SLOT_COUNTER += 1
     """
     Build a payload on the engine via testing_buildBlockV1, POST engine_newPayload,
     then engine_forkchoiceUpdatedV3.
@@ -1122,6 +1126,7 @@ def preparation_getpayload(
         "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
         "withdrawals": withdrawals,
         "parentBeaconBlockRoot": parent_hash,
+        "slotNumber": hex(_PREP_SLOT_COUNTER),
     }
     payload = _engine_with_jwt(
         engine_url,
