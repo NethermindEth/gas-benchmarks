@@ -577,14 +577,11 @@ def _scenario_name(file_base: str, test_name: str) -> str:
     fb = _sanitize_filename_component(file_base)
     tn = _sanitize_filename_component(test_name)
 
-    suffix = ""
-    match = re.search(r"-benchmark-gas-value_([^-]+)", tn)
-    if match:
-        value = _sanitize_filename_component(match.group(1))
-        tn = re.sub(r"-benchmark-gas-value_[^-]+", "-benchmark", tn, count=1)
-        suffix = f"_{value}" if value else ""
+    # Strip the separate -benchmark-gas-value_XXX injected by EEST; the value is
+    # already encoded in the parametrized benchmark_XXM part of the test name.
+    tn = re.sub(r"-benchmark-gas-value_[^-]+", "", tn)
 
-    scenario = f"{fb}__{tn}{suffix}"
+    scenario = f"{fb}__{tn}"
     return scenario
 
 
