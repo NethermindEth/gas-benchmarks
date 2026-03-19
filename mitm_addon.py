@@ -1135,7 +1135,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
             _log(f"unknown phase '{phase}' -> treating as 'setup' for dump")
             ph = "setup"
 
-        if ph == "setup" and idx == 1:
+        if ph == "setup":
             # Flush any leftover testing block to setup BEFORE writing separator/setup
             # blocks for the new iteration, so block ordering stays monotonic.
             if not EEST_STATEFUL_TESTING:
@@ -1153,6 +1153,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
                     except Exception as e:
                         _log(f"early migrate testing→setup failed: {e}")
 
+        if ph == "setup" and idx == 1:
             pending_separator_pair = globals().get("_PENDING_SEPARATOR_PAIR")
             if isinstance(pending_separator_pair, tuple) and len(pending_separator_pair) == 2:
                 sep_np_body, sep_fcu_body = pending_separator_pair
