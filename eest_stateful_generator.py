@@ -1365,6 +1365,9 @@ def main():
             terms = [t.strip().lower() for t in group.split(" and ") if t.strip()]
             if terms:
                 parsed_groups.append(terms)
+        # Only delete files for gas values being regenerated in this run,
+        # so e.g. running with gas_benchmark_values=30 doesn't wipe 60M/90M/etc.
+        gas_value_lower = {v.lower() for v in gas_values}
         removed = 0
         for subdir in ("setup", "testing", "cleanup"):
             sub_path = payloads_dir / subdir
@@ -1372,10 +1375,16 @@ def main():
                 continue
             for f in sub_path.rglob("*.txt"):
                 name_lower = f.name.lower()
-                if any(all(term in name_lower for term in group) for group in parsed_groups):
-                    f.unlink()
-                    removed += 1
-        print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); removed {removed} matching files, preserved the rest")
+                if not any(all(term in name_lower for term in group) for group in parsed_groups):
+                    continue
+                # Check gas value: file contains e.g. "benchmark_120M" — only delete
+                # if it matches one of the gas values being regenerated.
+                gas_match = re.search(r"benchmark_(\d+[a-z]*)", name_lower)
+                if gas_match and gas_match.group(1) not in gas_value_lower:
+                    continue
+                f.unlink()
+                removed += 1
+        print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); removed {removed} matching files (gas values: {gas_values}), preserved the rest")
     else:
         for subdir in ("setup", "testing", "cleanup"):
             sub_path = payloads_dir / subdir
