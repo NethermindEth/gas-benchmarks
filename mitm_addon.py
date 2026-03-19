@@ -577,9 +577,9 @@ def _scenario_name(file_base: str, test_name: str) -> str:
     fb = _sanitize_filename_component(file_base)
     tn = _sanitize_filename_component(test_name)
 
-    # Strip the separate -benchmark-gas-value_XXX injected by EEST; the value is
-    # already encoded in the parametrized benchmark_XXM part of the test name.
-    tn = re.sub(r"-benchmark-gas-value_[^-]+", "", tn)
+    # Normalise the EEST-injected "-benchmark-gas-value_XXX" to "-benchmark_XXX"
+    # so filenames stay consistent with the parametrized naming convention.
+    tn = re.sub(r"-benchmark-gas-value_([^-\]]+)", r"-benchmark_\1", tn)
 
     scenario = f"{fb}__{tn}"
     return scenario
