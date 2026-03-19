@@ -577,14 +577,11 @@ def _scenario_name(file_base: str, test_name: str) -> str:
     fb = _sanitize_filename_component(file_base)
     tn = _sanitize_filename_component(test_name)
 
-    suffix = ""
-    match = re.search(r"-benchmark-gas-value_([^-]+)", tn)
-    if match:
-        value = _sanitize_filename_component(match.group(1))
-        tn = re.sub(r"-benchmark-gas-value_[^-]+", "-benchmark", tn, count=1)
-        suffix = f"_{value}" if value else ""
+    # Normalise the EEST-injected "-benchmark-gas-value_XXX" to "-benchmark_XXX"
+    # so filenames stay consistent with the parametrized naming convention.
+    tn = re.sub(r"-benchmark-gas-value_([^-\]]+)", r"-benchmark_\1", tn)
 
-    scenario = f"{fb}__{tn}{suffix}"
+    scenario = f"{fb}__{tn}"
     return scenario
 
 
@@ -1134,6 +1131,24 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
         if ph not in {"setup", "testing", "cleanup"}:
             _log(f"unknown phase '{phase}' -> treating as 'setup' for dump")
             ph = "setup"
+
+        if ph == "setup":
+            # Flush any leftover testing block to setup BEFORE writing separator/setup
+            # blocks for the new iteration, so block ordering stays monotonic.
+            if not EEST_STATEFUL_TESTING:
+                testing_path = _scenario_file_path("testing", scenario)
+                setup_path = _scenario_file_path("setup", scenario)
+                if testing_path.exists():
+                    try:
+                        with testing_path.open("r", encoding="utf-8") as f:
+                            prev_lines = [ln.rstrip("\n") for ln in f if ln.strip() != ""]
+                        if prev_lines:
+                            for ln in prev_lines:
+                                _append_line(setup_path, ln)
+                            _overwrite_with_lines(testing_path, [])
+                            _log(f"early migrate {len(prev_lines)} testing line(s) → setup for {scenario}")
+                    except Exception as e:
+                        _log(f"early migrate testing→setup failed: {e}")
 
         if ph == "setup" and idx == 1:
             pending_separator_pair = globals().get("_PENDING_SEPARATOR_PAIR")

@@ -360,11 +360,82 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          if [ -e "$PAYLOAD_DIR" ]; then
-            git add "$PAYLOAD_DIR"
-          fi
-          if [ -e "$WARMUP_DIR" ]; then
-            git add "$WARMUP_DIR"
+          if [[ -n "${CFG_PARAMETER_FILTER:-}" ]]; then
+            # Only stage files matching the filter terms so unrelated tests are untouched.
+            IFS=',' read -ra OR_GROUPS <<< "${CFG_PARAMETER_FILTER// or /,}"
+            matches_filter() {
+              local fname
+              fname="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+              for group in "${OR_GROUPS[@]}"; do
+                IFS=' ' read -ra AND_TERMS <<< "${group// and / }"
+                local all_match=true
+                for term in "${AND_TERMS[@]}"; do
+                  term="$(echo "$term" | tr '[:upper:]' '[:lower:]' | xargs)"
+                  [[ -z "$term" ]] && continue
+                  if [[ "$fname" != *"$term"* ]]; then
+                    all_match=false
+                    break
+                  fi
+                done
+                if $all_match; then return 0; fi
+              done
+              return 1
+            }
+            # Build a lowercase set of gas values being regenerated
+            # so we can skip files for other gas sizes.
+            IFS=',' read -ra _GAS_VALS <<< "${CFG_GAS_BENCHMARK_VALUES}"
+            declare -A GAS_VAL_SET
+            for _gv in "${_GAS_VALS[@]}"; do
+              GAS_VAL_SET["$(echo "$_gv" | tr '[:upper:]' '[:lower:]' | xargs)"]="1"
+            done
+
+            matches_gas_value() {
+              # If the filename contains benchmark_XXXM, check it's in the gas set.
+              # Files without a benchmark_ tag are always eligible (e.g. _control).
+              local fname_lower
+              fname_lower="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+              if [[ "$fname_lower" =~ benchmark_([0-9]+) ]]; then
+                local val="${BASH_REMATCH[1]}"
+                [[ -n "${GAS_VAL_SET[$val]:-}" ]] && return 0
+                return 1
+              fi
+              return 0
+            }
+
+            stage_filtered() {
+              local dir="$1"
+              [ -e "$dir" ] || return 0
+              git add "$dir/_control" 2>/dev/null || true
+              # Only stage git-tracked changes (new/modified/deleted/renamed)
+              # that match the filter AND the gas values being regenerated.
+              # IFS= prevents read from stripping leading spaces in porcelain output.
+              git status --porcelain -- "$dir" | while IFS= read -r line; do
+                # porcelain format: XY filename  or  XY old -> new
+                local fpath="${line:3}"
+                # Handle renames: "R  old -> new"
+                if [[ "$fpath" == *" -> "* ]]; then
+                  fpath="${fpath##* -> }"
+                fi
+                local bname
+                bname="$(basename "$fpath")"
+                if matches_filter "$bname" && matches_gas_value "$bname"; then
+                  git add "$fpath"
+                fi
+              done
+              # Also stage deletions matching filter + gas value
+              git ls-files --deleted -- "$dir" | while IFS= read -r f; do
+                local bname
+                bname="$(basename "$f")"
+                if matches_filter "$bname" && matches_gas_value "$bname"; then
+                  git add "$f"
+                fi
+              done
+            }
+            stage_filtered "$PAYLOAD_DIR"
+            stage_filtered "$WARMUP_DIR"
+          else
+            [ -e "$PAYLOAD_DIR" ] && git add "$PAYLOAD_DIR"
+            [ -e "$WARMUP_DIR" ] && git add "$WARMUP_DIR"
           fi
 
           if git diff --cached --quiet; then

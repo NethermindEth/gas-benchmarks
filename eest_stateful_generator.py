@@ -130,7 +130,12 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
             continue
         for path in sorted(phase_dir.glob("**/*.txt")):
             stem = path.stem
-            if stem.endswith(f"_{suffix}") or "gas-value" in stem:
+            stem_upper = stem.upper()
+            # Skip if the gas value is already embedded in the filename:
+            # - trailing _30M (legacy suffix)
+            # - benchmark_30M inside parametrized name (after _scenario_name normalisation)
+            # - raw -benchmark-gas-value_ from EEST
+            if stem_upper.endswith(f"_{suffix}") or f"BENCHMARK_{suffix}" in stem_upper or "gas-value" in stem:
                 continue
             base_name = stem
             target = path.with_name(f"{base_name}_{suffix}{path.suffix}")
@@ -1356,17 +1361,35 @@ def main():
     if args.parameter_filter:
         # Only remove files matching the filter so they get cleanly regenerated;
         # preserve all other tests.
-        filter_terms = [t.strip().lower() for t in args.parameter_filter.replace(" or ", ",").replace(" and ", ",").split(",") if t.strip()]
+        # Parse "A and B" as AND-groups and "A or B" / "A, B" as OR-groups,
+        # matching pytest -k semantics: file must satisfy ALL terms in an AND-group
+        # and at least one OR-group.
+        or_groups = [g.strip() for g in args.parameter_filter.replace(",", " or ").split(" or ") if g.strip()]
+        parsed_groups = []
+        for group in or_groups:
+            terms = [t.strip().lower() for t in group.split(" and ") if t.strip()]
+            if terms:
+                parsed_groups.append(terms)
+        # Only delete files for gas values being regenerated in this run,
+        # so e.g. running with gas_benchmark_values=30 doesn't wipe 60M/90M/etc.
+        gas_value_lower = {v.lower() for v in gas_values}
         removed = 0
         for subdir in ("setup", "testing", "cleanup"):
             sub_path = payloads_dir / subdir
             if not sub_path.exists():
                 continue
             for f in sub_path.rglob("*.txt"):
-                if any(term in f.name.lower() for term in filter_terms):
-                    f.unlink()
-                    removed += 1
-        print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); removed {removed} matching files, preserved the rest")
+                name_lower = f.name.lower()
+                if not any(all(term in name_lower for term in group) for group in parsed_groups):
+                    continue
+                # Check gas value: file contains e.g. "benchmark_120M" — only delete
+                # if it matches one of the gas values being regenerated.
+                gas_match = re.search(r"benchmark_(\d+)", name_lower)
+                if gas_match and gas_match.group(1) not in gas_value_lower:
+                    continue
+                f.unlink()
+                removed += 1
+        print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); removed {removed} matching files (gas values: {gas_values}), preserved the rest")
     else:
         for subdir in ("setup", "testing", "cleanup"):
             sub_path = payloads_dir / subdir
