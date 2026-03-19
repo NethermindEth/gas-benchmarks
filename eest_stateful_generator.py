@@ -505,8 +505,18 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
 
     testing_files = sorted([p for p in testing_dir.rglob("*.txt") if p.is_file()])
     if parameter_filter:
-        filter_terms = [t.strip().lower() for t in parameter_filter.replace(" or ", ",").replace(" and ", ",").split(",") if t.strip()]
-        testing_files = [f for f in testing_files if any(term in f.name.lower() for term in filter_terms)]
+        # Parse AND/OR groups with the same semantics as the file deletion filter:
+        # "A and B" requires both terms; "A or B" / "A, B" matches either group.
+        or_groups = [g.strip() for g in parameter_filter.replace(",", " or ").split(" or ") if g.strip()]
+        parsed_groups = []
+        for group in or_groups:
+            terms = [t.strip().lower() for t in group.split(" and ") if t.strip()]
+            if terms:
+                parsed_groups.append(terms)
+        testing_files = [
+            f for f in testing_files
+            if any(all(term in f.name.lower() for term in group) for group in parsed_groups)
+        ]
         print(f"[INFO] Trace matching filtered to {len(testing_files)} files (parameter_filter='{parameter_filter}')")
     for txt_file in testing_files:
         test_name = txt_file.stem
