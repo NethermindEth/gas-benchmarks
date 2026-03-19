@@ -135,7 +135,7 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
             # - trailing _30M (legacy suffix)
             # - benchmark_30M inside parametrized name (after _scenario_name normalisation)
             # - raw -benchmark-gas-value_ from EEST
-            if stem_upper.endswith(f"_{suffix}") or f"benchmark_{suffix}" in stem_upper or "gas-value" in stem:
+            if stem_upper.endswith(f"_{suffix}") or f"BENCHMARK_{suffix}" in stem_upper or "gas-value" in stem:
                 continue
             base_name = stem
             target = path.with_name(f"{base_name}_{suffix}{path.suffix}")
