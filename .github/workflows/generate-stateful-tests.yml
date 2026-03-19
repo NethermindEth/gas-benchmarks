@@ -361,7 +361,44 @@ jobs:
           git config user.email "actions@github.com"
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           if [ -e "$PAYLOAD_DIR" ]; then
-            git add "$PAYLOAD_DIR"
+            if [[ -n "${CFG_PARAMETER_FILTER:-}" ]]; then
+              # Only stage files matching the filter terms so unrelated tests are untouched.
+              # Also stage _control dir and any deletions of old matching files.
+              git add "$PAYLOAD_DIR/_control" 2>/dev/null || true
+              IFS=',' read -ra OR_GROUPS <<< "${CFG_PARAMETER_FILTER// or /,}"
+              matches_filter() {
+                local fname
+                fname="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+                for group in "${OR_GROUPS[@]}"; do
+                  IFS=' ' read -ra AND_TERMS <<< "${group// and / }"
+                  local all_match=true
+                  for term in "${AND_TERMS[@]}"; do
+                    term="$(echo "$term" | tr '[:upper:]' '[:lower:]' | xargs)"
+                    [[ -z "$term" ]] && continue
+                    if [[ "$fname" != *"$term"* ]]; then
+                      all_match=false
+                      break
+                    fi
+                  done
+                  if $all_match; then return 0; fi
+                done
+                return 1
+              }
+              # Stage new/modified matching files
+              find "$PAYLOAD_DIR" -name '*.txt' -type f -print0 | while IFS= read -r -d '' f; do
+                if matches_filter "$(basename "$f")"; then
+                  git add "$f"
+                fi
+              done
+              # Stage deletions of old matching files
+              git ls-files --deleted -- "$PAYLOAD_DIR" | while read -r f; do
+                if matches_filter "$(basename "$f")"; then
+                  git add "$f"
+                fi
+              done
+            else
+              git add "$PAYLOAD_DIR"
+            fi
           fi
           if [ -e "$WARMUP_DIR" ]; then
             git add "$WARMUP_DIR"

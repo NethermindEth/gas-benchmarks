@@ -1356,14 +1356,23 @@ def main():
     if args.parameter_filter:
         # Only remove files matching the filter so they get cleanly regenerated;
         # preserve all other tests.
-        filter_terms = [t.strip().lower() for t in args.parameter_filter.replace(" or ", ",").replace(" and ", ",").split(",") if t.strip()]
+        # Parse "A and B" as AND-groups and "A or B" / "A, B" as OR-groups,
+        # matching pytest -k semantics: file must satisfy ALL terms in an AND-group
+        # and at least one OR-group.
+        or_groups = [g.strip() for g in args.parameter_filter.replace(",", " or ").split(" or ") if g.strip()]
+        parsed_groups = []
+        for group in or_groups:
+            terms = [t.strip().lower() for t in group.split(" and ") if t.strip()]
+            if terms:
+                parsed_groups.append(terms)
         removed = 0
         for subdir in ("setup", "testing", "cleanup"):
             sub_path = payloads_dir / subdir
             if not sub_path.exists():
                 continue
             for f in sub_path.rglob("*.txt"):
-                if any(term in f.name.lower() for term in filter_terms):
+                name_lower = f.name.lower()
+                if any(all(term in name_lower for term in group) for group in parsed_groups):
                     f.unlink()
                     removed += 1
         print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); removed {removed} matching files, preserved the rest")
