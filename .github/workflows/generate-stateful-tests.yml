@@ -394,7 +394,7 @@ jobs:
               # Files without a benchmark_ tag are always eligible (e.g. _control).
               local fname_lower
               fname_lower="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
-              if [[ "$fname_lower" =~ benchmark_([0-9]+[a-z]*) ]]; then
+              if [[ "$fname_lower" =~ benchmark_([0-9]+) ]]; then
                 local val="${BASH_REMATCH[1]}"
                 [[ -n "${GAS_VAL_SET[$val]:-}" ]] && return 0
                 return 1
