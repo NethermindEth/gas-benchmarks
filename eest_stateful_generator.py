@@ -1384,7 +1384,7 @@ def main():
                     continue
                 # Check gas value: file contains e.g. "benchmark_120M" — only delete
                 # if it matches one of the gas values being regenerated.
-                gas_match = re.search(r"benchmark_(\d+[a-z]*)", name_lower)
+                gas_match = re.search(r"benchmark_(\d+)", name_lower)
                 if gas_match and gas_match.group(1) not in gas_value_lower:
                     continue
                 f.unlink()
