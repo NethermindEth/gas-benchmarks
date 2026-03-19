@@ -130,7 +130,12 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
             continue
         for path in sorted(phase_dir.glob("**/*.txt")):
             stem = path.stem
-            if stem.endswith(f"_{suffix}") or "gas-value" in stem:
+            stem_upper = stem.upper()
+            # Skip if the gas value is already embedded in the filename:
+            # - trailing _30M (legacy suffix)
+            # - benchmark_30M inside parametrized name (after _scenario_name normalisation)
+            # - raw -benchmark-gas-value_ from EEST
+            if stem_upper.endswith(f"_{suffix}") or f"benchmark_{suffix}" in stem_upper or "gas-value" in stem:
                 continue
             base_name = stem
             target = path.with_name(f"{base_name}_{suffix}{path.suffix}")
