@@ -1358,12 +1358,14 @@ for run in $(seq 1 $RUNS); do
         # via engine_forkchoiceUpdatedV3.
         if [ "${CANONICAL_CHECK:-false}" = true ] && [[ "$normalized_path" == */setup/* ]]; then
           echo "[INFO] ${PROGRESS} [CANONICAL-CHECK] after $filename"
+          mkdir -p canonical-check-logs
           python3 check_canonical.py \
             --rpc "http://127.0.0.1:8545" \
             --depth "${CANONICAL_CHECK_DEPTH:-50}" \
             --start latest \
             --label "$filename" \
             ${CANONICAL_CHECK_WARN_ONLY:+--warn-only} \
+            2>&1 | tee -a "canonical-check-logs/${filename%.txt}.log" \
             || echo "[WARN] Canonical chain mismatch detected after replaying $filename"
         fi
 

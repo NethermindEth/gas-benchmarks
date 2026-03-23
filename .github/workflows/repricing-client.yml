@@ -444,6 +444,14 @@ jobs:
             --runs "$RUNS" \
             --images "$IMAGES"
 
+      - name: Upload canonical check logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-check-logs-${{ inputs.client }}-${{ matrix.run }}-${{ matrix.network }}
+          path: canonical-check-logs/
+          if-no-files-found: ignore
+
       - name: Docker full prune
         if: always()
         run: |
