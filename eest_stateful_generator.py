@@ -1898,11 +1898,22 @@ def main():
                 print(f"[WARN] Ignoring pause payload without token: {payload}")
                 return
             scenario_name = payload.get("scenario") or "unknown"
+            _check_counter += 1
+            check_label = f"{_check_counter:03d}_{scenario_name}"
 
-            # Snapshot head BEFORE resume — this is the old scenario's tip.
+            # ── PRE-REORG CHECK ──────────────────────────────────────
+            # The current scenario just finished building blocks. The
+            # chain should be fully consistent: walking backward from
+            # head via parentHash must match eth_getBlockByNumber at
+            # every height.  If a PREVIOUS reorg left stale markers,
+            # by-number will return the wrong block here.
             old_head = _get_block_number()
-            print(f"[CANONICAL-CHECK] pre-reorg head: {old_head} (scenario={scenario_name})")
+            print(f"[CANONICAL-CHECK] [{check_label}] pre-reorg head: {old_head}")
 
+            check_depth = int(os.environ.get("CANONICAL_CHECK_DEPTH", "50"))
+            _check_canonical_backward(check_label, depth=check_depth)
+
+            # ── RESUME & REORG ───────────────────────────────────────
             try:
                 resume_file.unlink(missing_ok=True)
             except Exception:
@@ -1912,28 +1923,20 @@ def main():
                 print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
             processed_tokens.add(token)
 
-            # Wait for separator block — head must change to confirm the
-            # reorg FCU has been processed by the node.
+            # Wait for the separator block FCU to land.
             new_head = _wait_for_head_change(old_head, timeout=30.0)
             if new_head is not None and new_head != old_head:
-                print(f"[CANONICAL-CHECK] post-reorg head: {new_head} (was {old_head}, separator landed)")
+                print(f"[CANONICAL-CHECK] [{check_label}] post-reorg head: {new_head} (was {old_head})")
             else:
-                print(f"[CANONICAL-CHECK] head did not change from {old_head} within timeout")
+                print(f"[CANONICAL-CHECK] [{check_label}] head did not change from {old_head} within timeout")
 
             _last_known_head = new_head
-            _check_counter += 1
-            check_label = f"{_check_counter:03d}_{scenario_name}"
 
-            # Check 1: stale canonical markers in the orphaned range
-            # (heights above new head that should now return null).
+            # ── POST-REORG CHECK ─────────────────────────────────────
+            # Heights above the new head should return null from
+            # eth_getBlockByNumber.  Any non-null = stale marker.
             if old_head is not None and new_head is not None:
                 _check_stale_canonical_above_head(old_head, new_head, check_label)
-
-            # Check 2: backward walk from new head — same as original
-            # check_canonical.py script. Verifies by-number matches
-            # by-hash chain at every height below the new head.
-            check_depth = int(os.environ.get("CANONICAL_CHECK_DEPTH", "50"))
-            _check_canonical_backward(check_label, depth=check_depth)
 
         try:
             while True:
