@@ -1889,9 +1889,10 @@ def main():
                 _log(f"All {len(truth)} block(s) consistent — by-number matches by-hash chain")
 
         _last_known_head: Optional[int] = None
+        _check_counter: int = 0
 
         def handle_pause(payload: dict) -> None:
-            nonlocal _last_known_head
+            nonlocal _last_known_head, _check_counter
             token = str(payload.get("token") or "")
             if not token:
                 print(f"[WARN] Ignoring pause payload without token: {payload}")
@@ -1920,17 +1921,19 @@ def main():
                 print(f"[CANONICAL-CHECK] head did not change from {old_head} within timeout")
 
             _last_known_head = new_head
+            _check_counter += 1
+            check_label = f"{_check_counter:03d}_{scenario_name}"
 
             # Check 1: stale canonical markers in the orphaned range
             # (heights above new head that should now return null).
             if old_head is not None and new_head is not None:
-                _check_stale_canonical_above_head(old_head, new_head, scenario_name)
+                _check_stale_canonical_above_head(old_head, new_head, check_label)
 
             # Check 2: backward walk from new head — same as original
             # check_canonical.py script. Verifies by-number matches
             # by-hash chain at every height below the new head.
             check_depth = int(os.environ.get("CANONICAL_CHECK_DEPTH", "50"))
-            _check_canonical_backward(scenario_name, depth=check_depth)
+            _check_canonical_backward(check_label, depth=check_depth)
 
         try:
             while True:
