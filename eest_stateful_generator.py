@@ -1705,6 +1705,42 @@ def main():
         processed_tokens: set[str] = set()
         return_code: Optional[int] = None
 
+        def _run_canonical_check(label: str) -> None:
+            """Run canonical chain integrity check against the live node."""
+            if not os.environ.get("CANONICAL_CHECK", "").lower() in ("1", "true", "yes"):
+                return
+            depth = os.environ.get("CANONICAL_CHECK_DEPTH", "50")
+            cc_log_dir = Path("canonical-check-logs")
+            cc_log_dir.mkdir(parents=True, exist_ok=True)
+            safe_label = re.sub(r'[^\w\-.]', '_', label)
+            cc_log = cc_log_dir / f"{safe_label}.log"
+            cmd = [
+                sys.executable, "-u", "check_canonical.py",
+                "--rpc", "http://127.0.0.1:8545",
+                "--depth", depth,
+                "--start", "latest",
+                "--label", label,
+            ]
+            if os.environ.get("CANONICAL_CHECK_WARN_ONLY", ""):
+                cmd.append("--warn-only")
+            print(f"[CANONICAL-CHECK] running after {label}")
+            try:
+                with open(cc_log, "a", encoding="utf-8") as lf:
+                    proc = subprocess.Popen(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+                    )
+                    for line in proc.stdout:
+                        decoded = line.decode("utf-8", errors="replace")
+                        sys.stdout.write(decoded)
+                        sys.stdout.flush()
+                        lf.write(decoded)
+                    rc = proc.wait()
+                if rc != 0:
+                    print(f"[WARN] Canonical chain mismatch detected after {label} (exit={rc})")
+            except Exception as e:
+                print(f"[WARN] Canonical check failed for {label}: {e}")
+
         def handle_pause(payload: dict) -> None:
             token = str(payload.get("token") or "")
             if not token:
@@ -1719,6 +1755,7 @@ def main():
             if not _wait_for_resume_consumed(resume_file, timeout=300.0):
                 print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
             processed_tokens.add(token)
+            _run_canonical_check(scenario_name)
 
         try:
             while True:

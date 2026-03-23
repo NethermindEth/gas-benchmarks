@@ -219,6 +219,8 @@ jobs:
         shell: bash
         env:
           RPC_SEED_KEY: ${{ secrets.EEST_RPC_SEED_KEY }}
+          CANONICAL_CHECK: "true"
+          CANONICAL_CHECK_DEPTH: "50"
         run: |
           set -euo pipefail
           STATEFUL_GENERATOR_LOG="stateful_generator.log"
@@ -339,6 +341,14 @@ jobs:
           name: nethermind-log-${{ github.run_id }}
           path: nethermind.log
           if-no-files-found: warn
+
+      - name: Upload canonical check logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-check-logs-${{ github.run_id }}
+          path: canonical-check-logs/
+          if-no-files-found: ignore
 
       - name: Upload generated artifacts
         if: always()
