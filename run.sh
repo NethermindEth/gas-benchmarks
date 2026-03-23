@@ -1351,6 +1351,22 @@ for run in $(seq 1 $RUNS); do
       if [ "$measured" = false ]; then
         echo "[INFO] ${PROGRESS} [SETUP] $filename"
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT
+
+        # Run canonical chain integrity check after setup files that contain
+        # reorg separator blocks (setup/*.txt).  This detects the Nethermind
+        # bug where eth_getBlockByNumber returns stale blocks after a reorg
+        # via engine_forkchoiceUpdatedV3.
+        if [ "${CANONICAL_CHECK:-false}" = true ] && [[ "$normalized_path" == */setup/* ]]; then
+          echo "[INFO] ${PROGRESS} [CANONICAL-CHECK] after $filename"
+          python3 check_canonical.py \
+            --rpc "http://127.0.0.1:8545" \
+            --depth "${CANONICAL_CHECK_DEPTH:-50}" \
+            --start latest \
+            --label "$filename" \
+            ${CANONICAL_CHECK_WARN_ONLY:+--warn-only} \
+            || echo "[WARN] Canonical chain mismatch detected after replaying $filename"
+        fi
+
         echo ""
         continue
       fi

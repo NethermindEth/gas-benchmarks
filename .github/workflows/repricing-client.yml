@@ -347,6 +347,9 @@ jobs:
         run: chmod +x ./run.sh
 
       - name: Run benchmarks for client=${{ inputs.client }}
+        env:
+          CANONICAL_CHECK: "true"
+          CANONICAL_CHECK_DEPTH: "50"
         run: |
           TEST_PATH="${{ matrix.test_path }}"
           NETWORK="${{ matrix.network }}"
@@ -440,57 +443,6 @@ jobs:
             --testsPath "$TEST_PATH" \
             --runs "$RUNS" \
             --images "$IMAGES"
-
-      - name: Publish results to DB
-        env:
-          PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
-          PERFNET_DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
-          PERFNET_DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
-          PERFNET_DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
-        run: |
-          set -euo pipefail
-          TEST_PATH="${{ matrix.test_path }}"
-
-          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2|perf-devnet-3)$ ]]; then
-            SUITE="${BASH_REMATCH[1]}"
-            NETWORK="${BASH_REMATCH[2]}"
-            DB_NETWORK="${NETWORK//-/_}"
-            DB_NAME="monitoring"
-          else
-            echo "Skipping DB upload for non-repricing path: $TEST_PATH"
-            exit 0
-          fi
-
-          if [ ! -d "reports" ]; then
-            echo "No reports directory found, skipping DB upload"
-            exit 0
-          fi
-
-          python3 fill_postgres_db.py \
-            --db-host "$PERFNET_DB_HOST" \
-            --db-port "$PERFNET_DB_PORT" \
-            --db-user "$PERFNET_DB_USER" \
-            --db-name "$DB_NAME" \
-            --table-name "${SUITE}_${DB_NETWORK}" \
-            --db-password "$PERFNET_DB_PASSWORD" \
-            --log-level DEBUG \
-            --reports-dir "reports"
-
-      - name: Zip the results folder
-        run: |
-          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
-          CLEANED_CLIENT=$(echo "${{ inputs.client }}" | tr -d '\n')
-          CLEANED_TEST_PATH=$(echo "${{ matrix.test_path }}" | tr -d '\n' | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
-          echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
-          echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
-          echo "CLEANED_TEST_PATH=$CLEANED_TEST_PATH" >> $GITHUB_ENV
-          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}-${CLEANED_TEST_PATH}.zip results
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_TEST_PATH }}
-          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_TEST_PATH }}.zip
 
       - name: Docker full prune
         if: always()

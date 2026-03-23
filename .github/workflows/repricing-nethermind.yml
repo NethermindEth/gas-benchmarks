@@ -33,15 +33,3 @@ jobs:
       opcodes_warmup_count: ${{ inputs.opcodes_warmup_count }}
       filter: ${{ inputs.filter || '' }}
     secrets: inherit
-
-  retrigger:
-    needs: repricing
-    runs-on: ubuntu-latest
-    steps:
-      - name: Retrigger workflow
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: repricing-nethermind.yml
-          ref: "${{ github.ref }}"
-          token: "${{ secrets.GH_TOKEN }}"
-          inputs: ${{ toJson(github.event.inputs) }}
