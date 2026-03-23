@@ -1725,27 +1725,30 @@ def main():
             resp.raise_for_status()
             return {item["id"]: item.get("result") for item in resp.json()}
 
-        def _get_block_number(rpc_url: str = "http://127.0.0.1:8545") -> Optional[int]:
+        def _get_head(rpc_url: str = "http://127.0.0.1:8545") -> tuple[Optional[int], Optional[str]]:
+            """Return (block_number, block_hash) of the current head."""
             try:
-                result = _rpc_call("eth_blockNumber", [], rpc_url)
-                return int(result, 16) if result else None
+                block = _rpc_call("eth_getBlockByNumber", ["latest", False], rpc_url)
+                if block is None:
+                    return None, None
+                return int(block["number"], 16), block["hash"]
             except Exception:
-                return None
+                return None, None
 
         def _wait_for_head_change(
-            baseline: Optional[int],
+            baseline_hash: Optional[str],
             rpc_url: str = "http://127.0.0.1:8545",
-            timeout: float = 30.0,
-            poll: float = 0.2,
-        ) -> Optional[int]:
-            """Poll until eth_blockNumber differs from *baseline*, return new head."""
+            timeout: float = 10.0,
+            poll: float = 0.1,
+        ) -> tuple[Optional[int], Optional[str]]:
+            """Poll until the head block hash differs from *baseline_hash*."""
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
-                head = _get_block_number(rpc_url)
-                if head is not None and (baseline is None or head != baseline):
-                    return head
+                num, h = _get_head(rpc_url)
+                if h is not None and (baseline_hash is None or h != baseline_hash):
+                    return num, h
                 time.sleep(poll)
-            return _get_block_number(rpc_url)
+            return _get_head(rpc_url)
 
         def _check_stale_canonical_above_head(
             old_head: int,
@@ -1909,8 +1912,8 @@ def main():
             # head via parentHash must match eth_getBlockByNumber at
             # every height.  If a PREVIOUS reorg left stale markers,
             # by-number will return the wrong block here.
-            old_head = _get_block_number()
-            print(f"[CANONICAL-CHECK] [{check_label}] pre-reorg head: {old_head}")
+            old_head_num, old_head_hash = _get_head()
+            print(f"[CANONICAL-CHECK] [{check_label}] pre-reorg head: #{old_head_num} {old_head_hash}")
 
             check_depth = int(os.environ.get("CANONICAL_CHECK_DEPTH", "50"))
             _check_canonical_backward(check_label, depth=check_depth)
@@ -1925,20 +1928,21 @@ def main():
                 print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
             processed_tokens.add(token)
 
-            # Wait for the separator block FCU to land.
-            new_head = _wait_for_head_change(old_head, timeout=30.0)
-            if new_head is not None and new_head != old_head:
-                print(f"[CANONICAL-CHECK] [{check_label}] post-reorg head: {new_head} (was {old_head})")
+            # Wait for the separator block FCU to land (compare by hash,
+            # not number — the separator can be at the same height).
+            new_head_num, new_head_hash = _wait_for_head_change(old_head_hash, timeout=10.0)
+            if new_head_hash is not None and new_head_hash != old_head_hash:
+                print(f"[CANONICAL-CHECK] [{check_label}] post-reorg head: #{new_head_num} {new_head_hash} (was #{old_head_num})")
             else:
-                print(f"[CANONICAL-CHECK] [{check_label}] head did not change from {old_head} within timeout")
+                print(f"[CANONICAL-CHECK] [{check_label}] head hash unchanged at #{old_head_num} {old_head_hash} within timeout")
 
-            _last_known_head = new_head
+            _last_known_head = new_head_num
 
             # ── POST-REORG CHECK ─────────────────────────────────────
             # Heights above the new head should return null from
             # eth_getBlockByNumber.  Any non-null = stale marker.
-            if old_head is not None and new_head is not None:
-                _check_stale_canonical_above_head(old_head, new_head, check_label)
+            if old_head_num is not None and new_head_num is not None:
+                _check_stale_canonical_above_head(old_head_num, new_head_num, check_label)
 
         try:
             while True:
