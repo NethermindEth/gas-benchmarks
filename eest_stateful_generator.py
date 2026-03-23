@@ -1705,16 +1705,27 @@ def main():
         processed_tokens: set[str] = set()
         return_code: Optional[int] = None
 
-        def _get_block_number(rpc_url: str = "http://127.0.0.1:8545") -> Optional[int]:
-            """Query eth_blockNumber and return the head height."""
+        def _rpc_call(method: str, params: list, rpc_url: str = "http://127.0.0.1:8545") -> Any:
             import requests as _req
+            resp = _req.post(rpc_url, json={
+                "jsonrpc": "2.0", "id": 1,
+                "method": method, "params": params,
+            }, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            if "error" in data:
+                raise RuntimeError(f"RPC error: {data['error']}")
+            return data.get("result")
+
+        def _rpc_batch(batch: list, rpc_url: str = "http://127.0.0.1:8545") -> dict:
+            import requests as _req
+            resp = _req.post(rpc_url, json=batch, timeout=30)
+            resp.raise_for_status()
+            return {item["id"]: item.get("result") for item in resp.json()}
+
+        def _get_block_number(rpc_url: str = "http://127.0.0.1:8545") -> Optional[int]:
             try:
-                resp = _req.post(rpc_url, json={
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "eth_blockNumber", "params": [],
-                }, timeout=5)
-                resp.raise_for_status()
-                result = resp.json().get("result")
+                result = _rpc_call("eth_blockNumber", [], rpc_url)
                 return int(result, 16) if result else None
             except Exception:
                 return None
@@ -1734,41 +1745,69 @@ def main():
                 time.sleep(poll)
             return _get_block_number(rpc_url)
 
-        def _run_canonical_check(label: str) -> None:
-            """Run canonical chain integrity check against the live node."""
+        def _check_stale_canonical_above_head(
+            old_head: int,
+            new_head: int,
+            label: str,
+        ) -> None:
+            """After a reorg from old_head down to new_head, check that
+            eth_getBlockByNumber returns null for every height in
+            (new_head, old_head].  Any non-null result means a stale
+            HasBlockOnMainChain marker — the Nethermind bug."""
             if not os.environ.get("CANONICAL_CHECK", "").lower() in ("1", "true", "yes"):
                 return
-            depth = os.environ.get("CANONICAL_CHECK_DEPTH", "50")
+            if old_head is None or new_head is None or old_head <= new_head:
+                return
+
             cc_log_dir = Path("canonical-check-logs")
             cc_log_dir.mkdir(parents=True, exist_ok=True)
             safe_label = re.sub(r'[^\w\-.]', '_', label)
             cc_log = cc_log_dir / f"{safe_label}.log"
-            cmd = [
-                sys.executable, "-u", "check_canonical.py",
-                "--rpc", "http://127.0.0.1:8545",
-                "--depth", depth,
-                "--start", "latest",
-                "--label", label,
+
+            stale_range_start = new_head + 1
+            stale_range_end = old_head
+            count = stale_range_end - stale_range_start + 1
+
+            def _log(msg: str) -> None:
+                line = f"[CANONICAL-CHECK] [{label}] {msg}"
+                print(line)
+                sys.stdout.flush()
+                with open(cc_log, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+
+            _log(f"reorg {old_head} -> {new_head}, checking {count} height(s) "
+                 f"[{stale_range_start}..{stale_range_end}] for stale canonical markers")
+
+            # Batch-fetch eth_getBlockByNumber for the orphaned range
+            batch = [
+                {"jsonrpc": "2.0", "method": "eth_getBlockByNumber",
+                 "params": [hex(n), False], "id": n}
+                for n in range(stale_range_start, stale_range_end + 1)
             ]
-            if os.environ.get("CANONICAL_CHECK_WARN_ONLY", ""):
-                cmd.append("--warn-only")
-            print(f"[CANONICAL-CHECK] running after {label}")
             try:
-                with open(cc_log, "a", encoding="utf-8") as lf:
-                    proc = subprocess.Popen(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        env={**os.environ, "PYTHONUNBUFFERED": "1"},
-                    )
-                    for line in proc.stdout:
-                        decoded = line.decode("utf-8", errors="replace")
-                        sys.stdout.write(decoded)
-                        sys.stdout.flush()
-                        lf.write(decoded)
-                    rc = proc.wait()
-                if rc != 0:
-                    print(f"[WARN] Canonical chain mismatch detected after {label} (exit={rc})")
+                by_number = _rpc_batch(batch)
             except Exception as e:
-                print(f"[WARN] Canonical check failed for {label}: {e}")
+                _log(f"ERROR: batch fetch failed: {e}")
+                return
+
+            stale = []
+            for height in range(stale_range_start, stale_range_end + 1):
+                block = by_number.get(height)
+                if block is not None:
+                    stale_hash = block.get("hash", "?")
+                    _log(f"  STALE at height {height}: by-number returned {stale_hash} "
+                         f"(should be null after reorg)")
+                    stale.append({"height": height, "hash": stale_hash})
+                else:
+                    _log(f"  OK  #{height}  (null — correctly decanonicalised)")
+
+            _log("")
+            if stale:
+                _log(f"FOUND {len(stale)} STALE CANONICAL MARKER(S) out of {count} checked")
+                for s in stale:
+                    _log(f"  height={s['height']}  hash={s['hash']}")
+            else:
+                _log(f"All {count} height(s) correctly decanonicalised — no stale markers")
 
         _last_known_head: Optional[int] = None
 
@@ -1780,9 +1819,9 @@ def main():
                 return
             scenario_name = payload.get("scenario") or "unknown"
 
-            # Snapshot head BEFORE resume so we can detect when the
-            # separator block (built by MITM addon after resume) lands.
-            _last_known_head = _get_block_number()
+            # Snapshot head BEFORE resume — this is the old scenario's tip.
+            old_head = _get_block_number()
+            print(f"[CANONICAL-CHECK] pre-reorg head: {old_head} (scenario={scenario_name})")
 
             try:
                 resume_file.unlink(missing_ok=True)
@@ -1793,16 +1832,20 @@ def main():
                 print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
             processed_tokens.add(token)
 
-            # Wait for the separator block to land — the MITM addon builds it
-            # right after consuming the resume signal, so the head will change.
-            new_head = _wait_for_head_change(_last_known_head, timeout=30.0)
-            if new_head is not None and new_head != _last_known_head:
-                print(f"[CANONICAL-CHECK] head moved {_last_known_head} -> {new_head} (separator landed)")
+            # Wait for separator block — head must change to confirm the
+            # reorg FCU has been processed by the node.
+            new_head = _wait_for_head_change(old_head, timeout=30.0)
+            if new_head is not None and new_head != old_head:
+                print(f"[CANONICAL-CHECK] post-reorg head: {new_head} (was {old_head}, separator landed)")
             else:
-                print(f"[CANONICAL-CHECK] head did not change from {_last_known_head} within timeout, checking anyway")
+                print(f"[CANONICAL-CHECK] head did not change from {old_head} within timeout")
+
             _last_known_head = new_head
 
-            _run_canonical_check(scenario_name)
+            # Check for stale canonical markers in the orphaned range
+            # (heights above new head that should now return null).
+            if old_head is not None and new_head is not None:
+                _check_stale_canonical_above_head(old_head, new_head, scenario_name)
 
         try:
             while True:
