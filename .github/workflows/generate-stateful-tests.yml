@@ -342,6 +342,64 @@ jobs:
           path: nethermind.log
           if-no-files-found: warn
 
+      - name: Canonical chain integrity summary
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          echo "============================================"
+          echo "  CANONICAL CHAIN INTEGRITY CHECK SUMMARY"
+          echo "============================================"
+          echo ""
+
+          if [ ! -d canonical-check-logs ] || [ -z "$(ls -A canonical-check-logs/ 2>/dev/null)" ]; then
+            echo "No canonical check logs found."
+            echo "RESULT: SKIPPED (no checks ran)"
+            exit 0
+          fi
+
+          total_files=0
+          files_with_issues=0
+          total_stale=0
+          total_mismatches=0
+
+          for log in canonical-check-logs/*.log; do
+            [ -f "$log" ] || continue
+            total_files=$((total_files + 1))
+            fname="$(basename "$log")"
+
+            stale=$(grep -c "STALE at height" "$log" 2>/dev/null || true)
+            mismatches=$(grep -c "MISMATCH #" "$log" 2>/dev/null || true)
+
+            if [ "$stale" -gt 0 ] || [ "$mismatches" -gt 0 ]; then
+              files_with_issues=$((files_with_issues + 1))
+              total_stale=$((total_stale + stale))
+              total_mismatches=$((total_mismatches + mismatches))
+              echo "FAIL  $fname  (stale=$stale, mismatches=$mismatches)"
+              grep -E "STALE at height|MISMATCH #" "$log" | sed 's/^/  /'
+              echo ""
+            else
+              echo "PASS  $fname"
+            fi
+          done
+
+          echo ""
+          echo "--------------------------------------------"
+          echo "  Checks run:       $total_files"
+          echo "  Stale markers:    $total_stale"
+          echo "  Hash mismatches:  $total_mismatches"
+          echo "  Scenarios failed: $files_with_issues"
+          echo "--------------------------------------------"
+
+          if [ "$total_stale" -gt 0 ] || [ "$total_mismatches" -gt 0 ]; then
+            echo ""
+            echo "RESULT: FAIL — canonical chain inconsistencies detected"
+            exit 1
+          else
+            echo ""
+            echo "RESULT: PASS — all canonical checks clean"
+          fi
+
       - name: Upload canonical check logs
         if: always()
         uses: actions/upload-artifact@v4
