@@ -1809,6 +1809,85 @@ def main():
             else:
                 _log(f"All {count} height(s) correctly decanonicalised — no stale markers")
 
+        def _check_canonical_backward(label: str, depth: int = 50) -> None:
+            """Walk backward from head via parentHash and compare against
+            eth_getBlockByNumber at each height.  This is the same check as
+            check_canonical.py — detects when by-number returns a different
+            block than the one reachable via the hash chain."""
+            if not os.environ.get("CANONICAL_CHECK", "").lower() in ("1", "true", "yes"):
+                return
+
+            cc_log_dir = Path("canonical-check-logs")
+            cc_log_dir.mkdir(parents=True, exist_ok=True)
+            safe_label = re.sub(r'[^\w\-.]', '_', label)
+            cc_log = cc_log_dir / f"{safe_label}_backward.log"
+
+            def _log(msg: str) -> None:
+                line = f"[CANONICAL-CHECK-BACKWARD] [{label}] {msg}"
+                print(line)
+                sys.stdout.flush()
+                with open(cc_log, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+
+            try:
+                head_block = _rpc_call("eth_getBlockByNumber", ["latest", False])
+            except Exception as e:
+                _log(f"ERROR: cannot fetch latest block: {e}")
+                return
+            if head_block is None:
+                _log("ERROR: latest block is null")
+                return
+
+            head_number = int(head_block["number"], 16)
+            head_hash = head_block["hash"]
+            _log(f"walking {depth} blocks back from #{head_number} ({head_hash})")
+
+            # Phase 1: walk backward via parentHash
+            truth = []
+            current = head_block
+            for _ in range(depth):
+                number = int(current["number"], 16)
+                truth.append((number, current["hash"]))
+                parent_hash = current["parentHash"]
+                if int(parent_hash, 16) == 0:
+                    break
+                try:
+                    parent = _rpc_call("eth_getBlockByHash", [parent_hash, False])
+                except Exception:
+                    parent = None
+                if parent is None:
+                    break
+                current = parent
+
+            # Phase 2: batch fetch by-number
+            batch = [
+                {"jsonrpc": "2.0", "method": "eth_getBlockByNumber",
+                 "params": [hex(n), False], "id": n}
+                for n, _ in truth
+            ]
+            try:
+                by_number = _rpc_batch(batch)
+            except Exception as e:
+                _log(f"ERROR: batch fetch failed: {e}")
+                return
+
+            # Phase 3: compare
+            mismatches = []
+            for number, chain_hash in truth:
+                block = by_number.get(number)
+                bn_hash = block["hash"] if block else None
+                if bn_hash != chain_hash:
+                    _log(f"  MISMATCH #{number}: chain={chain_hash} by-number={bn_hash}")
+                    mismatches.append(number)
+                else:
+                    _log(f"  OK  #{number}  {chain_hash}")
+
+            _log("")
+            if mismatches:
+                _log(f"FOUND {len(mismatches)} MISMATCH(ES) out of {len(truth)} checked")
+            else:
+                _log(f"All {len(truth)} block(s) consistent — by-number matches by-hash chain")
+
         _last_known_head: Optional[int] = None
 
         def handle_pause(payload: dict) -> None:
@@ -1842,10 +1921,16 @@ def main():
 
             _last_known_head = new_head
 
-            # Check for stale canonical markers in the orphaned range
+            # Check 1: stale canonical markers in the orphaned range
             # (heights above new head that should now return null).
             if old_head is not None and new_head is not None:
                 _check_stale_canonical_above_head(old_head, new_head, scenario_name)
+
+            # Check 2: backward walk from new head — same as original
+            # check_canonical.py script. Verifies by-number matches
+            # by-hash chain at every height below the new head.
+            check_depth = int(os.environ.get("CANONICAL_CHECK_DEPTH", "50"))
+            _check_canonical_backward(scenario_name, depth=check_depth)
 
         try:
             while True:
