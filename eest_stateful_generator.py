@@ -1705,6 +1705,35 @@ def main():
         processed_tokens: set[str] = set()
         return_code: Optional[int] = None
 
+        def _get_block_number(rpc_url: str = "http://127.0.0.1:8545") -> Optional[int]:
+            """Query eth_blockNumber and return the head height."""
+            import requests as _req
+            try:
+                resp = _req.post(rpc_url, json={
+                    "jsonrpc": "2.0", "id": 1,
+                    "method": "eth_blockNumber", "params": [],
+                }, timeout=5)
+                resp.raise_for_status()
+                result = resp.json().get("result")
+                return int(result, 16) if result else None
+            except Exception:
+                return None
+
+        def _wait_for_head_change(
+            baseline: Optional[int],
+            rpc_url: str = "http://127.0.0.1:8545",
+            timeout: float = 30.0,
+            poll: float = 0.2,
+        ) -> Optional[int]:
+            """Poll until eth_blockNumber differs from *baseline*, return new head."""
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                head = _get_block_number(rpc_url)
+                if head is not None and (baseline is None or head != baseline):
+                    return head
+                time.sleep(poll)
+            return _get_block_number(rpc_url)
+
         def _run_canonical_check(label: str) -> None:
             """Run canonical chain integrity check against the live node."""
             if not os.environ.get("CANONICAL_CHECK", "").lower() in ("1", "true", "yes"):
@@ -1741,12 +1770,20 @@ def main():
             except Exception as e:
                 print(f"[WARN] Canonical check failed for {label}: {e}")
 
+        _last_known_head: Optional[int] = None
+
         def handle_pause(payload: dict) -> None:
+            nonlocal _last_known_head
             token = str(payload.get("token") or "")
             if not token:
                 print(f"[WARN] Ignoring pause payload without token: {payload}")
                 return
             scenario_name = payload.get("scenario") or "unknown"
+
+            # Snapshot head BEFORE resume so we can detect when the
+            # separator block (built by MITM addon after resume) lands.
+            _last_known_head = _get_block_number()
+
             try:
                 resume_file.unlink(missing_ok=True)
             except Exception:
@@ -1755,6 +1792,16 @@ def main():
             if not _wait_for_resume_consumed(resume_file, timeout=300.0):
                 print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
             processed_tokens.add(token)
+
+            # Wait for the separator block to land — the MITM addon builds it
+            # right after consuming the resume signal, so the head will change.
+            new_head = _wait_for_head_change(_last_known_head, timeout=30.0)
+            if new_head is not None and new_head != _last_known_head:
+                print(f"[CANONICAL-CHECK] head moved {_last_known_head} -> {new_head} (separator landed)")
+            else:
+                print(f"[CANONICAL-CHECK] head did not change from {_last_known_head} within timeout, checking anyway")
+            _last_known_head = new_head
+
             _run_canonical_check(scenario_name)
 
         try:
