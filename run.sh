@@ -1356,6 +1356,7 @@ for run in $(seq 1 $RUNS); do
         # reorg separator blocks (setup/*.txt).  This detects the Nethermind
         # bug where eth_getBlockByNumber returns stale blocks after a reorg
         # via engine_forkchoiceUpdatedV3.
+        echo "[DEBUG] CANONICAL_CHECK=${CANONICAL_CHECK:-<unset>} normalized_path=$normalized_path measured=$measured"
         if [ "${CANONICAL_CHECK:-false}" = true ] && [[ "$normalized_path" == */setup/* ]]; then
           echo "[INFO] ${PROGRESS} [CANONICAL-CHECK] after $filename"
           mkdir -p canonical-check-logs
