@@ -941,6 +941,8 @@ def start_nethermind_container(
         "10000000",
         "--JsonRpc.MaxBatchResponseBodySize",
         "3355443200",
+        "FlatDb.Enabled",
+        "true",
     ]
     if trace_json:
         cmd += [
