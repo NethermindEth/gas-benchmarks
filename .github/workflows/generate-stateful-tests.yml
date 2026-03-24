@@ -369,14 +369,14 @@ jobs:
             fname="$(basename "$log")"
 
             stale=$(grep -c "STALE at height" "$log" 2>/dev/null || true)
-            mismatches=$(grep -c "MISMATCH #" "$log" 2>/dev/null || true)
+            mismatches=$(grep -c "MISMATCH at height" "$log" 2>/dev/null || true)
 
             if [ "$stale" -gt 0 ] || [ "$mismatches" -gt 0 ]; then
               files_with_issues=$((files_with_issues + 1))
               total_stale=$((total_stale + stale))
               total_mismatches=$((total_mismatches + mismatches))
               echo "FAIL  $fname  (stale=$stale, mismatches=$mismatches)"
-              grep -E "STALE at height|MISMATCH #" "$log" | sed 's/^/  /'
+              grep -E "STALE at height|MISMATCH at height" "$log" | sed 's/^/  /'
               echo ""
             else
               echo "PASS  $fname"

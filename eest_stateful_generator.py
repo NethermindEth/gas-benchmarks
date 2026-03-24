@@ -1735,46 +1735,62 @@ def main():
             except Exception:
                 return None, None
 
-        def _wait_for_head_change(
-            baseline_hash: Optional[str],
-            rpc_url: str = "http://127.0.0.1:8545",
-            timeout: float = 10.0,
-            poll: float = 0.1,
-        ) -> tuple[Optional[int], Optional[str]]:
-            """Poll until the head block hash differs from *baseline_hash*."""
+        def _canonical_check_enabled() -> bool:
+            return os.environ.get("CANONICAL_CHECK", "").lower() in ("1", "true", "yes")
+
+        def _cc_log_dir() -> Path:
+            d = Path("canonical-check-logs")
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+
+        def _wait_for_separator_done(timeout: float = 30.0, poll: float = 0.1) -> Optional[dict]:
+            """Wait for the MITM addon to write separator_done.json, which
+            confirms the separator block's engine_forkchoiceUpdatedV3 has
+            fully returned from Nethermind (including UpdateMainChain).
+            Returns the signal payload, or None on timeout."""
+            sep_done = control_dir / "separator_done.json"
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
-                num, h = _get_head(rpc_url)
-                if h is not None and (baseline_hash is None or h != baseline_hash):
-                    return num, h
+                if sep_done.exists():
+                    try:
+                        data = json.loads(sep_done.read_text(encoding="utf-8"))
+                        sep_done.unlink(missing_ok=True)
+                        return data
+                    except Exception:
+                        pass
                 time.sleep(poll)
-            return _get_head(rpc_url)
+            # Cleanup stale file on timeout
+            try:
+                sep_done.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return None
 
+        # ──────────────────────────────────────────────────────────
+        # CHECK 2: stale canonical markers above head after reorg
+        # ──────────────────────────────────────────────────────────
         def _check_stale_canonical_above_head(
             old_head: int,
             new_head: int,
             label: str,
-        ) -> None:
+        ) -> list:
             """After a reorg from old_head down to new_head, check that
             eth_getBlockByNumber returns null for every height in
             (new_head, old_head].  Any non-null result means a stale
-            HasBlockOnMainChain marker — the Nethermind bug."""
-            if not os.environ.get("CANONICAL_CHECK", "").lower() in ("1", "true", "yes"):
-                return
+            HasBlockOnMainChain marker.
+            Returns list of stale entries."""
             if old_head is None or new_head is None or old_head <= new_head:
-                return
+                return []
 
-            cc_log_dir = Path("canonical-check-logs")
-            cc_log_dir.mkdir(parents=True, exist_ok=True)
             safe_label = re.sub(r'[^\w\-.]', '_', label)
-            cc_log = cc_log_dir / f"{safe_label}.log"
+            cc_log = _cc_log_dir() / f"{safe_label}_stale.log"
 
             stale_range_start = new_head + 1
             stale_range_end = old_head
             count = stale_range_end - stale_range_start + 1
 
             def _log(msg: str) -> None:
-                line = f"[CANONICAL-CHECK] [{label}] {msg}"
+                line = f"[CANONICAL-CHECK-STALE] [{label}] {msg}"
                 print(line)
                 sys.stdout.flush()
                 with open(cc_log, "a", encoding="utf-8") as f:
@@ -1793,7 +1809,7 @@ def main():
                 by_number = _rpc_batch(batch)
             except Exception as e:
                 _log(f"ERROR: batch fetch failed: {e}")
-                return
+                return []
 
             stale = []
             for height in range(stale_range_start, stale_range_end + 1):
@@ -1813,19 +1829,21 @@ def main():
                     _log(f"  height={s['height']}  hash={s['hash']}")
             else:
                 _log(f"All {count} height(s) correctly decanonicalised — no stale markers")
+            return stale
 
-        def _check_canonical_backward(label: str, depth: int = 50) -> None:
-            """Walk backward from head via parentHash and compare against
-            eth_getBlockByNumber at each height.  This is the same check as
-            check_canonical.py — detects when by-number returns a different
-            block than the one reachable via the hash chain."""
-            if not os.environ.get("CANONICAL_CHECK", "").lower() in ("1", "true", "yes"):
-                return
-
-            cc_log_dir = Path("canonical-check-logs")
-            cc_log_dir.mkdir(parents=True, exist_ok=True)
+        # ──────────────────────────────────────────────────────────
+        # CHECK 4: backward walk — identical to check_canonical.py
+        #
+        # Walks backward from the head via parentHash (sequential,
+        # each step depends on the previous block's parentHash),
+        # then batch-fetches eth_getBlockByNumber for every height
+        # visited, and compares.  A mismatch means the canonical
+        # index disagrees with the hash chain.
+        # ──────────────────────────────────────────────────────────
+        def _check_canonical_backward(label: str, depth: int = 50) -> list:
+            """Returns list of mismatched heights."""
             safe_label = re.sub(r'[^\w\-.]', '_', label)
-            cc_log = cc_log_dir / f"{safe_label}_backward.log"
+            cc_log = _cc_log_dir() / f"{safe_label}_backward.log"
 
             def _log(msg: str) -> None:
                 line = f"[CANONICAL-CHECK-BACKWARD] [{label}] {msg}"
@@ -1834,70 +1852,116 @@ def main():
                 with open(cc_log, "a", encoding="utf-8") as f:
                     f.write(line + "\n")
 
+            # Get head block — use the hash, not the number (same as original script)
             try:
                 head_block = _rpc_call("eth_getBlockByNumber", ["latest", False])
             except Exception as e:
                 _log(f"ERROR: cannot fetch latest block: {e}")
-                return
+                return []
             if head_block is None:
                 _log("ERROR: latest block is null")
-                return
+                return []
 
             head_number = int(head_block["number"], 16)
             head_hash = head_block["hash"]
-            _log(f"walking {depth} blocks back from #{head_number} ({head_hash})")
+            _log(f"Start block: #{head_number}  hash={head_hash}")
 
-            # Phase 1: walk backward via parentHash
-            truth = []
+            # Phase 1: walk backward via parentHash to build the truth chain.
+            # This is inherently sequential — each parent hash comes from
+            # the previous block.  (Identical to check_canonical.py Phase 1)
+            _log("Phase 1: walking backward via parentHash...")
+            phase1_start = time.monotonic()
+
+            truth_chain: list[tuple[int, str]] = []
             current = head_block
             for _ in range(depth):
                 number = int(current["number"], 16)
-                truth.append((number, current["hash"]))
+                truth_chain.append((number, current["hash"]))
+
                 parent_hash = current["parentHash"]
                 if int(parent_hash, 16) == 0:
+                    _log("Reached genesis.")
                     break
+
                 try:
                     parent = _rpc_call("eth_getBlockByHash", [parent_hash, False])
                 except Exception:
                     parent = None
                 if parent is None:
+                    _log(f"ERROR: parent block {parent_hash} not found — node may be pruned.")
                     break
                 current = parent
 
-            # Phase 2: batch fetch by-number
-            batch = [
-                {"jsonrpc": "2.0", "method": "eth_getBlockByNumber",
-                 "params": [hex(n), False], "id": n}
-                for n, _ in truth
-            ]
-            try:
-                by_number = _rpc_batch(batch)
-            except Exception as e:
-                _log(f"ERROR: batch fetch failed: {e}")
-                return
+            phase1_ms = (time.monotonic() - phase1_start) * 1000
+            _log(f"  {len(truth_chain)} block(s) collected in {phase1_ms:.0f}ms")
 
-            # Phase 3: compare
+            # Phase 2: batch fetch all by-number.
+            # (Identical to check_canonical.py Phase 2)
+            _log("Phase 2: batch fetching by number...")
+            phase2_start = time.monotonic()
+
+            numbers = [n for n, _ in truth_chain]
+            by_number_map: dict = {}
+            BATCH_SIZE = 500
+            num_batches = (len(numbers) + BATCH_SIZE - 1) // BATCH_SIZE
+
+            for i in range(0, len(numbers), BATCH_SIZE):
+                chunk = numbers[i:i + BATCH_SIZE]
+                batch = [
+                    {"jsonrpc": "2.0", "method": "eth_getBlockByNumber",
+                     "params": [hex(n), False], "id": n}
+                    for n in chunk
+                ]
+                try:
+                    by_number_map.update(_rpc_batch(batch))
+                except Exception as e:
+                    _log(f"ERROR: batch fetch failed: {e}")
+                    return []
+
+            phase2_ms = (time.monotonic() - phase2_start) * 1000
+            _log(f"  {len(numbers)} block(s) fetched in {num_batches} batch(es) in {phase2_ms:.0f}ms")
+
+            # Phase 3: compare truth chain against by-number results.
+            # (Identical to check_canonical.py Phase 3)
             mismatches = []
-            for number, chain_hash in truth:
-                block = by_number.get(number)
-                bn_hash = block["hash"] if block else None
-                if bn_hash != chain_hash:
-                    _log(f"  MISMATCH #{number}: chain={chain_hash} by-number={bn_hash}")
-                    mismatches.append(number)
+            for number, chain_hash in truth_chain:
+                by_number = by_number_map.get(number)
+                by_number_hash = by_number["hash"] if by_number else None
+
+                if by_number_hash != chain_hash:
+                    _log(f"  MISMATCH at height {number}:")
+                    _log(f"    by-hash chain : {chain_hash}")
+                    _log(f"    by-number     : {by_number_hash}")
+                    mismatches.append({
+                        "height": number,
+                        "by_hash_chain": chain_hash,
+                        "by_number": by_number_hash,
+                    })
                 else:
                     _log(f"  OK  #{number}  {chain_hash}")
 
+            total_ms = phase1_ms + phase2_ms
+            blocks_checked = len(truth_chain)
             _log("")
+            _log(f"Checked {blocks_checked} block(s) in {total_ms:.0f}ms  "
+                 f"({total_ms / blocks_checked:.1f}ms/block avg)" if blocks_checked else
+                 "No blocks checked")
             if mismatches:
-                _log(f"FOUND {len(mismatches)} MISMATCH(ES) out of {len(truth)} checked")
+                _log(f"FOUND {len(mismatches)} MISMATCH(ES):")
+                for m in mismatches:
+                    _log(f"  height={m['height']}  chain={m['by_hash_chain']}  "
+                         f"canonical={m['by_number']}")
             else:
-                _log(f"All {len(truth)} block(s) consistent — by-number matches by-hash chain")
+                _log(f"All {blocks_checked} block(s) consistent — by-number matches by-hash chain.")
+            return [m["height"] if isinstance(m, dict) else m for m in mismatches]
 
-        _last_known_head: Optional[int] = None
         _check_counter: int = 0
+        _total_stale: int = 0
+        _total_backward_mismatches: int = 0
+        _total_checks: int = 0
 
         def handle_pause(payload: dict) -> None:
-            nonlocal _last_known_head, _check_counter
+            nonlocal _check_counter, _total_stale, _total_backward_mismatches, _total_checks
             token = str(payload.get("token") or "")
             if not token:
                 print(f"[WARN] Ignoring pause payload without token: {payload}")
@@ -1906,43 +1970,73 @@ def main():
             _check_counter += 1
             check_label = f"{_check_counter:03d}_{scenario_name}"
 
-            # ── PRE-REORG CHECK ──────────────────────────────────────
-            # The current scenario just finished building blocks. The
-            # chain should be fully consistent: walking backward from
-            # head via parentHash must match eth_getBlockByNumber at
-            # every height.  If a PREVIOUS reorg left stale markers,
-            # by-number will return the wrong block here.
+            enabled = _canonical_check_enabled()
+
+            # ── STEP 4: PRE-REORG BACKWARD WALK ──────────────────
+            # The MITM addon is BLOCKED on _wait_for_resume() right
+            # now — no concurrent block building or FCU calls.
+            # The current scenario just finished building blocks.
+            # Walk backward from head via parentHash and verify that
+            # eth_getBlockByNumber agrees at every height.  If a
+            # PREVIOUS reorg left stale markers, by-number will
+            # return the wrong block here.
+            # (This is step 4 for the PREVIOUS cycle's reorg.)
             old_head_num, old_head_hash = _get_head()
-            print(f"[CANONICAL-CHECK] [{check_label}] pre-reorg head: #{old_head_num} {old_head_hash}")
+            if enabled:
+                print(f"[CANONICAL-CHECK] [{check_label}] pre-reorg head: "
+                      f"#{old_head_num} {old_head_hash}")
+                check_depth = int(os.environ.get("CANONICAL_CHECK_DEPTH", "50"))
+                bw_mismatches = _check_canonical_backward(check_label, depth=check_depth)
+                _total_backward_mismatches += len(bw_mismatches)
+                _total_checks += 1
 
-            check_depth = int(os.environ.get("CANONICAL_CHECK_DEPTH", "50"))
-            _check_canonical_backward(check_label, depth=check_depth)
-
-            # ── RESUME & REORG ───────────────────────────────────────
+            # ── STEP 1: RESUME → REORG HAPPENS ───────────────────
+            # Writing the resume signal unblocks the MITM addon,
+            # which then builds the separator block and sends
+            # engine_forkchoiceUpdatedV3 (the reorg).
             try:
                 resume_file.unlink(missing_ok=True)
             except Exception:
                 pass
             _write_resume_signal(resume_file, token, scenario_name)
             if not _wait_for_resume_consumed(resume_file, timeout=300.0):
-                print(f"[WARN] Resume signal not consumed for scenario {scenario_name} (token={token}) within timeout")
+                print(f"[WARN] Resume signal not consumed for scenario "
+                      f"{scenario_name} (token={token}) within timeout")
             processed_tokens.add(token)
 
-            # Wait for the separator block FCU to land (compare by hash,
-            # not number — the separator can be at the same height).
-            new_head_num, new_head_hash = _wait_for_head_change(old_head_hash, timeout=10.0)
-            if new_head_hash is not None and new_head_hash != old_head_hash:
-                print(f"[CANONICAL-CHECK] [{check_label}] post-reorg head: #{new_head_num} {new_head_hash} (was #{old_head_num})")
-            else:
-                print(f"[CANONICAL-CHECK] [{check_label}] head hash unchanged at #{old_head_num} {old_head_hash} within timeout")
+            # ── WAIT FOR REORG TO COMPLETE ────────────────────────
+            # Wait for separator_done.json — written by the MITM
+            # addon AFTER _insert_empty_hook_separator() returns,
+            # i.e. AFTER the FCU response comes back from
+            # Nethermind.  This guarantees UpdateMainChain has
+            # fully executed (no race with marker flushing).
+            if enabled:
+                sep_info = _wait_for_separator_done(timeout=30.0)
+                if sep_info:
+                    sep_hash = sep_info.get("hash", "?")
+                    print(f"[CANONICAL-CHECK] [{check_label}] separator done: "
+                          f"hash={sep_hash}")
+                else:
+                    print(f"[CANONICAL-CHECK] [{check_label}] WARNING: "
+                          f"separator_done not received within timeout")
 
-            _last_known_head = new_head_num
+                new_head_num, new_head_hash = _get_head()
+                print(f"[CANONICAL-CHECK] [{check_label}] post-reorg head: "
+                      f"#{new_head_num} {new_head_hash} (was #{old_head_num})")
 
-            # ── POST-REORG CHECK ─────────────────────────────────────
-            # Heights above the new head should return null from
-            # eth_getBlockByNumber.  Any non-null = stale marker.
-            if old_head_num is not None and new_head_num is not None:
-                _check_stale_canonical_above_head(old_head_num, new_head_num, check_label)
+                # ── STEP 2: STALE-ABOVE CHECK ────────────────────
+                # Heights (new_head, old_head] should return null.
+                if old_head_num is not None and new_head_num is not None:
+                    stale = _check_stale_canonical_above_head(
+                        old_head_num, new_head_num, check_label)
+                    _total_stale += len(stale)
+
+            # ── STEP 3: RETURN ────────────────────────────────────
+            # handle_pause returns → main loop resumes → MITM addon
+            # continues building the next scenario's blocks.
+            # The next reorg CANNOT happen until the next
+            # handle_pause is called, at which point step 4 runs
+            # the backward walk first.
 
         try:
             while True:
@@ -1977,6 +2071,24 @@ def main():
 
         if return_code is None:
             return_code = tests_proc.returncode
+
+        # ── POST-GENERATION CANONICAL CHECK SUMMARY ───────────────
+        if _canonical_check_enabled() and _total_checks > 0:
+            print("")
+            print("=" * 70)
+            print("CANONICAL CHECK SUMMARY")
+            print("=" * 70)
+            print(f"  Total reorg cycles checked:     {_total_checks}")
+            print(f"  Stale markers found (check 2):  {_total_stale}")
+            print(f"  Backward mismatches (check 4):  {_total_backward_mismatches}")
+            if _total_stale == 0 and _total_backward_mismatches == 0:
+                print("  RESULT: PASS — no canonical chain inconsistencies detected")
+            else:
+                print("  RESULT: FAIL — canonical chain inconsistencies detected!")
+                print("  See canonical-check-logs/ for details.")
+            print("=" * 70)
+            print("")
+
         if args.trace_json:
             generate_opcode_trace_json(
                 testing_dir=Path(payloads_dir / "testing"),

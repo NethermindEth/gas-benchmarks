@@ -161,6 +161,7 @@ _PHASE_BASE_DIRS: Dict[str, pathlib.Path] = {
 _CONTROL_DIR = _PAYLOADS_DIR / "_control"
 _PAUSE_FILE = _CONTROL_DIR / "pause.json"
 _RESUME_FILE = _CONTROL_DIR / "resume.json"
+_SEPARATOR_DONE_FILE = _CONTROL_DIR / "separator_done.json"
 _PAUSE_LOCK = threading.Lock()
 _PAUSE_EVENT = threading.Event()
 _PAUSE_EVENT.set()
@@ -377,6 +378,19 @@ def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
     _PENDING_SEPARATOR_PAIR = (np_body, fcu_body)
     _SEPARATOR_READY_FOR_NEXT_SETUP = True
     _log(f"inserted empty hook separator ({reason}) hash={sep_hash}")
+
+    # Signal to the generator that the separator (including its FCU) is
+    # fully processed by Nethermind.  The generator waits for this file
+    # before running post-reorg canonical checks — eliminates the race
+    # between Head being updated and canonical markers being flushed.
+    try:
+        _ensure_control_dir()
+        _SEPARATOR_DONE_FILE.write_text(
+            json.dumps({"hash": sep_hash, "reason": reason, "timestamp": time.time()}),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        _log(f"WARN separator_done signal write failed: {e}")
 
 
 def _http_post_json(url: str, obj: Any, timeout: int = 90, headers: Optional[Dict[str, str]] = None) -> Any:
