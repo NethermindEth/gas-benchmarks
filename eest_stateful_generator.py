@@ -2026,17 +2026,30 @@ def main():
 
                 # ── STEP 2: STALE-ABOVE CHECK ────────────────────
                 # Heights (new_head, old_head] should return null.
+                # The MITM addon is BLOCKED waiting for check_done.json,
+                # so no new blocks can be built during this check.
                 if old_head_num is not None and new_head_num is not None:
                     stale = _check_stale_canonical_above_head(
                         old_head_num, new_head_num, check_label)
                     _total_stale += len(stale)
 
+                # ── ACK: unblock the MITM addon ──────────────────
+                # Write check_done.json so the MITM addon can continue
+                # building the next scenario's blocks.
+                check_done_file = control_dir / "check_done.json"
+                try:
+                    check_done_file.write_text(
+                        json.dumps({"label": check_label, "timestamp": time.time()}),
+                        encoding="utf-8",
+                    )
+                except Exception as e:
+                    print(f"[WARN] Failed to write check_done: {e}")
+
             # ── STEP 3: RETURN ────────────────────────────────────
             # handle_pause returns → main loop resumes → MITM addon
-            # continues building the next scenario's blocks.
-            # The next reorg CANNOT happen until the next
-            # handle_pause is called, at which point step 4 runs
-            # the backward walk first.
+            # reads check_done.json and continues building the next
+            # scenario's blocks.  The next reorg CANNOT happen until
+            # the next handle_pause, where step 4 runs first.
 
         try:
             while True:

@@ -162,6 +162,7 @@ _CONTROL_DIR = _PAYLOADS_DIR / "_control"
 _PAUSE_FILE = _CONTROL_DIR / "pause.json"
 _RESUME_FILE = _CONTROL_DIR / "resume.json"
 _SEPARATOR_DONE_FILE = _CONTROL_DIR / "separator_done.json"
+_CHECK_DONE_FILE = _CONTROL_DIR / "check_done.json"
 _PAUSE_LOCK = threading.Lock()
 _PAUSE_EVENT = threading.Event()
 _PAUSE_EVENT.set()
@@ -380,17 +381,41 @@ def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
     _log(f"inserted empty hook separator ({reason}) hash={sep_hash}")
 
     # Signal to the generator that the separator (including its FCU) is
-    # fully processed by Nethermind.  The generator waits for this file
-    # before running post-reorg canonical checks — eliminates the race
-    # between Head being updated and canonical markers being flushed.
+    # fully processed by Nethermind.  Then BLOCK until the generator
+    # acknowledges via check_done.json — this prevents the next
+    # scenario's blocks from being built before the stale check runs.
     try:
         _ensure_control_dir()
+        # Clean up any stale ack from previous cycle
+        try:
+            _CHECK_DONE_FILE.unlink(missing_ok=True)
+        except Exception:
+            pass
         _SEPARATOR_DONE_FILE.write_text(
             json.dumps({"hash": sep_hash, "reason": reason, "timestamp": time.time()}),
             encoding="utf-8",
         )
     except Exception as e:
         _log(f"WARN separator_done signal write failed: {e}")
+
+    # Wait for generator to finish the stale check and write check_done.json.
+    # Only wait if CANONICAL_CHECK is enabled; otherwise continue immediately.
+    if os.environ.get("CANONICAL_CHECK", "").lower() in ("1", "true", "yes"):
+        _log(f"waiting for check_done acknowledgment (separator {reason})")
+        deadline = time.time() + 60.0
+        while time.time() < deadline:
+            if _CHECK_DONE_FILE.exists():
+                try:
+                    _CHECK_DONE_FILE.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                _log(f"check_done received, continuing")
+                break
+            if _STOP:
+                break
+            time.sleep(0.05)
+        else:
+            _log(f"WARN check_done not received within timeout, continuing anyway")
 
 
 def _http_post_json(url: str, obj: Any, timeout: int = 90, headers: Optional[Dict[str, str]] = None) -> Any:
