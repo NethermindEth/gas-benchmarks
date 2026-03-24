@@ -92,11 +92,11 @@ else:
     _FULL_LOG_ENABLED = bool(_FULL_LOG_RAW)
 
 _MERGED_LOG_RAW = _CFG.get("merged_log_path")
-_MERGED_LOG_PATH = pathlib.Path(_MERGED_LOG_RAW).expanduser() if _MERGED_LOG_RAW else _LOG_FILE_PATH.with_name("mitm_nethermind.log")
+_MERGED_LOG_PATH = pathlib.Path(_MERGED_LOG_RAW).expanduser() if _MERGED_LOG_RAW else _LOG_FILE_PATH.with_name("mitm_besu.log")
 if not _MERGED_LOG_PATH.is_absolute():
     _MERGED_LOG_PATH = _MERGED_LOG_PATH.resolve()
 
-_NETHERMIND_CONTAINER = _CFG.get("nethermind_container") or "eest-nethermind"
+_BESU_CONTAINER = _CFG.get("besu_container") or "eest-besu"
 _LIGHT_LOG = bool(_CFG.get("light_logs", True))
 _MITM_QUIET = bool(_CFG.get("mitm_quiet", True))
 _MITM_TERMLOG_VERBOSITY = _CFG.get("mitm_termlog_verbosity", "error")
@@ -272,19 +272,19 @@ def _apply_mitm_quiet_options() -> None:
     _set_mitm_option("flow_detail", _MITM_FLOW_DETAIL)
 
 
-def _capture_nethermind_logs() -> List[str]:
+def _capture_besu_logs() -> List[str]:
     global _NM_LAST_TS
     since_args: List[str] = ["--since", _NM_LAST_TS] if _NM_LAST_TS else ["--tail", "200"]
     try:
         cp = subprocess.run(
-            ["docker", "logs", "--timestamps", *since_args, _NETHERMIND_CONTAINER],
+            ["docker", "logs", "--timestamps", *since_args, _BESU_CONTAINER],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             check=False,
         )
         if cp.returncode != 0:
-            _log(f"[NM] docker logs rc={cp.returncode} out={cp.stdout[-200:]} err={cp.stderr or ''}")
+            _log(f"[BESU] docker logs rc={cp.returncode} out={cp.stdout[-200:]} err={cp.stderr or ''}")
             return []
         lines = [ln for ln in cp.stdout.splitlines() if ln.strip()]
         if lines:
@@ -294,7 +294,7 @@ def _capture_nethermind_logs() -> List[str]:
                 _NM_LAST_TS = ts_part
         return lines
     except Exception as e:
-        _log(f"[NM] docker logs error: {e}")
+        _log(f"[BESU] docker logs error: {e}")
         return []
 
 
@@ -305,10 +305,10 @@ def _emit_newpayload_event(exec_payload: Dict[str, Any], parent_hash: str) -> No
     summary = f"[MITM][NP] block={block_hash} blockNumber={block_number} parent={parent_hash} txs={len(txs)}"
     _log(summary, to_merged=True)
 
-    nm_lines = _capture_nethermind_logs()
+    nm_lines = _capture_besu_logs()
     if nm_lines:
         ts_prefix = _now_ts()
-        prefixed = [f"{ts_prefix} [NM] {ln}" for ln in nm_lines]
+        prefixed = [f"{ts_prefix} [BESU] {ln}" for ln in nm_lines]
         _append_lines(_MERGED_LOG_PATH, prefixed)
         _append_lines(_LOG_FILE_PATH, prefixed)
         if _FULL_LOG_ENABLED:

@@ -818,8 +818,8 @@ def download_snapshot(chain: str, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     sh = textwrap.dedent(f"""
         apk add --no-cache curl tar zstd >/dev/null && \
-        BLOCK_NUMBER=$(curl -s https://snapshots.ethpandaops.io/{chain}/nethermind/latest) && \
-        curl -s -L https://snapshots.ethpandaops.io/{chain}/nethermind/$BLOCK_NUMBER/snapshot.tar.zst | \
+        BLOCK_NUMBER=$(curl -s https://snapshots.ethpandaops.io/{chain}/besu/latest) && \
+        curl -s -L https://snapshots.ethpandaops.io/{chain}/besu/$BLOCK_NUMBER/snapshot.tar.zst | \
         tar -I zstd -xvf - -C /data --strip-components=1
     """)
     cmd = [
@@ -836,14 +836,14 @@ def ensure_jwt(jwt_dir: Path) -> Path:
     if not jwt.exists(): jwt.write_text(os.urandom(32).hex())
     return jwt
 
-def start_nethermind_container(
+def start_besu_container(
     chain: str,
     db_dir: Path,
     jwt_path: Path,
     rpc_port=8545,
     engine_port=8551,
-    name="eest-nethermind",
-    image: str = "nethermindeth/nethermind:gp-hacked",
+    name="eest-besu",
+    image: str = "ethpandaops/besu:bal-devnet-2",
     genesis_path: Optional[Path] = None,
     trace_json: bool = False,
     extra_flags: Optional[list] = None,
@@ -868,82 +868,39 @@ def start_nethermind_container(
     ]
     if trace_json:
         cmd += ["-v", f"{str(Path('opcode-tracing').resolve())}:/test-output"]
-    genesis_volume = None
     if genesis_path:
         resolved_genesis = Path(genesis_path).resolve()
         if not resolved_genesis.is_file():
             raise FileNotFoundError(f"Genesis file not found at {resolved_genesis}")
-        genesis_volume = ["-v", f"{str(resolved_genesis)}:/genesis/custom.json:ro"]
-        cmd += genesis_volume
+        cmd += ["-v", f"{str(resolved_genesis)}:/genesis/custom.json:ro"]
 
     cmd.append(image)
 
     if genesis_path:
-        cmd += ["--config", "none", "--Init.ChainSpecPath", "/genesis/custom.json"]
+        cmd += ["--genesis-file=/genesis/custom.json"]
     else:
         chain_name = str(chain).strip().lower()
-        # perf-devnet-2 uses mainnet-format DB/genesis in this workflow; Nethermind has no built-in "perf-devnet-2" config.
-        runtime_config = "mainnet" if chain_name in ("perf-devnet-2", "mainnet", "ethereum") else str(chain)
-        if runtime_config != str(chain):
-            print(f"[INFO] Overriding Nethermind runtime --config from {chain!r} to {runtime_config!r}")
-        cmd += ["--config", runtime_config]
+        runtime_network = "mainnet" if chain_name in ("perf-devnet-2", "mainnet", "ethereum") else str(chain)
+        if runtime_network != str(chain):
+            print(f"[INFO] Overriding Besu runtime --network from {chain!r} to {runtime_network!r}")
+        cmd += [f"--network={runtime_network}"]
 
     cmd += [
-        "--JsonRpc.Enabled",
-        "true",
-        "--JsonRpc.Host",
-        "0.0.0.0",
-        "--JsonRpc.Port",
-        str(rpc_port),
-        "--JsonRpc.EngineHost",
-        "0.0.0.0",
-        "--JsonRpc.EnginePort",
-        str(engine_port),
-        "--JsonRpc.JwtSecretFile",
-        "/jwt/jwt.hex",
-        "--JsonRpc.UnsecureDevNoRpcAuthentication",
-        "true",
-        "--JsonRpc.EnabledModules",
-        "Eth,Net,Web3,Admin,Debug,Trace,TxPool,Testing",
-        "--JsonRpc.EngineEnabledModules",
-        "Net,Eth,Subscribe,Web3,Testing,Engine",
-        "--Blocks.TargetBlockGasLimit",
-        "1000000000000",
-        "--data-dir",
-        "/db",
-        "--log",
-        "INFO",
-        "--Network.MaxActivePeers",
-        "0",
-        "--TxPool.Size",
-        "0",
-        "--TxPool.MaxTxSize",
-        "null",
-        "--Merge.TerminalTotalDifficulty",
-        "0",
-        "--Init.LogRules",
-        "Consensus.Processing.ProcessingStats:Debug",
-        "--Blocks.SingleBlockImprovementOfSlot",
-        "10",
-        "--Blocks.SecondsPerSlot",
-        "2",
-        "--Merge.NewPayloadBlockProcessingTimeout",
-        "70000",
-        "--Init.BaseDbPath",
-        "/db/mainnet",
-        "--JsonRpc.MaxBatchSize",
-        "10000000",
-        "--JsonRpc.MaxBatchResponseBodySize",
-        "3355443200",
+        "--rpc-http-enabled",
+        "--rpc-http-host=0.0.0.0",
+        f"--rpc-http-port={rpc_port}",
+        "--rpc-http-apis=ETH,NET,WEB3,ADMIN,DEBUG,TRACE,TXPOOL,TESTING",
+        "--engine-rpc-enabled",
+        f"--engine-rpc-port={engine_port}",
+        f"--engine-jwt-secret=/jwt/{jwt_path.name}",
+        "--host-allowlist=*",
+        "--rpc-http-cors-origins=*",
+        f"--data-path=/db",
+        f"--target-gas-limit=1000000000000",
+        "--logging=INFO",
+        "--p2p-enabled=false",
+        "--tx-pool-max-size=0",
     ]
-    if trace_json:
-        cmd += [
-            "--OpcodeTracing.Enabled", "true",
-            "--OpcodeTracing.Mode", "Realtime",
-            "--OpcodeTracing.StartBlock", "1",
-            "--OpcodeTracing.EndBlock", "2",
-            "--OpcodeTracing.OutputDirectory", "/test-output",
-        ]
     if extra_flags:
         cmd += extra_flags
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
@@ -964,7 +921,7 @@ def print_container_logs(name: str):
         return
     try:
         out = subprocess.run(["docker", "logs", name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, check=False)
-        Path("nethermind.log").write_text(out.stdout, encoding="utf-8")
+        Path("besu.log").write_text(out.stdout, encoding="utf-8")
     except Exception:
         pass
 
@@ -1276,14 +1233,14 @@ def main():
              "Provide no value to pass an empty flag through.",
     )
     parser.add_argument(
-        "--nethermind-image",
-        default="nethermindeth/nethermind:gp-hacked",
-        help="Docker image to use when launching the Nethermind container.",
+        "--besu-image",
+        default="ethpandaops/besu:bal-devnet-2",
+        help="Docker image to use when launching the Besu container.",
     )
     parser.add_argument(
-        "--nethermind-extra-flags",
+        "--besu-extra-flags",
         default="",
-        help="Extra CLI flags passed to the Nethermind container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None').",
+        help="Extra CLI flags passed to the Besu container (e.g. '--sync-mode=FULL').",
     )
     parser.add_argument(
         "--gas-bump-count",
@@ -1514,31 +1471,31 @@ def main():
             shutil.rmtree(opcode_tracing_dir, ignore_errors=True)
         opcode_tracing_dir.mkdir(parents=True, exist_ok=True)
 
-    stop_and_remove_container("eest-nethermind")
+    stop_and_remove_container("eest-besu")
     if use_overlay_base:
         ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
 
-    container_name = "eest-nethermind"
+    container_name = "eest-besu"
     CLEANUP["container"] = container_name
     active_db_dir = primary_merged
-    nm_extra_flags = shlex.split(args.nethermind_extra_flags) if args.nethermind_extra_flags else []
-    if nm_extra_flags:
-        print(f"[INFO] Extra Nethermind flags: {nm_extra_flags}")
+    besu_extra_flags = shlex.split(args.besu_extra_flags) if args.besu_extra_flags else []
+    if besu_extra_flags:
+        print(f"[INFO] Extra Besu flags: {besu_extra_flags}")
 
     def restart_node(db_dir: Path, *, show_logs: bool = False) -> None:
         nonlocal active_db_dir
         stop_and_remove_container(container_name)
-        _ = start_nethermind_container(
+        _ = start_besu_container(
             chain=args.chain,
             db_dir=db_dir,
             jwt_path=jwt_path,
             rpc_port=8545,
             engine_port=8551,
             name=container_name,
-            image=args.nethermind_image,
+            image=args.besu_image,
             genesis_path=genesis_file,
             trace_json=args.trace_json,
-            extra_flags=nm_extra_flags,
+            extra_flags=besu_extra_flags,
         )
         if not wait_for_port("127.0.0.1", 8545, timeout=300):
             print("ERROR: 8545 not reachable.")
@@ -1638,8 +1595,8 @@ def main():
         "mitm_log_path": str(Path("mitm.log").resolve()),
         "mitm_full_log_path": str(Path("mitm_full.log").resolve()),
         "mitm_full_log": True,
-        "merged_log_path": str(Path("mitm_nethermind.log").resolve()),
-        "nethermind_container": container_name,
+        "merged_log_path": str(Path("mitm_besu.log").resolve()),
+        "besu_container": container_name,
         "light_logs": True,
         "testing_buildblock_timestamp_hack": args.testing_buildblock_timestamp_hack,
         "slot_counter_start": _PREP_SLOT_COUNTER,

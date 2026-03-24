@@ -21,10 +21,10 @@ on:
           - perf-devnet-2
           - perf-devnet-3
         default: "mainnet"
-      nethermind_image:
-        description: "Nethermind Docker image"
+      besu_image:
+        description: "Besu Docker image"
         required: true
-        default: "nethermindeth/nethermind:testing-rpc"
+        default: "ethpandaops/besu:bal-devnet-2"
       fork:
         description: "Fork name"
         required: true
@@ -66,8 +66,8 @@ on:
           - warmup_only
           - stateful_only
         default: "full"
-      nethermind_extra_flags:
-        description: "Extra Nethermind CLI flags passed to the container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None')"
+      besu_extra_flags:
+        description: "Extra Besu CLI flags passed to the container (e.g. '--sync-mode=FULL')"
         required: false
         default: ""
       warmup_snapshot_backend:
@@ -94,7 +94,7 @@ jobs:
       DB_PORT: ${{ secrets.PERFNET_0_DB_PORT }}
       DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
       DB_NAME: ${{ secrets.PERFNET_0_DB_NAME }}
-      CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:flat' }}
+      CFG_BESU_IMAGE: ${{ github.event.inputs.besu_image || 'ethpandaops/besu:bal-devnet-2' }}
       CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
       CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
       CFG_MODE: ${{ github.event.inputs.mode || 'compute' }}
@@ -110,7 +110,7 @@ jobs:
       CFG_PARAMETER_FILTER: ${{ github.event.inputs.parameter_filter || '' }}
       CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
       CFG_WARMUP_SNAPSHOT_BACKEND: ${{ github.event.inputs.warmup_snapshot_backend || 'overlay' }}
-      CFG_NETHERMIND_EXTRA_FLAGS: ${{ github.event.inputs.nethermind_extra_flags || '' }}
+      CFG_BESU_EXTRA_FLAGS: ${{ github.event.inputs.besu_extra_flags || '' }}
 
     steps:
       - name: Checkout gas-benchmarks repository from triggering branch
@@ -139,7 +139,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Prepare Nethermind tools (Kute)
+      - name: Prepare tools (Kute)
         shell: bash
         run: |
           set -euo pipefail
@@ -152,20 +152,20 @@ jobs:
 
           case "$CFG_CHAIN" in
             mainnet)
-              SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
-              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              SNAPSHOT_DIR="/mnt/sda/mainnet/besu"
+              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR"
               EXECUTION_CHAIN="mainnet"
               STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_mainnet.json"
               ;;
             perf-devnet-2)
-              SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-2/nethermind"
-              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              SNAPSHOT_DIR="/mnt/sda/perf-devnet-2/besu"
+              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR"
               EXECUTION_CHAIN="mainnet"
               STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_bloatnet.json"
               ;;
             perf-devnet-3)
-              SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-3/nethermind"
-              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
+              SNAPSHOT_DIR="/mnt/sda/perf-devnet-3/besu"
+              SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR"
               EXECUTION_CHAIN="mainnet"
               STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_bloatnet.json"
               ;;
@@ -202,7 +202,7 @@ jobs:
             DB_TABLE="${TABLE_BASE}_metadata"
           fi
 
-          echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
+          echo "SNAPSHOT_DIR=$SNAPSHOT_DIR" >> "$GITHUB_ENV"
           echo "SNAPSHOT_DIR_WARMUP=$SNAPSHOT_DIR_WARMUP" >> "$GITHUB_ENV"
           echo "EXECUTION_CHAIN=$EXECUTION_CHAIN" >> "$GITHUB_ENV"
           echo "STUBS_FILE=$STUBS_FILE" >> "$GITHUB_ENV"
@@ -244,7 +244,7 @@ jobs:
           #   GENESIS_ARGS=(--genesis-path "scripts/genesisfiles/nethermind/bloatnet-prague.json")
           # fi
           PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 eest_stateful_generator.py \
-            --nethermind-image "$CFG_NETHERMIND_IMAGE" \
+            --besu-image "$CFG_BESU_IMAGE" \
             --fork "$CFG_FORK" \
             --rpc-seed-key "$RPC_SEED_KEY" \
             --rpc-address "$CFG_RPC_ADDRESS" \
@@ -258,7 +258,7 @@ jobs:
             --eest_mode "$CFG_EEST_MODE" \
             --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
             --stubs-file "$STUBS_FILE" \
-            --snapshot-dir "$SNAPSHOT_DIR_NM" \
+            --snapshot-dir "$SNAPSHOT_DIR" \
             --chain "$EXECUTION_CHAIN" \
             "${GENESIS_ARGS[@]}" \
             --overlay-root "$OVERLAY_ROOT" \
@@ -266,7 +266,7 @@ jobs:
             --trace-json \
             --trace-json-output "$TRACES_JSON" \
             ${CFG_PARAMETER_FILTER:+--parameter_filter "$CFG_PARAMETER_FILTER"} \
-            ${CFG_NETHERMIND_EXTRA_FLAGS:+--nethermind-extra-flags="$CFG_NETHERMIND_EXTRA_FLAGS"} \
+            ${CFG_BESU_EXTRA_FLAGS:+--besu-extra-flags="$CFG_BESU_EXTRA_FLAGS"} \
             2>&1 | tee -a "$STATEFUL_GENERATOR_LOG"
 
       - name: Print stateful generator log
@@ -317,24 +317,24 @@ jobs:
             --network "mainnet" \
             "${FILTER_ARGS[@]}"
 
-      - name: Print warmup nethermind log
+      - name: Print warmup besu log
         if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' }}
         shell: bash
         run: |
           set +e
-          if [ -f warmup_nethermind.log ]; then
-            echo "=== warmup_nethermind.log (full) ==="
-            cat warmup_nethermind.log
+          if [ -f warmup_besu.log ]; then
+            echo "=== warmup_besu.log (full) ==="
+            cat warmup_besu.log
           else
-            echo "warmup_nethermind.log not found"
+            echo "warmup_besu.log not found"
           fi
 
-      - name: Upload warmup nethermind log artifact
+      - name: Upload warmup besu log artifact
         if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: warmup-nethermind-log-${{ github.run_id }}
-          path: warmup_nethermind.log
+          name: warmup-besu-log-${{ github.run_id }}
+          path: warmup_besu.log
           if-no-files-found: warn
 
       - name: Upload traces metadata to DB
@@ -400,24 +400,24 @@ jobs:
             sleep "${sleep_seconds}"
           done
 
-      - name: Print nethermind.log
+      - name: Print besu.log
         if: always()
         shell: bash
         run: |
           set +e
-          if [ -f nethermind.log ]; then
-            echo "=== nethermind.log (full) ==="
-            cat nethermind.log
+          if [ -f besu.log ]; then
+            echo "=== besu.log (full) ==="
+            cat besu.log
           else
-            echo "nethermind.log not found"
+            echo "besu.log not found"
           fi
 
-      - name: Upload nethermind.log artifact
+      - name: Upload besu.log artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nethermind-log-${{ github.run_id }}
-          path: nethermind.log
+          name: besu-log-${{ github.run_id }}
+          path: besu.log
           if-no-files-found: warn
 
       - name: Upload generated artifacts
@@ -430,9 +430,9 @@ jobs:
             ${{ env.WARMUP_DIR }}
             mitm.log
             mitm_full.log
-            mitm_nethermind.log
-            nethermind.log
-            warmup_nethermind.log
+            mitm_besu.log
+            besu.log
+            warmup_besu.log
             stateful_generator.log
 
       - name: Purge all running Docker containers on runner
@@ -458,10 +458,10 @@ jobs:
                 [ -n "$snap" ] && (zfs destroy "$snap" || sudo zfs destroy "$snap" || true)
               done
             fi
-            rm -rf "$OVERLAY_ROOT"/nethermind "$OVERLAY_ROOT"/geth || true
+            rm -rf "$OVERLAY_ROOT"/besu "$OVERLAY_ROOT"/geth || true
           else
             # Warmup overlays: /mnt/sda/overlay-workspace/<client>/<overlay_id>/{merged,upper,work}
-            for client in nethermind geth; do
+            for client in besu geth; do
               if [ -d "$OVERLAY_ROOT/$client" ]; then
                 find "$OVERLAY_ROOT/$client" -mindepth 2 -maxdepth 2 -type d -name merged | sort -r | while read -r mp; do
                   mountpoint -q "$mp" && (umount "$mp" || umount -l "$mp" || true)
