@@ -1361,8 +1361,8 @@ def main():
         "--eest-mode",
         "--eest_mode",
         dest="eest_mode",
-        default="Benchmark",
-        help="Mode passed to execute remote via -m (supports repricings/benchmarks/stateful).",
+        default="",
+        help="Mode passed to execute remote via -m (e.g. repricing). Leave empty to omit -m entirely.",
     )
     parser.add_argument(
         "--eest-stateful-testing",
@@ -1694,16 +1694,18 @@ def main():
 
         tests_rpc = args.rpc_endpoint or "http://127.0.0.1:8549"
         mode_key = (args.eest_mode or "").strip().lower()
-        mode_map = {
-            "repricing": "repricing",
-            "repricings": "repricing",
-            "benchmark": "benchmark",
-            "benchmarks": "benchmark",
-            "stateful": "stateful",
-        }
-        if mode_key not in mode_map:
-            raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
-        eest_mode = mode_map[mode_key]
+        eest_mode = ""
+        if mode_key:
+            mode_map = {
+                "repricing": "repricing",
+                "repricings": "repricing",
+                "benchmark": "benchmark",
+                "benchmarks": "benchmark",
+                "stateful": "stateful",
+            }
+            if mode_key not in mode_map:
+                raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
+            eest_mode = mode_map[mode_key]
         uv_cmd = [
             "uv", "run", "execute", "remote", "-v",
             f"--fork={args.fork}",
@@ -1724,8 +1726,10 @@ def main():
             "--skip-cleanup",
             args.test_path,
             "--",
-            "-m", eest_mode, "-n", "1",
+            "-n", "1",
         ]
+        if eest_mode:
+            uv_cmd.extend(["-m", eest_mode])
         if args.parameter_filter:
             uv_cmd.extend(["-k", args.parameter_filter])
         stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")
