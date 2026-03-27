@@ -74,6 +74,11 @@ on:
         description: "Extra Nethermind CLI flags passed to the container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None')"
         required: false
         default: ""
+      commit_results:
+        description: "Commit generated data to the repo"
+        required: false
+        type: boolean
+        default: false
       warmup_snapshot_backend:
         description: "Snapshot backend for warmup generation"
         required: true
@@ -369,6 +374,7 @@ jobs:
           rm -f "$TRACES_JSON"
 
       - name: Commit generated tests and warmups to triggering branch
+        if: ${{ github.event.inputs.commit_results == 'true' }}
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
