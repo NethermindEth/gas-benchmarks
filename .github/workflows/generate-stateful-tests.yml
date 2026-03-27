@@ -79,6 +79,11 @@ on:
         required: false
         type: boolean
         default: false
+      push_to_db:
+        description: "Upload traces metadata to PostgreSQL"
+        required: false
+        type: boolean
+        default: false
       warmup_snapshot_backend:
         description: "Snapshot backend for warmup generation"
         required: true
@@ -347,7 +352,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload traces metadata to DB
-        if: ${{ env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ github.event.inputs.push_to_db == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         env:
           DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
