@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 import os
+import shlex
 import shutil
 import signal
 import socket
@@ -666,6 +667,7 @@ def _generate_preparation_payloads(
                     "EMPTY",
                     save_path=gas_bump_file,
                     timestamp_hack=args.testing_buildblock_timestamp_hack,
+                    fork=args.fork,
                 )
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
@@ -677,6 +679,7 @@ def _generate_preparation_payloads(
             args.rpc_address,
             save_path=funding_file,
             timestamp_hack=args.testing_buildblock_timestamp_hack,
+            fork=args.fork,
         )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
@@ -705,6 +708,7 @@ def _replay_preparation_payloads(
     jwt_hex_path: Path,
     gas_bump_file: Path,
     funding_file: Path,
+    fork: str = "Prague",
 ) -> str:
     """Replay existing gas-bump and funding payload files against the running node."""
     import hmac, hashlib
@@ -726,6 +730,7 @@ def _replay_preparation_payloads(
             raise RuntimeError(f"Engine error replaying {body.get('method')}: {j['error']}")
         return j
 
+    target_np_method = _newpayload_method_for_fork(fork)
     finalized = ""
     for label, path in [("gas-bump", gas_bump_file), ("funding", funding_file)]:
         if not path.exists():
@@ -746,6 +751,9 @@ def _replay_preparation_payloads(
                 continue
             method = obj.get("method", "")
             if isinstance(method, str) and method.startswith("engine_newPayload"):
+                if method != target_np_method:
+                    obj["method"] = target_np_method
+                    line = json.dumps(obj, separators=(",", ":"))
                 replayed += 1
                 now = time.monotonic()
                 if replayed == 1 or replayed == np_count or now - last_log >= 5:
@@ -853,6 +861,7 @@ def start_nethermind_container(
     image: str = "nethermindeth/nethermind:gp-hacked",
     genesis_path: Optional[Path] = None,
     trace_json: bool = False,
+    extra_flags: Optional[list] = None,
 ) -> str:
     subprocess.run(["docker", "pull", image], check=False)
     resolved_db = db_dir.resolve()
@@ -950,6 +959,8 @@ def start_nethermind_container(
             "--OpcodeTracing.EndBlock", "2",
             "--OpcodeTracing.OutputDirectory", "/test-output",
         ]
+    if extra_flags:
+        cmd += extra_flags
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
 
@@ -1048,6 +1059,12 @@ def _extract_execution_requests(payload: Dict[str, Any]) -> List[Any]:
     return []
 
 
+def _newpayload_method_for_fork(fork: str) -> str:
+    if fork.lower() in ("amsterdam",):
+        return "engine_newPayloadV5"
+    return "engine_newPayloadV4"
+
+
 def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> Optional[str]:
     for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
         val = payload.get(key)
@@ -1060,6 +1077,8 @@ def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dic
     return None
 
 
+_PREP_SLOT_COUNTER: int = 0
+
 def preparation_getpayload(
     engine_url: str,
     jwt_hex_path: Path,
@@ -1067,9 +1086,10 @@ def preparation_getpayload(
     save_path: Path | None = None,
     *,
     timestamp_hack: bool = False,
+    fork: str = "Prague",
 ):
     """
-    Build a payload on the engine via testing_buildBlockV1, POST engine_newPayloadV4,
+    Build a payload on the engine via testing_buildBlockV1, POST engine_newPayload,
     then engine_forkchoiceUpdatedV3.
     If save_path is provided, append TWO minified JSON-RPC lines to that file:
       1) the engine_newPayloadV4 request body
@@ -1105,6 +1125,10 @@ def preparation_getpayload(
         "withdrawals": withdrawals,
         "parentBeaconBlockRoot": parent_hash,
     }
+    if fork.lower() in ("amsterdam",):
+        global _PREP_SLOT_COUNTER
+        _PREP_SLOT_COUNTER += 1
+        payload_attributes["slotNumber"] = hex(_PREP_SLOT_COUNTER)
     payload = _engine_with_jwt(
         engine_url,
         jwt_hex_path,
@@ -1123,12 +1147,15 @@ def preparation_getpayload(
     parent_beacon_block_root = payload_attributes["parentBeaconBlockRoot"]
     execution_requests = _extract_execution_requests(payload)
 
+    np_method = _newpayload_method_for_fork(fork)
+    np_params = [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests]
+
     # Send NP
     _ = _engine_with_jwt(
         engine_url,
         jwt_hex_path,
-        "engine_newPayloadV4",
-        [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+        np_method,
+        np_params,
     )
     block_hash = exec_payload.get("blockHash")
 
@@ -1153,8 +1180,8 @@ def preparation_getpayload(
         np_body = {
             "jsonrpc": "2.0",
             "id": int(time.time()),
-            "method": "engine_newPayloadV4",
-            "params": [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+            "method": np_method,
+            "params": np_params,
         }
         fcu_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_forkchoiceUpdatedV3","params":[fcs, None]}
         _append_line(save_path, _minified_json_line(np_body))
@@ -1270,6 +1297,11 @@ def main():
         help="Docker image to use when launching the Nethermind container.",
     )
     parser.add_argument(
+        "--nethermind-extra-flags",
+        default="",
+        help="Extra CLI flags passed to the Nethermind container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None').",
+    )
+    parser.add_argument(
         "--gas-bump-count",
         type=int,
         default=301,
@@ -1329,8 +1361,8 @@ def main():
         "--eest-mode",
         "--eest_mode",
         dest="eest_mode",
-        default="Benchmark",
-        help="Mode passed to execute remote via -m (supports repricings/benchmarks/stateful).",
+        default="",
+        help="Mode passed to execute remote via -m (e.g. repricing). Leave empty to omit -m entirely.",
     )
     parser.add_argument(
         "--eest-stateful-testing",
@@ -1523,6 +1555,9 @@ def main():
     container_name = "eest-nethermind"
     CLEANUP["container"] = container_name
     active_db_dir = primary_merged
+    nm_extra_flags = shlex.split(args.nethermind_extra_flags) if args.nethermind_extra_flags else []
+    if nm_extra_flags:
+        print(f"[INFO] Extra Nethermind flags: {nm_extra_flags}")
 
     def restart_node(db_dir: Path, *, show_logs: bool = False) -> None:
         nonlocal active_db_dir
@@ -1537,6 +1572,7 @@ def main():
             image=args.nethermind_image,
             genesis_path=genesis_file,
             trace_json=args.trace_json,
+            extra_flags=nm_extra_flags,
         )
         if not wait_for_port("127.0.0.1", 8545, timeout=300):
             print("ERROR: 8545 not reachable.")
@@ -1581,6 +1617,23 @@ def main():
     finalized_hash = ""
     rpc_url = "http://127.0.0.1:8545"
     engine_url = "http://127.0.0.1:8551"
+    target_np_method = _newpayload_method_for_fork(args.fork)
+    if reuse_preparation and gas_bump_file.exists():
+        # Check if the existing gas-bump file uses the correct newPayload version
+        try:
+            first_np_line = next(
+                (ln for ln in gas_bump_file.read_text(encoding="utf-8").splitlines()
+                 if '"engine_newPayload' in ln),
+                None,
+            )
+            if first_np_line:
+                file_method = json.loads(first_np_line).get("method", "")
+                if file_method != target_np_method:
+                    print(f"[INFO] newPayload version mismatch: file has {file_method} but fork {args.fork} requires {target_np_method}; regenerating.")
+                    reuse_preparation = False
+        except Exception:
+            pass
+
     if reuse_preparation and args.parameter_filter:
         # When filter is set, replay existing payloads instead of regenerating — but only
         # if the gas-bump count matches what was requested.
@@ -1591,7 +1644,7 @@ def main():
             reuse_preparation = False
         else:
             print(f"[INFO] Replaying {existing_bump_count} existing gas-bump + funding payloads (parameter_filter is set).")
-            finalized_hash = _replay_preparation_payloads(engine_url, jwt_path, gas_bump_file, funding_file)
+            finalized_hash = _replay_preparation_payloads(engine_url, jwt_path, gas_bump_file, funding_file, fork=args.fork)
     elif reuse_preparation:
         print("[INFO] Reusing existing gas-bump and funding payloads.")
         finalized_hash = _latest_block_hash_from_payload_file(funding_file) or ""
@@ -1624,6 +1677,8 @@ def main():
         "light_logs": True,
         "testing_buildblock_timestamp_hack": args.testing_buildblock_timestamp_hack,
     }
+    if args.fork.lower() in ("amsterdam",):
+        mitm_config["slot_counter_start"] = _PREP_SLOT_COUNTER
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
     addon_path = Path("mitm_addon.py")  # external file from above
@@ -1639,16 +1694,18 @@ def main():
 
         tests_rpc = args.rpc_endpoint or "http://127.0.0.1:8549"
         mode_key = (args.eest_mode or "").strip().lower()
-        mode_map = {
-            "repricing": "repricing",
-            "repricings": "repricing",
-            "benchmark": "benchmark",
-            "benchmarks": "benchmark",
-            "stateful": "stateful",
-        }
-        if mode_key not in mode_map:
-            raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
-        eest_mode = mode_map[mode_key]
+        eest_mode = ""
+        if mode_key:
+            mode_map = {
+                "repricing": "repricing",
+                "repricings": "repricing",
+                "benchmark": "benchmark",
+                "benchmarks": "benchmark",
+                "stateful": "stateful",
+            }
+            if mode_key not in mode_map:
+                raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
+            eest_mode = mode_map[mode_key]
         uv_cmd = [
             "uv", "run", "execute", "remote", "-v",
             f"--fork={args.fork}",
@@ -1669,8 +1726,10 @@ def main():
             "--skip-cleanup",
             args.test_path,
             "--",
-            "-m", eest_mode, "-n", "1",
+            "-n", "1",
         ]
+        if eest_mode:
+            uv_cmd.extend(["-m", eest_mode])
         if args.parameter_filter:
             uv_cmd.extend(["-k", args.parameter_filter])
         stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")

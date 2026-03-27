@@ -53,10 +53,21 @@ _TESTING_BUILDBLOCK_TIMESTAMP_HACK: bool = _cfg_bool(_CFG.get("testing_buildbloc
 
 
 def _newpayload_method_for_fork(fork: str) -> str:
+    if fork.lower() in ("amsterdam",):
+        return "engine_newPayloadV5"
     return "engine_newPayloadV4"
 
 
 _NEWPAYLOAD_METHOD = _newpayload_method_for_fork(FORK)
+
+_IS_AMSTERDAM: bool = FORK.lower() in ("amsterdam",)
+
+_SLOT_COUNTER: int = int(_CFG.get("slot_counter_start") or 0)
+
+def _next_slot() -> str:
+    global _SLOT_COUNTER
+    _SLOT_COUNTER += 1
+    return hex(_SLOT_COUNTER)
 
 _DYN_FINALIZED: str = FINALIZED_BLOCK
 
@@ -337,6 +348,8 @@ def _insert_empty_hook_separator(reason: str, scenario: str) -> None:
         "withdrawals": [],
         "parentBeaconBlockRoot": parent_hash,
     }
+    if _IS_AMSTERDAM:
+        separator_attrs["slotNumber"] = _next_slot()
 
     _log(
         f"inserting empty hook separator ({reason}) scenario={scenario} parent={parent_hash} "
@@ -975,6 +988,8 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
                 "withdrawals": [],
                 "parentBeaconBlockRoot": parent_hash,
             }
+            if _IS_AMSTERDAM:
+                separator_attrs["slotNumber"] = _next_slot()
             _log(f"inserting empty hook separator block before scenario={scenario} parent={parent_hash}")
             sep_raw = _engine("testing_buildBlockV1", [parent_hash, separator_attrs, [], extra_data])
             sep_payload = sep_raw if isinstance(sep_raw, dict) else {}
@@ -1038,6 +1053,8 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
             "withdrawals": [],
             "parentBeaconBlockRoot": parent_hash,
         }
+        if _IS_AMSTERDAM:
+            payload_attributes["slotNumber"] = _next_slot()
         _log(
             f"buildBlock parent source={parent_source} hash={parent_hash} phase={phase_lc} stage={next_stage} "
             f"extraData={extra_data}"
