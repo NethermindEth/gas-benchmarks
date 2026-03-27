@@ -1088,8 +1088,6 @@ def preparation_getpayload(
     timestamp_hack: bool = False,
     fork: str = "Prague",
 ):
-    global _PREP_SLOT_COUNTER
-    _PREP_SLOT_COUNTER += 1
     """
     Build a payload on the engine via testing_buildBlockV1, POST engine_newPayload,
     then engine_forkchoiceUpdatedV3.
@@ -1126,8 +1124,11 @@ def preparation_getpayload(
         "suggestedFeeRecipient": "0x0000000000000000000000000000000000000000",
         "withdrawals": withdrawals,
         "parentBeaconBlockRoot": parent_hash,
-        "slotNumber": hex(_PREP_SLOT_COUNTER),
     }
+    if fork.lower() in ("amsterdam",):
+        global _PREP_SLOT_COUNTER
+        _PREP_SLOT_COUNTER += 1
+        payload_attributes["slotNumber"] = hex(_PREP_SLOT_COUNTER)
     payload = _engine_with_jwt(
         engine_url,
         jwt_hex_path,
@@ -1675,8 +1676,9 @@ def main():
         "nethermind_container": container_name,
         "light_logs": True,
         "testing_buildblock_timestamp_hack": args.testing_buildblock_timestamp_hack,
-        "slot_counter_start": _PREP_SLOT_COUNTER,
     }
+    if args.fork.lower() in ("amsterdam",):
+        mitm_config["slot_counter_start"] = _PREP_SLOT_COUNTER
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
     addon_path = Path("mitm_addon.py")  # external file from above
