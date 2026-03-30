@@ -530,6 +530,14 @@ jobs:
             warmup_nethermind.log
             stateful_generator.log
 
+      - name: Kill stale mitmdump and child processes
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          pkill -f mitmdump || true
+          pkill -f mitm_addon || true
+
       - name: Purge all running Docker containers on runner
         if: always()
         shell: bash
