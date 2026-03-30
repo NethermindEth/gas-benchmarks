@@ -29,6 +29,14 @@ on:
         description: "Fork name"
         required: true
         default: "Osaka"
+      chainspec_file:
+        description: "Custom Nethermind chainspec file from scripts/genesisfiles/nethermind/ (leave empty to use built-in config)"
+        required: false
+        type: choice
+        options:
+          - ""
+          - "generator-amsterdam.json"
+        default: ""
       eest_repo:
         description: "execution-specs repository"
         required: true
@@ -70,14 +78,6 @@ on:
           - warmup_only
           - stateful_only
         default: "full"
-      chainspec_file:
-        description: "Custom Nethermind chainspec file from scripts/genesisfiles/nethermind/ (leave empty to use built-in config)"
-        required: false
-        type: choice
-        options:
-          - ""
-          - "generator-amsterdam.json"
-        default: ""
       nethermind_extra_flags:
         description: "Extra Nethermind CLI flags passed to the container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None')"
         required: false
