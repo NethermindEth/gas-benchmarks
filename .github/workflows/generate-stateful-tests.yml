@@ -87,6 +87,11 @@ on:
         required: false
         type: boolean
         default: false
+      skip_artifacts:
+        description: "Skip uploading artifacts"
+        required: false
+        type: boolean
+        default: false
       push_to_db:
         description: "Upload traces metadata to PostgreSQL"
         required: false
@@ -305,7 +310,7 @@ jobs:
           fi
 
       - name: Upload stateful generator log artifact
-        if: always()
+        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: stateful-generator-log-${{ github.run_id }}
@@ -353,7 +358,7 @@ jobs:
           fi
 
       - name: Upload warmup nethermind log artifact
-        if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' }}
+        if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' && github.event.inputs.skip_artifacts != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: warmup-nethermind-log-${{ github.run_id }}
@@ -508,7 +513,7 @@ jobs:
           fi
 
       - name: Upload nethermind.log artifact
-        if: always()
+        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: nethermind-log-${{ github.run_id }}
@@ -516,7 +521,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload generated artifacts
-        if: always()
+        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: generated-stateful-tests-${{ github.run_id }}
