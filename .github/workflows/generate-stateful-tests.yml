@@ -148,7 +148,6 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
           lfs: true
-          submodules: recursive
           clean: true
 
       - name: Set up Python
