@@ -357,14 +357,6 @@ jobs:
             echo "warmup_nethermind.log not found"
           fi
 
-      - name: Upload warmup nethermind log artifact
-        if: ${{ always() && env.CFG_GENERATION_MODE != 'stateful_only' && github.event.inputs.skip_artifacts != 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: warmup-nethermind-log-${{ github.run_id }}
-          path: warmup_nethermind.log
-          if-no-files-found: warn
-
       - name: Upload traces metadata to DB
         if: ${{ github.event.inputs.push_to_db == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
@@ -384,6 +376,22 @@ jobs:
             --db-password "$DB_PASSWORD" \
             --db-name "$DB_NAME" \
             --table-name "$DB_TABLE"
+
+      - name: Prepare opcodes tracing artifact
+        if: ${{ always() && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        shell: bash
+        run: |
+          if [ -f "$TRACES_JSON" ]; then
+            cp "$TRACES_JSON" opcodes_tracing.json
+          fi
+
+      - name: Upload opcodes tracing artifact
+        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: opcodes-tracing-${{ github.run_id }}
+          path: opcodes_tracing.json
+          if-no-files-found: warn
 
       - name: Remove traces file after DB upload
         if: always()
@@ -512,14 +520,6 @@ jobs:
             echo "nethermind.log not found"
           fi
 
-      - name: Upload nethermind.log artifact
-        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: nethermind-log-${{ github.run_id }}
-          path: nethermind.log
-          if-no-files-found: warn
-
       - name: Upload generated artifacts
         if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
         uses: actions/upload-artifact@v4
@@ -528,12 +528,41 @@ jobs:
           path: |
             ${{ env.PAYLOAD_DIR }}
             ${{ env.WARMUP_DIR }}
-            mitm.log
-            mitm_full.log
-            mitm_nethermind.log
-            nethermind.log
-            warmup_nethermind.log
-            stateful_generator.log
+
+      - name: Generate run metadata
+        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          GB_COMMIT="${GITHUB_SHA}"
+          NM_IMAGE="${CFG_NETHERMIND_IMAGE}"
+          NM_DIGEST=$(docker image inspect --format='{{index .RepoDigests 0}}' "$NM_IMAGE" 2>/dev/null || echo "unavailable")
+          if [[ -n "${CFG_EEST_COMMIT:-}" ]]; then
+            EEST_COMMIT="${CFG_EEST_COMMIT}"
+          elif [[ -d "execution-specs/.git" ]]; then
+            EEST_COMMIT=$(git -C execution-specs rev-parse HEAD)
+          else
+            EEST_COMMIT="unknown"
+          fi
+          python3 -c "
+          import json, sys
+          json.dump({
+              'gas_benchmarks_commit': sys.argv[1],
+              'nethermind_image': sys.argv[2],
+              'nethermind_image_digest': sys.argv[3],
+              'execution_specs_commit': sys.argv[4],
+              'execution_specs_repo': sys.argv[5],
+              'execution_specs_branch': sys.argv[6]
+          }, open('run_metadata.json', 'w'), indent=2)
+          " "$GB_COMMIT" "$NM_IMAGE" "$NM_DIGEST" "$EEST_COMMIT" "$CFG_EEST_REPO" "$CFG_EEST_BRANCH"
+
+      - name: Upload run metadata artifact
+        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-metadata-${{ github.run_id }}
+          path: run_metadata.json
+          if-no-files-found: warn
 
       - name: Kill stale mitmdump and child processes
         if: always()
