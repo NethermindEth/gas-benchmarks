@@ -396,8 +396,9 @@ jobs:
             *)        STATUS="Generation finished with status: $RESULT" ;;
           esac
 
-          EXISTING_NOTES=$(gh release view "$TAG" --json body --jq '.body' 2>/dev/null || echo "")
-          gh release edit "$TAG" --notes "$(cat <<EOF
+          REPO="${{ github.repository }}"
+          EXISTING_NOTES=$(gh release view "$TAG" --repo "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
+          gh release edit "$TAG" --repo "$REPO" --notes "$(cat <<EOF
           ${EXISTING_NOTES}
 
           ### Status
