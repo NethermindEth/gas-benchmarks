@@ -105,6 +105,70 @@ on:
           - overlay
           - zfs
         default: "overlay"
+      release_tag:
+        description: "GitHub release tag to attach artifacts to (leave empty to skip)"
+        required: false
+        default: ""
+
+  workflow_call:
+    inputs:
+      mode:
+        type: string
+        required: true
+      chain:
+        type: string
+        required: true
+      nethermind_image:
+        type: string
+        default: "nethermindeth/nethermind:testing-rpc"
+      fork:
+        type: string
+        default: "Osaka"
+      chainspec_file:
+        type: string
+        default: ""
+      eest_repo:
+        type: string
+        default: "https://github.com/ethereum/execution-specs"
+      eest_branch:
+        type: string
+        default: "forks/amsterdam"
+      eest_commit:
+        type: string
+        default: ""
+      gas_benchmark_values:
+        type: string
+        default: "30,60,90,120,150,180,210,240,270,300"
+      gas_bump_count:
+        type: string
+        default: "-1"
+      parameter_filter:
+        type: string
+        default: ""
+      eest_mode:
+        type: string
+        default: ""
+      generation_mode:
+        type: string
+        default: "full"
+      nethermind_extra_flags:
+        type: string
+        default: ""
+      commit_results:
+        type: string
+        default: "false"
+      skip_artifacts:
+        type: string
+        default: "false"
+      push_to_db:
+        type: string
+        default: "false"
+      warmup_snapshot_backend:
+        type: string
+        default: "overlay"
+      release_tag:
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -121,24 +185,25 @@ jobs:
       DB_PORT: ${{ secrets.PERFNET_0_DB_PORT }}
       DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
       DB_NAME: ${{ secrets.PERFNET_0_DB_NAME }}
-      CFG_NETHERMIND_IMAGE: ${{ github.event.inputs.nethermind_image || 'nethermindeth/nethermind:flat' }}
-      CFG_FORK: ${{ github.event.inputs.fork || 'Osaka' }}
-      CFG_CHAIN: ${{ github.event.inputs.chain || 'mainnet' }}
-      CFG_MODE: ${{ github.event.inputs.mode || 'compute' }}
-      CFG_PAYLOAD_DIR: ${{ format('repricings_{0}/{1}', github.event.inputs.mode || 'compute', github.event.inputs.chain || 'mainnet') }}
-      CFG_TEST_PATH: ${{ (github.event.inputs.mode || 'compute') == 'stateful' && 'tests/benchmark/stateful/' || 'tests/benchmark/compute/' }}
-      CFG_EEST_MODE: ${{ github.event.inputs.eest_mode || '' }}
-      CFG_EEST_REPO: ${{ github.event.inputs.eest_repo || 'https://github.com/ethereum/execution-specs' }}
-      CFG_EEST_BRANCH: ${{ github.event.inputs.eest_branch || 'forks/amsterdam' }}
-      CFG_EEST_COMMIT: ${{ github.event.inputs.eest_commit || '' }}
-      CFG_GAS_BENCHMARK_VALUES: ${{ github.event.inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
-      CFG_GAS_BUMP_COUNT: ${{ github.event.inputs.gas_bump_count || '-1' }}
+      CFG_NETHERMIND_IMAGE: ${{ inputs.nethermind_image || 'nethermindeth/nethermind:flat' }}
+      CFG_FORK: ${{ inputs.fork || 'Osaka' }}
+      CFG_CHAIN: ${{ inputs.chain || 'mainnet' }}
+      CFG_MODE: ${{ inputs.mode || 'compute' }}
+      CFG_PAYLOAD_DIR: ${{ format('repricings_{0}/{1}', inputs.mode || 'compute', inputs.chain || 'mainnet') }}
+      CFG_TEST_PATH: ${{ (inputs.mode || 'compute') == 'stateful' && 'tests/benchmark/stateful/' || 'tests/benchmark/compute/' }}
+      CFG_EEST_MODE: ${{ inputs.eest_mode || '' }}
+      CFG_EEST_REPO: ${{ inputs.eest_repo || 'https://github.com/ethereum/execution-specs' }}
+      CFG_EEST_BRANCH: ${{ inputs.eest_branch || 'forks/amsterdam' }}
+      CFG_EEST_COMMIT: ${{ inputs.eest_commit || '' }}
+      CFG_GAS_BENCHMARK_VALUES: ${{ inputs.gas_benchmark_values || '30,60,90,120,150,180,210,240,270,300' }}
+      CFG_GAS_BUMP_COUNT: ${{ inputs.gas_bump_count || '-1' }}
       CFG_RPC_ADDRESS: "0x86cF016FB873D50a7B8F31EB154c9234DD31b058"
-      CFG_PARAMETER_FILTER: ${{ github.event.inputs.parameter_filter || '' }}
-      CFG_GENERATION_MODE: ${{ github.event.inputs.generation_mode || 'full' }}
-      CFG_WARMUP_SNAPSHOT_BACKEND: ${{ github.event.inputs.warmup_snapshot_backend || 'overlay' }}
-      CFG_CHAINSPEC_FILE: ${{ github.event.inputs.chainspec_file || '' }}
-      CFG_NETHERMIND_EXTRA_FLAGS: ${{ github.event.inputs.nethermind_extra_flags || '' }}
+      CFG_PARAMETER_FILTER: ${{ inputs.parameter_filter || '' }}
+      CFG_GENERATION_MODE: ${{ inputs.generation_mode || 'full' }}
+      CFG_WARMUP_SNAPSHOT_BACKEND: ${{ inputs.warmup_snapshot_backend || 'overlay' }}
+      CFG_CHAINSPEC_FILE: ${{ inputs.chainspec_file || '' }}
+      CFG_NETHERMIND_EXTRA_FLAGS: ${{ inputs.nethermind_extra_flags || '' }}
+      ARTIFACT_SUFFIX: ${{ format('{0}-{1}', inputs.mode || 'compute', inputs.chain || 'mainnet') }}
 
     steps:
       - name: Checkout gas-benchmarks repository from triggering branch
@@ -310,10 +375,10 @@ jobs:
           fi
 
       - name: Upload stateful generator log artifact
-        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
+        if: ${{ always() && inputs.skip_artifacts != 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: stateful-generator-log-${{ github.run_id }}
+          name: stateful-generator-log-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
           path: stateful_generator.log
           if-no-files-found: warn
 
@@ -358,7 +423,7 @@ jobs:
           fi
 
       - name: Upload traces metadata to DB
-        if: ${{ github.event.inputs.push_to_db == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ inputs.push_to_db == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         env:
           DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
@@ -386,10 +451,10 @@ jobs:
           fi
 
       - name: Upload opcodes tracing artifact
-        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         uses: actions/upload-artifact@v4
         with:
-          name: opcodes-tracing-${{ github.run_id }}
+          name: opcodes-tracing-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
           path: opcodes_tracing.json
           if-no-files-found: warn
 
@@ -401,7 +466,7 @@ jobs:
           rm -f "$TRACES_JSON"
 
       - name: Commit generated tests and warmups to triggering branch
-        if: ${{ github.event.inputs.commit_results == 'true' }}
+        if: ${{ inputs.commit_results == 'true' }}
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -521,16 +586,16 @@ jobs:
           fi
 
       - name: Upload generated artifacts
-        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
+        if: ${{ always() && inputs.skip_artifacts != 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: generated-stateful-tests-${{ github.run_id }}
+          name: generated-stateful-tests-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
           path: |
             ${{ env.PAYLOAD_DIR }}
             ${{ env.WARMUP_DIR }}
 
       - name: Generate run metadata
-        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
+        if: ${{ always() && inputs.skip_artifacts != 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -557,12 +622,44 @@ jobs:
           " "$GB_COMMIT" "$NM_IMAGE" "$NM_DIGEST" "$EEST_COMMIT" "$CFG_EEST_REPO" "$CFG_EEST_BRANCH"
 
       - name: Upload run metadata artifact
-        if: ${{ always() && github.event.inputs.skip_artifacts != 'true' }}
+        if: ${{ always() && inputs.skip_artifacts != 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: run-metadata-${{ github.run_id }}
+          name: run-metadata-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
           path: run_metadata.json
           if-no-files-found: warn
+
+      - name: Upload assets to GitHub release
+        if: ${{ always() && inputs.release_tag != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.release_tag }}"
+          SUFFIX="${CFG_MODE}-${CFG_CHAIN}"
+
+          # Archive generated tests
+          DIRS_TO_ARCHIVE=()
+          [ -d "$PAYLOAD_DIR" ] && DIRS_TO_ARCHIVE+=("$PAYLOAD_DIR")
+          [ -d "$WARMUP_DIR" ] && DIRS_TO_ARCHIVE+=("$WARMUP_DIR")
+          if [ ${#DIRS_TO_ARCHIVE[@]} -gt 0 ]; then
+            ARCHIVE="generated-tests-${SUFFIX}.tar.gz"
+            tar czf "$ARCHIVE" "${DIRS_TO_ARCHIVE[@]}"
+            gh release upload "$TAG" "$ARCHIVE" --clobber
+          fi
+
+          # Upload opcodes tracing
+          if [ -f opcodes_tracing.json ]; then
+            cp opcodes_tracing.json "opcodes_tracing-${SUFFIX}.json"
+            gh release upload "$TAG" "opcodes_tracing-${SUFFIX}.json" --clobber
+          fi
+
+          # Upload run metadata
+          if [ -f run_metadata.json ]; then
+            cp run_metadata.json "run_metadata-${SUFFIX}.json"
+            gh release upload "$TAG" "run_metadata-${SUFFIX}.json" --clobber
+          fi
 
       - name: Kill stale mitmdump and child processes
         if: always()

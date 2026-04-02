@@ -1,0 +1,407 @@
+name: Release Workstream
+run-name: "Release [${{ inputs.workstream }}] ${{ inputs.regeneration_type }}${{ inputs.append_to_draft == true && '+append' || '' }} chains=${{ inputs.chains || 'all' }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      workstream:
+        description: "Workstream to release"
+        required: true
+        type: choice
+        options:
+          - osaka-repricings
+          - amsterdam-repricings
+          - osaka-full
+          - amsterdam-full
+      regeneration_type:
+        description: "full = new major version (1.0.0 → 2.0.0), partial = bump minor from latest (1.0.0 → 1.1.0), reuses base assets"
+        required: true
+        type: choice
+        options:
+          - full
+          - partial
+        default: "full"
+      append_to_draft:
+        description: "Append to existing draft release instead of creating/replacing"
+        required: false
+        type: boolean
+        default: false
+      chains:
+        description: "Comma-separated networks to run (leave empty for all workstream defaults)"
+        required: false
+        default: ""
+      nethermind_image:
+        description: "Nethermind Docker image"
+        required: true
+        default: "nethermindeth/nethermind:testing-rpc"
+      fork:
+        description: "Fork name (override workstream default)"
+        required: false
+        default: ""
+      chainspec_file:
+        description: "Custom chainspec file (override workstream default, leave empty to use workstream default)"
+        required: false
+        type: choice
+        options:
+          - ""
+          - "generator-amsterdam.json"
+        default: ""
+      eest_repo:
+        description: "execution-specs repository"
+        required: true
+        default: "https://github.com/ethereum/execution-specs"
+      eest_branch:
+        description: "execution-specs branch"
+        required: true
+        default: "forks/amsterdam"
+      eest_commit:
+        description: "Pin execution-specs to a specific commit SHA (optional)"
+        required: false
+        default: ""
+      gas_benchmark_values:
+        description: "Override gas values (leave empty for workstream default)"
+        required: false
+        default: ""
+      gas_bump_count:
+        description: "Gas bump count (-1 = chain default)"
+        required: true
+        default: "-1"
+      parameter_filter:
+        description: "pytest -k filter expression"
+        required: false
+        default: ""
+      nethermind_extra_flags:
+        description: "Extra Nethermind CLI flags"
+        required: false
+        default: ""
+      warmup_snapshot_backend:
+        description: "Snapshot backend for warmup generation"
+        required: true
+        type: choice
+        options:
+          - overlay
+          - zfs
+        default: "overlay"
+      commit_results:
+        description: "Commit generated data to the repo"
+        required: false
+        type: boolean
+        default: false
+      push_to_db:
+        description: "Upload traces metadata to PostgreSQL"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.release.outputs.tag }}
+      matrix: ${{ steps.workstream.outputs.matrix }}
+      gas_benchmark_values: ${{ steps.workstream.outputs.gas_benchmark_values }}
+      eest_mode: ${{ steps.workstream.outputs.eest_mode }}
+      fork: ${{ steps.workstream.outputs.fork }}
+      chainspec_file: ${{ steps.workstream.outputs.chainspec_file }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve workstream defaults
+        id: workstream
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # ── Per-workstream defaults ──
+          case "${{ inputs.workstream }}" in
+            osaka-repricings)
+              DEFAULT_GAS="30,60,90,120,150,180,210,240,270,300"
+              DEFAULT_EEST_MODE="repricing"
+              DEFAULT_FORK="Osaka"
+              DEFAULT_CHAINSPEC=""
+              FULL_MATRIX='[
+                {"mode":"compute","chain":"mainnet"},
+                {"mode":"compute","chain":"perf-devnet-3"},
+                {"mode":"stateful","chain":"mainnet"},
+                {"mode":"stateful","chain":"perf-devnet-3"}
+              ]'
+              ;;
+            amsterdam-repricings)
+              DEFAULT_GAS="30,60,90,120,150,180,210,240,270,300"
+              DEFAULT_EEST_MODE="repricing"
+              DEFAULT_FORK="Amsterdam"
+              DEFAULT_CHAINSPEC="generator-amsterdam.json"
+              FULL_MATRIX='[
+                {"mode":"compute","chain":"mainnet"},
+                {"mode":"compute","chain":"perf-devnet-3"},
+                {"mode":"stateful","chain":"mainnet"},
+                {"mode":"stateful","chain":"perf-devnet-3"}
+              ]'
+              ;;
+            osaka-full)
+              DEFAULT_GAS="90,120"
+              DEFAULT_EEST_MODE=""
+              DEFAULT_FORK="Osaka"
+              DEFAULT_CHAINSPEC=""
+              FULL_MATRIX='[
+                {"mode":"compute","chain":"mainnet"},
+                {"mode":"compute","chain":"perf-devnet-3"},
+                {"mode":"stateful","chain":"mainnet"},
+                {"mode":"stateful","chain":"perf-devnet-3"}
+              ]'
+              ;;
+            amsterdam-full)
+              DEFAULT_GAS="90,120"
+              DEFAULT_EEST_MODE=""
+              DEFAULT_FORK="Amsterdam"
+              DEFAULT_CHAINSPEC="generator-amsterdam.json"
+              FULL_MATRIX='[
+                {"mode":"compute","chain":"mainnet"},
+                {"mode":"compute","chain":"perf-devnet-3"},
+                {"mode":"stateful","chain":"mainnet"},
+                {"mode":"stateful","chain":"perf-devnet-3"}
+              ]'
+              ;;
+            *)
+              echo "Unknown workstream: ${{ inputs.workstream }}" >&2
+              exit 1
+              ;;
+          esac
+
+          # ── Apply overrides (input wins if non-empty) ──
+          GAS_VALUES="${{ inputs.gas_benchmark_values }}"
+          GAS_VALUES="${GAS_VALUES:-$DEFAULT_GAS}"
+
+          FORK="${{ inputs.fork }}"
+          FORK="${FORK:-$DEFAULT_FORK}"
+
+          CHAINSPEC="${{ inputs.chainspec_file }}"
+          CHAINSPEC="${CHAINSPEC:-$DEFAULT_CHAINSPEC}"
+
+          # ── Filter matrix by chains if specified ──
+          CHAINS_FILTER='${{ inputs.chains }}'
+          if [[ -n "$CHAINS_FILTER" ]]; then
+            JQ_FILTER=$(echo "$CHAINS_FILTER" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | jq -R . | jq -sc '.')
+            MATRIX=$(echo "$FULL_MATRIX" | jq -c --argjson allowed "$JQ_FILTER" '[.[] | select(.chain as $c | $allowed | index($c))]')
+          else
+            MATRIX="$FULL_MATRIX"
+          fi
+
+          if [[ "$(echo "$MATRIX" | jq 'length')" -eq 0 ]]; then
+            echo "Error: chains filter '$CHAINS_FILTER' matched nothing in the workstream matrix" >&2
+            exit 1
+          fi
+
+          echo "matrix=$(echo "$MATRIX" | jq -c '{"include": .}')" >> "$GITHUB_OUTPUT"
+          echo "gas_benchmark_values=$GAS_VALUES" >> "$GITHUB_OUTPUT"
+          echo "eest_mode=$DEFAULT_EEST_MODE" >> "$GITHUB_OUTPUT"
+          echo "fork=$FORK" >> "$GITHUB_OUTPUT"
+          echo "chainspec_file=$CHAINSPEC" >> "$GITHUB_OUTPUT"
+
+          echo "Workstream: ${{ inputs.workstream }}"
+          echo "  Fork: $FORK"
+          echo "  EEST mode: ${DEFAULT_EEST_MODE:-(none)}"
+          echo "  Gas values: $GAS_VALUES"
+          echo "  Chainspec: ${CHAINSPEC:-(built-in)}"
+          echo "  Matrix: $(echo "$MATRIX" | jq -c '.')"
+
+      - name: Resolve version and manage release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          WORKSTREAM="${{ inputs.workstream }}"
+          REGEN_TYPE="${{ inputs.regeneration_type }}"
+          TAG_PREFIX="${WORKSTREAM}-v"
+
+          # ── Find latest release for this workstream ──
+          RELEASES=$(gh release list --limit 100 --json tagName,isDraft \
+            --jq "[.[] | select(.tagName | startswith(\"${TAG_PREFIX}\"))]")
+
+          if [[ "$(echo "$RELEASES" | jq 'length')" -eq 0 ]]; then
+            MAJOR=0
+            MINOR=0
+            LATEST_TAG=""
+            LATEST_IS_DRAFT="false"
+          else
+            LATEST=$(echo "$RELEASES" | jq -r --arg pfx "$TAG_PREFIX" '
+              sort_by(.tagName | ltrimstr($pfx) | split(".") | map(tonumber)) | last')
+            LATEST_TAG=$(echo "$LATEST" | jq -r '.tagName')
+            LATEST_IS_DRAFT=$(echo "$LATEST" | jq -r '.isDraft')
+            VERSION_STR="${LATEST_TAG#"$TAG_PREFIX"}"
+            MAJOR=$(echo "$VERSION_STR" | cut -d. -f1)
+            MINOR=$(echo "$VERSION_STR" | cut -d. -f2)
+            echo "Latest release: $LATEST_TAG (draft=$LATEST_IS_DRAFT)"
+          fi
+
+          APPEND="${{ inputs.append_to_draft }}"
+
+          # ── Append mode: reuse existing draft regardless of regen type ──
+          if [[ "$APPEND" == "true" ]]; then
+            if [[ "$LATEST_IS_DRAFT" == "true" ]]; then
+              echo "Appending to existing draft $LATEST_TAG"
+              echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+              echo "base_tag=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Warning: append_to_draft=true but no draft found — creating new release"
+          fi
+
+          # ── Compute new version ──
+          if [[ "$REGEN_TYPE" == "full" ]]; then
+            if [[ "$LATEST_IS_DRAFT" == "true" ]]; then
+              echo "Replacing unpromoted draft $LATEST_TAG"
+              gh release delete "$LATEST_TAG" --yes --cleanup-tag || true
+              NEW_TAG="${TAG_PREFIX}${MAJOR}.0.0"
+            else
+              NEW_MAJOR=$((MAJOR + 1))
+              NEW_TAG="${TAG_PREFIX}${NEW_MAJOR}.0.0"
+            fi
+            BASE_TAG=""
+          else
+            if [[ -z "$LATEST_TAG" ]]; then
+              echo "Error: partial regeneration requires an existing release to build on" >&2
+              exit 1
+            fi
+
+            if [[ "$LATEST_IS_DRAFT" == "true" ]]; then
+              echo "Reusing existing draft $LATEST_TAG for partial update"
+              echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+              echo "base_tag=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            NEW_MINOR=$((MINOR + 1))
+            NEW_TAG="${TAG_PREFIX}${MAJOR}.${NEW_MINOR}.0"
+            BASE_TAG="$LATEST_TAG"
+          fi
+
+          echo "Creating release: $NEW_TAG (base=$BASE_TAG)"
+
+          GAS_VALUES="${{ steps.workstream.outputs.gas_benchmark_values }}"
+          EEST_MODE="${{ steps.workstream.outputs.eest_mode }}"
+          FORK="${{ steps.workstream.outputs.fork }}"
+
+          gh release create "$NEW_TAG" \
+            --draft \
+            --title "${WORKSTREAM} ${NEW_TAG#"$TAG_PREFIX"} (draft)" \
+            --notes "$(cat <<EOF
+          ## Workstream: \`$WORKSTREAM\`
+          **Version:** \`${NEW_TAG#"$TAG_PREFIX"}\`
+          **Type:** ${REGEN_TYPE} regeneration
+          ${BASE_TAG:+**Base:** \`$BASE_TAG\`}
+
+          **Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Branch:** ${{ github.ref_name }}
+          **Triggered by:** ${{ github.actor }}
+
+          ### Parameters
+          | Parameter | Value |
+          |-----------|-------|
+          | Fork | \`${FORK}\` |
+          | EEST mode | \`${EEST_MODE:-all}\` |
+          | Nethermind image | \`${{ inputs.nethermind_image }}\` |
+          | EEST branch | \`${{ inputs.eest_branch }}\` |
+          | Gas benchmark values | \`${GAS_VALUES}\` |
+          | Warmups | disabled |
+          | Chains | \`${{ inputs.chains || 'all' }}\` |
+          ${BASE_TAG:+| Parameter filter | \`${{ inputs.parameter_filter }}\` |}
+
+          ### Artifacts
+          Each mode/chain combination produces:
+          - \`generated-tests-{mode}-{chain}.tar.gz\` — test fixtures
+          - \`opcodes_tracing-{mode}-{chain}.json\` — opcode-level tracing data
+          - \`run_metadata-{mode}-{chain}.json\` — build provenance
+          EOF
+          )"
+
+          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "base_tag=$BASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Copy base release assets for partial regeneration
+        if: ${{ inputs.regeneration_type == 'partial' && steps.release.outputs.base_tag != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_TAG="${{ steps.release.outputs.base_tag }}"
+          NEW_TAG="${{ steps.release.outputs.tag }}"
+
+          echo "Copying assets from $BASE_TAG → $NEW_TAG"
+          mkdir -p /tmp/base-assets
+          gh release download "$BASE_TAG" -D /tmp/base-assets
+
+          for f in /tmp/base-assets/*; do
+            echo "  Copying $(basename "$f")"
+            gh release upload "$NEW_TAG" "$f" --clobber
+          done
+          rm -rf /tmp/base-assets
+
+  generate:
+    needs: setup
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+    uses: ./.github/workflows/generate-stateful-tests.yml
+    with:
+      mode: ${{ matrix.mode }}
+      chain: ${{ matrix.chain }}
+      nethermind_image: ${{ inputs.nethermind_image }}
+      fork: ${{ needs.setup.outputs.fork }}
+      chainspec_file: ${{ needs.setup.outputs.chainspec_file }}
+      eest_repo: ${{ inputs.eest_repo }}
+      eest_branch: ${{ inputs.eest_branch }}
+      eest_commit: ${{ inputs.eest_commit }}
+      gas_benchmark_values: ${{ needs.setup.outputs.gas_benchmark_values }}
+      gas_bump_count: ${{ inputs.gas_bump_count }}
+      parameter_filter: ${{ inputs.parameter_filter }}
+      eest_mode: ${{ needs.setup.outputs.eest_mode }}
+      generation_mode: "stateful_only"
+      nethermind_extra_flags: ${{ inputs.nethermind_extra_flags }}
+      warmup_snapshot_backend: ${{ inputs.warmup_snapshot_backend }}
+      commit_results: ${{ format('{0}', inputs.commit_results) }}
+      skip_artifacts: "false"
+      push_to_db: ${{ format('{0}', inputs.push_to_db) }}
+      release_tag: ${{ needs.setup.outputs.release_tag }}
+    secrets: inherit
+
+  summary:
+    needs: [setup, generate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update release notes with job results
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ needs.setup.outputs.release_tag }}"
+          if [[ -z "$TAG" ]]; then
+            echo "No release tag — skipping summary"
+            exit 0
+          fi
+
+          RESULT="${{ needs.generate.result }}"
+          case "$RESULT" in
+            success)  STATUS="All generation jobs completed successfully." ;;
+            failure)  STATUS="One or more generation jobs failed. Check individual run logs." ;;
+            *)        STATUS="Generation finished with status: $RESULT" ;;
+          esac
+
+          EXISTING_NOTES=$(gh release view "$TAG" --json body --jq '.body' 2>/dev/null || echo "")
+          gh release edit "$TAG" --notes "$(cat <<EOF
+          ${EXISTING_NOTES}
+
+          ### Status
+          ${STATUS}
+          **Completed:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+          )"
