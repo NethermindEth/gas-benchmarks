@@ -20,7 +20,7 @@ on:
       nethermind_image:
         description: "Nethermind Docker image"
         required: true
-        default: "nethermindeth/nethermind:testing-rpc"
+        default: "nethermindeth/nethermind:testing_build_block_with_opcode_tracing"
       eest_repo:
         description: "execution-specs repository"
         required: true
