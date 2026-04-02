@@ -1,5 +1,5 @@
 name: Release Workstream
-run-name: "Release [${{ inputs.workstream }}] ${{ inputs.regeneration_type }}${{ inputs.append_to_draft == true && '+append' || '' }} chains=${{ inputs.chains || 'all' }}"
+run-name: "Release [${{ inputs.workstream }}] ${{ inputs.parameter_filter != '' && 'partial' || 'full' }} chains=${{ inputs.chains || 'all' }}"
 
 on:
   workflow_dispatch:
@@ -13,19 +13,6 @@ on:
           - amsterdam-repricings
           - osaka-full
           - amsterdam-full
-      regeneration_type:
-        description: "full = new major version (1.0.0 → 2.0.0), partial = bump minor from latest (1.0.0 → 1.1.0), reuses base assets"
-        required: true
-        type: choice
-        options:
-          - full
-          - partial
-        default: "full"
-      append_to_draft:
-        description: "Append to existing draft release instead of creating/replacing"
-        required: false
-        type: boolean
-        default: false
       chains:
         description: "Comma-separated networks to run (leave empty for all workstream defaults)"
         required: false
@@ -34,18 +21,6 @@ on:
         description: "Nethermind Docker image"
         required: true
         default: "nethermindeth/nethermind:testing-rpc"
-      fork:
-        description: "Fork name (override workstream default)"
-        required: false
-        default: ""
-      chainspec_file:
-        description: "Custom chainspec file (override workstream default, leave empty to use workstream default)"
-        required: false
-        type: choice
-        options:
-          - ""
-          - "generator-amsterdam.json"
-        default: ""
       eest_repo:
         description: "execution-specs repository"
         required: true
@@ -62,31 +37,14 @@ on:
         description: "Override gas values (leave empty for workstream default)"
         required: false
         default: ""
-      gas_bump_count:
-        description: "Gas bump count (-1 = chain default)"
-        required: true
-        default: "-1"
       parameter_filter:
-        description: "pytest -k filter expression"
+        description: "pytest -k filter expression (if set → partial regeneration)"
         required: false
         default: ""
       nethermind_extra_flags:
         description: "Extra Nethermind CLI flags"
         required: false
         default: ""
-      warmup_snapshot_backend:
-        description: "Snapshot backend for warmup generation"
-        required: true
-        type: choice
-        options:
-          - overlay
-          - zfs
-        default: "overlay"
-      commit_results:
-        description: "Commit generated data to the repo"
-        required: false
-        type: boolean
-        default: false
       push_to_db:
         description: "Upload traces metadata to PostgreSQL"
         required: false
@@ -171,15 +129,9 @@ jobs:
               ;;
           esac
 
-          # ── Apply overrides (input wins if non-empty) ──
+          # ── Gas values override (input wins if non-empty) ──
           GAS_VALUES="${{ inputs.gas_benchmark_values }}"
           GAS_VALUES="${GAS_VALUES:-$DEFAULT_GAS}"
-
-          FORK="${{ inputs.fork }}"
-          FORK="${FORK:-$DEFAULT_FORK}"
-
-          CHAINSPEC="${{ inputs.chainspec_file }}"
-          CHAINSPEC="${CHAINSPEC:-$DEFAULT_CHAINSPEC}"
 
           # ── Filter matrix by chains if specified ──
           CHAINS_FILTER='${{ inputs.chains }}'
@@ -198,14 +150,14 @@ jobs:
           echo "matrix=$(echo "$MATRIX" | jq -c '{"include": .}')" >> "$GITHUB_OUTPUT"
           echo "gas_benchmark_values=$GAS_VALUES" >> "$GITHUB_OUTPUT"
           echo "eest_mode=$DEFAULT_EEST_MODE" >> "$GITHUB_OUTPUT"
-          echo "fork=$FORK" >> "$GITHUB_OUTPUT"
-          echo "chainspec_file=$CHAINSPEC" >> "$GITHUB_OUTPUT"
+          echo "fork=$DEFAULT_FORK" >> "$GITHUB_OUTPUT"
+          echo "chainspec_file=$DEFAULT_CHAINSPEC" >> "$GITHUB_OUTPUT"
 
           echo "Workstream: ${{ inputs.workstream }}"
-          echo "  Fork: $FORK"
+          echo "  Fork: $DEFAULT_FORK"
           echo "  EEST mode: ${DEFAULT_EEST_MODE:-(none)}"
           echo "  Gas values: $GAS_VALUES"
-          echo "  Chainspec: ${CHAINSPEC:-(built-in)}"
+          echo "  Chainspec: ${DEFAULT_CHAINSPEC:-(built-in)}"
           echo "  Matrix: $(echo "$MATRIX" | jq -c '.')"
 
       - name: Resolve version and manage release
@@ -216,7 +168,12 @@ jobs:
         run: |
           set -euo pipefail
           WORKSTREAM="${{ inputs.workstream }}"
-          REGEN_TYPE="${{ inputs.regeneration_type }}"
+          FILTER="${{ inputs.parameter_filter }}"
+          if [[ -n "$FILTER" ]]; then
+            REGEN_TYPE="partial"
+          else
+            REGEN_TYPE="full"
+          fi
           TAG_PREFIX="${WORKSTREAM}-v"
 
           # ── Find latest release for this workstream ──
@@ -239,43 +196,24 @@ jobs:
             echo "Latest release: $LATEST_TAG (draft=$LATEST_IS_DRAFT)"
           fi
 
-          APPEND="${{ inputs.append_to_draft }}"
-
-          # ── Append mode: reuse existing draft regardless of regen type ──
-          if [[ "$APPEND" == "true" ]]; then
-            if [[ "$LATEST_IS_DRAFT" == "true" ]]; then
-              echo "Appending to existing draft $LATEST_TAG"
-              echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-              echo "base_tag=" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "Warning: append_to_draft=true but no draft found — creating new release"
+          # ── Draft exists → append to it ──
+          if [[ "$LATEST_IS_DRAFT" == "true" ]]; then
+            echo "Draft $LATEST_TAG exists — appending to it"
+            echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+            echo "base_tag=" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          # ── Compute new version ──
+          # ── No draft → create new version ──
           if [[ "$REGEN_TYPE" == "full" ]]; then
-            if [[ "$LATEST_IS_DRAFT" == "true" ]]; then
-              echo "Replacing unpromoted draft $LATEST_TAG"
-              gh release delete "$LATEST_TAG" --yes --cleanup-tag || true
-              NEW_TAG="${TAG_PREFIX}${MAJOR}.0.0"
-            else
-              NEW_MAJOR=$((MAJOR + 1))
-              NEW_TAG="${TAG_PREFIX}${NEW_MAJOR}.0.0"
-            fi
+            NEW_MAJOR=$((MAJOR + 1))
+            NEW_TAG="${TAG_PREFIX}${NEW_MAJOR}.0.0"
             BASE_TAG=""
           else
             if [[ -z "$LATEST_TAG" ]]; then
               echo "Error: partial regeneration requires an existing release to build on" >&2
               exit 1
             fi
-
-            if [[ "$LATEST_IS_DRAFT" == "true" ]]; then
-              echo "Reusing existing draft $LATEST_TAG for partial update"
-              echo "tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-              echo "base_tag=" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-
             NEW_MINOR=$((MINOR + 1))
             NEW_TAG="${TAG_PREFIX}${MAJOR}.${NEW_MINOR}.0"
             BASE_TAG="$LATEST_TAG"
@@ -324,7 +262,7 @@ jobs:
           echo "base_tag=$BASE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Copy base release assets for partial regeneration
-        if: ${{ inputs.regeneration_type == 'partial' && steps.release.outputs.base_tag != '' }}
+        if: ${{ inputs.parameter_filter != '' && steps.release.outputs.base_tag != '' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -360,13 +298,13 @@ jobs:
       eest_branch: ${{ inputs.eest_branch }}
       eest_commit: ${{ inputs.eest_commit }}
       gas_benchmark_values: ${{ needs.setup.outputs.gas_benchmark_values }}
-      gas_bump_count: ${{ inputs.gas_bump_count }}
+      gas_bump_count: "-1"
       parameter_filter: ${{ inputs.parameter_filter }}
       eest_mode: ${{ needs.setup.outputs.eest_mode }}
       generation_mode: "stateful_only"
       nethermind_extra_flags: ${{ inputs.nethermind_extra_flags }}
-      warmup_snapshot_backend: ${{ inputs.warmup_snapshot_backend }}
-      commit_results: ${{ format('{0}', inputs.commit_results) }}
+      warmup_snapshot_backend: "overlay"
+      commit_results: "false"
       skip_artifacts: "false"
       push_to_db: ${{ format('{0}', inputs.push_to_db) }}
       release_tag: ${{ needs.setup.outputs.release_tag }}
