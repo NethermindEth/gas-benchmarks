@@ -59,6 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.release.outputs.tag }}
+      base_release_tag: ${{ steps.release.outputs.base_tag }}
       matrix: ${{ steps.workstream.outputs.matrix }}
       gas_benchmark_values: ${{ steps.workstream.outputs.gas_benchmark_values }}
       eest_mode: ${{ steps.workstream.outputs.eest_mode }}
@@ -308,6 +309,7 @@ jobs:
       skip_artifacts: "false"
       push_to_db: ${{ format('{0}', inputs.push_to_db) }}
       release_tag: ${{ needs.setup.outputs.release_tag }}
+      base_release_tag: ${{ needs.setup.outputs.base_release_tag }}
     secrets: inherit
 
   summary:

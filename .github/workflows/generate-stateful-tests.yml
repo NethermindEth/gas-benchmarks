@@ -109,6 +109,10 @@ on:
         description: "GitHub release tag to attach artifacts to (leave empty to skip)"
         required: false
         default: ""
+      base_release_tag:
+        description: "Base release tag to download for partial regeneration (leave empty for full runs)"
+        required: false
+        default: ""
 
   workflow_call:
     inputs:
@@ -167,6 +171,9 @@ on:
         type: string
         default: "overlay"
       release_tag:
+        type: string
+        default: ""
+      base_release_tag:
         type: string
         default: ""
 
@@ -303,6 +310,39 @@ jobs:
           echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
           echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
           echo "DB_TABLE=$DB_TABLE" >> "$GITHUB_ENV"
+
+      - name: Restore base release data for partial regeneration
+        if: ${{ inputs.base_release_tag != '' && inputs.parameter_filter != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_TAG="${{ inputs.base_release_tag }}"
+          SUFFIX="${CFG_MODE}-${CFG_CHAIN}"
+
+          echo "Downloading base archive from release $BASE_TAG"
+          ARCHIVE="generated-tests-${SUFFIX}.tar.gz"
+          gh release download "$BASE_TAG" -p "$ARCHIVE" -D /tmp/base-restore || {
+            echo "Warning: could not download $ARCHIVE from $BASE_TAG — partial run will rely on runner state"
+            exit 0
+          }
+
+          echo "Extracting base archive into working directory"
+          tar xzf "/tmp/base-restore/$ARCHIVE"
+          rm -rf /tmp/base-restore
+
+          echo "Base PAYLOAD_DIR contents:"
+          ls -la "$PAYLOAD_DIR"/ || echo "(empty)"
+
+          # Also download base opcodes tracing for later merge
+          TRACING="opcodes_tracing-${SUFFIX}.json"
+          gh release download "$BASE_TAG" -p "$TRACING" -D /tmp/base-tracing || true
+          if [ -f "/tmp/base-tracing/$TRACING" ]; then
+            cp "/tmp/base-tracing/$TRACING" base_opcodes_tracing.json
+            echo "Base opcodes tracing restored ($(wc -l < base_opcodes_tracing.json) lines)"
+          fi
+          rm -rf /tmp/base-tracing
 
       - name: Clean stale outputs from previous runs on runner
         shell: bash
@@ -446,9 +486,21 @@ jobs:
         if: ${{ always() && env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         run: |
-          if [ -f "$TRACES_JSON" ]; then
+          set -euo pipefail
+          if [ -f base_opcodes_tracing.json ] && [ -f "$TRACES_JSON" ]; then
+            echo "Merging base opcodes tracing with partial results"
+            python3 -c "
+          import json, sys
+          base = json.load(open('base_opcodes_tracing.json'))
+          partial = json.load(open(sys.argv[1]))
+          base.update(partial)
+          json.dump(base, open('opcodes_tracing.json', 'w'), indent=2)
+          print(f'Merged: {len(base)} total tests ({len(partial)} updated from partial run)')
+          " "$TRACES_JSON"
+          elif [ -f "$TRACES_JSON" ]; then
             cp "$TRACES_JSON" opcodes_tracing.json
           fi
+          rm -f base_opcodes_tracing.json
 
       - name: Upload opcodes tracing artifact
         if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
