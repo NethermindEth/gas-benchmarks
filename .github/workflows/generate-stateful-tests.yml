@@ -425,7 +425,13 @@ jobs:
           fi
 
           # Print from "short test summary info" through the final result line, exactly as pytest outputs it
-          sed -n '/^=* short test summary info/,/^=.*=$/p' "$LOG" | tail -200
+          SUMMARY=$(sed -n '/^=* short test summary info/,/^=.*=$/p' "$LOG" | tail -200)
+          if [ -n "$SUMMARY" ]; then
+            echo "$SUMMARY"
+          else
+            # No failures — just print the final result line (e.g. "== 18 passed, 10 warnings in 7.20s ==")
+            grep -E '^=+.*(passed|failed|error).*=+$' "$LOG" | tail -1
+          fi
 
       - name: Upload stateful generator log artifact
         if: ${{ always() && inputs.skip_artifacts != 'true' }}
