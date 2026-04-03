@@ -413,17 +413,19 @@ jobs:
             ${CFG_NETHERMIND_EXTRA_FLAGS:+--nethermind-extra-flags="$CFG_NETHERMIND_EXTRA_FLAGS"} \
             2>&1 | tee -a "$STATEFUL_GENERATOR_LOG"
 
-      - name: Print stateful generator log
+      - name: Generation summary
         if: always()
         shell: bash
         run: |
           set +e
-          if [ -f stateful_generator.log ]; then
-            echo "=== stateful_generator.log (full) ==="
-            cat stateful_generator.log
-          else
+          LOG="stateful_generator.log"
+          if [ ! -f "$LOG" ]; then
             echo "stateful_generator.log not found"
+            exit 0
           fi
+
+          # Print from "short test summary info" through the final result line, exactly as pytest outputs it
+          sed -n '/^=* short test summary info/,/^=.*=$/p' "$LOG" | tail -200
 
       - name: Upload stateful generator log artifact
         if: ${{ always() && inputs.skip_artifacts != 'true' }}
