@@ -35,7 +35,8 @@ on:
         type: choice
         options:
           - ""
-          - "generator-amsterdam.json"
+          - "generator-amsterdam-mainnet.json"
+          - "generator-amsterdam-perf-devnet-3.json"
         default: ""
       eest_repo:
         description: "execution-specs repository"

@@ -92,12 +92,12 @@ jobs:
               DEFAULT_GAS="30,60,90,120,150,180,210,240,270,300"
               DEFAULT_EEST_MODE="repricing"
               DEFAULT_FORK="Amsterdam"
-              DEFAULT_CHAINSPEC="generator-amsterdam.json"
+              DEFAULT_CHAINSPEC=""
               FULL_MATRIX='[
-                {"mode":"compute","chain":"mainnet"},
-                {"mode":"compute","chain":"perf-devnet-3"},
-                {"mode":"stateful","chain":"mainnet"},
-                {"mode":"stateful","chain":"perf-devnet-3"}
+                {"mode":"compute","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
+                {"mode":"compute","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"},
+                {"mode":"stateful","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
+                {"mode":"stateful","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"}
               ]'
               ;;
             osaka-full)
@@ -116,12 +116,12 @@ jobs:
               DEFAULT_GAS="90,120"
               DEFAULT_EEST_MODE=""
               DEFAULT_FORK="Amsterdam"
-              DEFAULT_CHAINSPEC="generator-amsterdam.json"
+              DEFAULT_CHAINSPEC=""
               FULL_MATRIX='[
-                {"mode":"compute","chain":"mainnet"},
-                {"mode":"compute","chain":"perf-devnet-3"},
-                {"mode":"stateful","chain":"mainnet"},
-                {"mode":"stateful","chain":"perf-devnet-3"}
+                {"mode":"compute","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
+                {"mode":"compute","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"},
+                {"mode":"stateful","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
+                {"mode":"stateful","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"}
               ]'
               ;;
             *)
@@ -294,7 +294,7 @@ jobs:
       chain: ${{ matrix.chain }}
       nethermind_image: ${{ inputs.nethermind_image }}
       fork: ${{ needs.setup.outputs.fork }}
-      chainspec_file: ${{ needs.setup.outputs.chainspec_file }}
+      chainspec_file: ${{ matrix.chainspec || needs.setup.outputs.chainspec_file }}
       eest_repo: ${{ inputs.eest_repo }}
       eest_branch: ${{ inputs.eest_branch }}
       eest_commit: ${{ inputs.eest_commit }}
