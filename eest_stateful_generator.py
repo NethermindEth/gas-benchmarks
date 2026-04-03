@@ -926,8 +926,6 @@ def start_nethermind_container(
         "1000000000000",
         "--data-dir",
         "/db",
-        "--log",
-        "INFO",
         "--Network.MaxActivePeers",
         "0",
         "--TxPool.Size",
