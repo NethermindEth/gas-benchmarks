@@ -655,13 +655,18 @@ jobs:
           fi
 
       - name: Upload generated artifacts
-        if: ${{ always() && inputs.skip_artifacts != 'true' }}
+        if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         uses: actions/upload-artifact@v4
         with:
           name: generated-stateful-tests-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
-          path: |
-            ${{ env.PAYLOAD_DIR }}
-            ${{ env.WARMUP_DIR }}
+          path: ${{ env.PAYLOAD_DIR }}
+
+      - name: Upload warmup artifacts
+        if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_GENERATION_MODE != 'stateful_only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-warmup-tests-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
+          path: ${{ env.WARMUP_DIR }}
 
       - name: Generate run metadata
         if: ${{ always() && inputs.skip_artifacts != 'true' }}
@@ -708,13 +713,16 @@ jobs:
           TAG="${{ inputs.release_tag }}"
           SUFFIX="${CFG_MODE}-${CFG_CHAIN}"
 
-          # Archive generated tests
+          # Archive generated tests (only include warmups if they were actually generated)
           DIRS_TO_ARCHIVE=()
           [ -d "$PAYLOAD_DIR" ] && DIRS_TO_ARCHIVE+=("$PAYLOAD_DIR")
-          [ -d "$WARMUP_DIR" ] && DIRS_TO_ARCHIVE+=("$WARMUP_DIR")
+          if [[ "$CFG_GENERATION_MODE" != "stateful_only" ]] && [ -d "$WARMUP_DIR" ]; then
+            DIRS_TO_ARCHIVE+=("$WARMUP_DIR")
+          fi
           if [ ${#DIRS_TO_ARCHIVE[@]} -gt 0 ]; then
             ARCHIVE="generated-tests-${SUFFIX}.tar.gz"
-            tar czf "$ARCHIVE" "${DIRS_TO_ARCHIVE[@]}"
+            tar cf - "${DIRS_TO_ARCHIVE[@]}" | gzip -9 > "$ARCHIVE"
+            echo "Archive size: $(numfmt --to=iec $(stat --format=%s "$ARCHIVE"))"
             gh release upload "$TAG" "$ARCHIVE" --clobber
           fi
 
