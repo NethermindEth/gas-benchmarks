@@ -323,6 +323,20 @@ jobs:
           echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
           echo "DB_TABLE=$DB_TABLE" >> "$GITHUB_ENV"
 
+      - name: Clean stale outputs from previous runs on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Always clean payload/warmup dirs to prevent stale runner files from
+          # leaking into archives. For partial regen the base release data is
+          # restored in the next step into a clean directory.
+          if [[ "$CFG_GENERATION_MODE" != "warmup_only" ]]; then
+            rm -rf "$PAYLOAD_DIR"
+          fi
+          rm -rf "$WARMUP_DIR"
+          rm -f "$TRACES_JSON"
+          rm -rf execution-specs
+
       - name: Restore base release data for partial regeneration
         if: ${{ inputs.base_release_tag != '' && inputs.parameter_filter != '' }}
         shell: bash
@@ -335,6 +349,7 @@ jobs:
 
           echo "Downloading base archive from release $BASE_TAG"
           ARCHIVE="generated-tests-${SUFFIX}.tar.gz"
+          mkdir -p /tmp/base-restore
           gh release download "$BASE_TAG" -p "$ARCHIVE" -D /tmp/base-restore || {
             echo "Warning: could not download $ARCHIVE from $BASE_TAG — partial run will rely on runner state"
             exit 0
@@ -342,10 +357,18 @@ jobs:
 
           echo "Extracting base archive into working directory"
           tar xzf "/tmp/base-restore/$ARCHIVE"
-          rm -rf /tmp/base-restore
+
+          # Keep base archive for later — if content is unchanged after
+          # generation we upload it directly to avoid non-deterministic repacking.
+          echo "BASE_ARCHIVE_PATH=/tmp/base-restore/$ARCHIVE" >> "$GITHUB_ENV"
 
           echo "Base PAYLOAD_DIR contents:"
           ls -la "$PAYLOAD_DIR"/ || echo "(empty)"
+
+          # Compute content fingerprint of restored data
+          FINGERPRINT=$(find "$PAYLOAD_DIR" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+          echo "BASE_CONTENT_FINGERPRINT=$FINGERPRINT" >> "$GITHUB_ENV"
+          echo "Base content fingerprint: $FINGERPRINT"
 
           # Also download base opcodes tracing for later merge
           TRACING="opcodes_tracing-${SUFFIX}.json"
@@ -355,25 +378,6 @@ jobs:
             echo "Base opcodes tracing restored ($(wc -l < base_opcodes_tracing.json) lines)"
           fi
           rm -rf /tmp/base-tracing
-
-      - name: Clean stale outputs from previous runs on runner
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "$CFG_GENERATION_MODE" != "warmup_only" ]]; then
-            if [[ -n "$CFG_PARAMETER_FILTER" ]]; then
-              echo "parameter_filter is set ('$CFG_PARAMETER_FILTER'); keeping existing $PAYLOAD_DIR to preserve other tests"
-            else
-              rm -rf "$PAYLOAD_DIR"
-            fi
-          fi
-          if [[ -n "$CFG_PARAMETER_FILTER" ]]; then
-            echo "parameter_filter is set; keeping existing $WARMUP_DIR to preserve other warmups"
-          else
-            rm -rf "$WARMUP_DIR"
-          fi
-          rm -f "$TRACES_JSON"
-          rm -rf execution-specs
 
       - name: Generate stateful tests
         if: ${{ env.CFG_GENERATION_MODE != 'warmup_only' }}
@@ -429,7 +433,7 @@ jobs:
           sed -n '/^=* short test summary info/,/^=.*=$/{ /^=/d; p }' "$LOG" | tail -200
 
           # Always print the final result line (e.g. "== 26 failed, 631 passed, 2 warnings in 3289.86s ==")
-          grep -E '^=+.*(passed|failed|error).*=+$' "$LOG" | tail -1
+          grep -E '^=+.*(passed|failed|error|no tests ran).*=+$' "$LOG" | tail -1 || echo "(no pytest result line found)"
 
       - name: Upload stateful generator log artifact
         if: ${{ always() && inputs.skip_artifacts != 'true' }}
@@ -721,7 +725,24 @@ jobs:
           fi
           if [ ${#DIRS_TO_ARCHIVE[@]} -gt 0 ]; then
             ARCHIVE="generated-tests-${SUFFIX}.tar.gz"
-            tar cf - "${DIRS_TO_ARCHIVE[@]}" | gzip -9 > "$ARCHIVE"
+
+            # For partial regen: if content is unchanged, upload the original
+            # base archive to guarantee byte-identical artifacts.
+            REUSE_BASE="false"
+            if [[ -n "${BASE_CONTENT_FINGERPRINT:-}" && -f "${BASE_ARCHIVE_PATH:-/dev/null}" ]]; then
+              CURRENT_FINGERPRINT=$(find "$PAYLOAD_DIR" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+              echo "Current content fingerprint: $CURRENT_FINGERPRINT"
+              echo "Base content fingerprint:    $BASE_CONTENT_FINGERPRINT"
+              if [[ "$CURRENT_FINGERPRINT" == "$BASE_CONTENT_FINGERPRINT" ]]; then
+                echo "Content unchanged — uploading base archive directly (no repack)"
+                cp "$BASE_ARCHIVE_PATH" "$ARCHIVE"
+                REUSE_BASE="true"
+              fi
+            fi
+
+            if [[ "$REUSE_BASE" == "false" ]]; then
+              tar cf - "${DIRS_TO_ARCHIVE[@]}" | gzip -9 > "$ARCHIVE"
+            fi
             echo "Archive size: $(numfmt --to=iec $(stat --format=%s "$ARCHIVE"))"
             gh release upload "$TAG" "$ARCHIVE" --clobber
           fi
