@@ -267,19 +267,19 @@ jobs:
               SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
               EXECUTION_CHAIN="mainnet"
-              STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_mainnet.json"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_mainnet.json"
               ;;
             perf-devnet-2)
               SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-2/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
               EXECUTION_CHAIN="mainnet"
-              STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_bloatnet.json"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_bloatnet.json"
               ;;
             perf-devnet-3)
               SNAPSHOT_DIR_NM="/mnt/sda/perf-devnet-3/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
               EXECUTION_CHAIN="mainnet"
-              STUBS_FILE="execution-specs/tests/benchmark/stateful/bloatnet/stubs_bloatnet.json"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_bloatnet.json"
               ;;
             *)
               echo "Unsupported chain: $CFG_CHAIN" >&2
