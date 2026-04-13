@@ -349,11 +349,28 @@ jobs:
 
           echo "Downloading base archive from release $BASE_TAG"
           ARCHIVE="generated-tests-${SUFFIX}.tar.gz"
+          rm -rf /tmp/base-restore /tmp/base-tracing
           mkdir -p /tmp/base-restore
-          gh release download "$BASE_TAG" -p "$ARCHIVE" -D /tmp/base-restore || {
-            echo "Warning: could not download $ARCHIVE from $BASE_TAG — partial run will rely on runner state"
-            exit 0
-          }
+
+          # Try single-file archive first; fall back to multi-part (.NN.part)
+          BASE_SINGLE_OK="false"
+          if gh release download "$BASE_TAG" -p "$ARCHIVE" -D /tmp/base-restore --clobber 2>/dev/null; then
+            BASE_SINGLE_OK="true"
+          fi
+
+          if [[ "$BASE_SINGLE_OK" != "true" ]]; then
+            echo "Single-file archive not found; trying multi-part (${ARCHIVE}.NN.part)"
+            gh release download "$BASE_TAG" -p "${ARCHIVE}.*.part" -D /tmp/base-restore --clobber || {
+              echo "ERROR: could not download $ARCHIVE (single or multi-part) from $BASE_TAG" >&2
+              echo "Partial regeneration requires the base archive to exist." >&2
+              exit 1
+            }
+            echo "Reassembling multi-part archive"
+            # -d numeric suffixes sort correctly in shell glob
+            cat /tmp/base-restore/${ARCHIVE}.*.part > "/tmp/base-restore/$ARCHIVE"
+            # Save part file names so REUSE_BASE path can re-upload them byte-identical
+            ls /tmp/base-restore/${ARCHIVE}.*.part > /tmp/base-restore/.part-list
+          fi
 
           echo "Extracting base archive into working directory"
           tar xzf "/tmp/base-restore/$ARCHIVE"
@@ -372,7 +389,8 @@ jobs:
 
           # Also download base opcodes tracing for later merge
           TRACING="opcodes_tracing-${SUFFIX}.json"
-          gh release download "$BASE_TAG" -p "$TRACING" -D /tmp/base-tracing || true
+          mkdir -p /tmp/base-tracing
+          gh release download "$BASE_TAG" -p "$TRACING" -D /tmp/base-tracing --clobber || true
           if [ -f "/tmp/base-tracing/$TRACING" ]; then
             cp "/tmp/base-tracing/$TRACING" base_opcodes_tracing.json
             echo "Base opcodes tracing restored ($(wc -l < base_opcodes_tracing.json) lines)"
@@ -725,26 +743,60 @@ jobs:
           fi
           if [ ${#DIRS_TO_ARCHIVE[@]} -gt 0 ]; then
             ARCHIVE="generated-tests-${SUFFIX}.tar.gz"
+            MAX_PART_SIZE=$((1900 * 1024 * 1024))  # 1.9 GiB, safely under 2 GiB GitHub limit
 
-            # For partial regen: if content is unchanged, upload the original
-            # base archive to guarantee byte-identical artifacts.
+            # Delete stale variants of this asset on the release (single + parts)
+            # so clobbering old format with new doesn't leave orphans behind.
+            delete_stale_assets() {
+              gh release view "$TAG" --json assets --jq ".assets[].name" 2>/dev/null | \
+                grep -E "^${ARCHIVE//./\\.}(\\.[0-9]+\\.part)?$" | \
+                while read -r name; do
+                  echo "  Deleting stale asset: $name"
+                  gh release delete-asset "$TAG" "$name" --yes >/dev/null 2>&1 || true
+                done
+            }
+
+            # For partial regen: if content is unchanged, re-upload the exact
+            # base asset files byte-for-byte (whether single-file or multi-part).
             REUSE_BASE="false"
             if [[ -n "${BASE_CONTENT_FINGERPRINT:-}" && -f "${BASE_ARCHIVE_PATH:-/dev/null}" ]]; then
               CURRENT_FINGERPRINT=$(find "$PAYLOAD_DIR" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
               echo "Current content fingerprint: $CURRENT_FINGERPRINT"
               echo "Base content fingerprint:    $BASE_CONTENT_FINGERPRINT"
               if [[ "$CURRENT_FINGERPRINT" == "$BASE_CONTENT_FINGERPRINT" ]]; then
-                echo "Content unchanged — uploading base archive directly (no repack)"
-                cp "$BASE_ARCHIVE_PATH" "$ARCHIVE"
+                echo "Content unchanged — re-uploading base asset(s) byte-identical"
                 REUSE_BASE="true"
+                delete_stale_assets
+                if [ -f /tmp/base-restore/.part-list ]; then
+                  while read -r part; do
+                    echo "  Uploading $(basename "$part") ($(numfmt --to=iec $(stat --format=%s "$part")))"
+                    gh release upload "$TAG" "$part" --clobber
+                  done < /tmp/base-restore/.part-list
+                else
+                  echo "  Uploading $(basename "$BASE_ARCHIVE_PATH") ($(numfmt --to=iec $(stat --format=%s "$BASE_ARCHIVE_PATH")))"
+                  gh release upload "$TAG" "$BASE_ARCHIVE_PATH" --clobber
+                fi
               fi
             fi
 
             if [[ "$REUSE_BASE" == "false" ]]; then
               tar cf - "${DIRS_TO_ARCHIVE[@]}" | gzip -9 > "$ARCHIVE"
+              ARCHIVE_SIZE=$(stat --format=%s "$ARCHIVE")
+              echo "Archive size: $(numfmt --to=iec "$ARCHIVE_SIZE")"
+
+              delete_stale_assets
+              if [ "$ARCHIVE_SIZE" -gt "$MAX_PART_SIZE" ]; then
+                echo "Archive exceeds $(numfmt --to=iec "$MAX_PART_SIZE") — splitting into parts"
+                split -b "$MAX_PART_SIZE" -d --additional-suffix=.part "$ARCHIVE" "${ARCHIVE}."
+                rm "$ARCHIVE"
+                for part in ${ARCHIVE}.*.part; do
+                  echo "  Uploading $(basename "$part") ($(numfmt --to=iec $(stat --format=%s "$part")))"
+                  gh release upload "$TAG" "$part" --clobber
+                done
+              else
+                gh release upload "$TAG" "$ARCHIVE" --clobber
+              fi
             fi
-            echo "Archive size: $(numfmt --to=iec $(stat --format=%s "$ARCHIVE"))"
-            gh release upload "$TAG" "$ARCHIVE" --clobber
           fi
 
           # Upload opcodes tracing

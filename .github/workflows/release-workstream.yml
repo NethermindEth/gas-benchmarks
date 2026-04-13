@@ -273,8 +273,9 @@ jobs:
           NEW_TAG="${{ steps.release.outputs.tag }}"
 
           echo "Copying assets from $BASE_TAG → $NEW_TAG"
+          rm -rf /tmp/base-assets
           mkdir -p /tmp/base-assets
-          gh release download "$BASE_TAG" -D /tmp/base-assets
+          gh release download "$BASE_TAG" -D /tmp/base-assets --clobber
 
           for f in /tmp/base-assets/*; do
             echo "  Copying $(basename "$f")"
