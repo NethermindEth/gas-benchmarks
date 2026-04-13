@@ -49,7 +49,6 @@ jobs:
 
           ALL_TARGETS=(
             "repricings_compute/mainnet|mainnet"
-            "repricings_compute/perf-devnet-2|perf-devnet-2"
             "repricings_compute/perf-devnet-3|perf-devnet-3"
             "repricings_stateful/mainnet|mainnet"
             "repricings_stateful/perf-devnet-3|perf-devnet-3"
@@ -459,7 +458,7 @@ jobs:
           set -euo pipefail
           TEST_PATH="${{ matrix.test_path }}"
 
-          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-2|perf-devnet-3)$ ]]; then
+          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-3)$ ]]; then
             SUITE="${BASH_REMATCH[1]}"
             NETWORK="${BASH_REMATCH[2]}"
             DB_NETWORK="${NETWORK//-/_}"

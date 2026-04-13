@@ -1188,7 +1188,7 @@ for run in $(seq 1 $RUNS); do
     raw_genesis="$DEFAULT_GENESIS"
     genesis_client="$client_base"
 
-    if [ "$NETWORK" = "perf-devnet-2" ] || [ "$NETWORK" = "perf-devnet-3" ]; then
+    if [ "$NETWORK" = "perf-devnet-3" ]; then
       devnet_genesis="${NETWORK}-${FORK_NAME}.json"
       case "$client_base" in
         besu)
@@ -1270,7 +1270,7 @@ for run in $(seq 1 $RUNS); do
       setup_cmd+=(--dataBackend "direct")
     fi
     if [ -n "$NETWORK" ]; then
-      if { [ "$NETWORK" = "perf-devnet-2" ] || [ "$NETWORK" = "perf-devnet-3" ]; } && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
+      if [ "$NETWORK" = "perf-devnet-3" ] && [ -n "$genesis_path" ] && [ "$client_base" != "nethermind" ]; then
         echo "Using custom genesis for $client: $genesis_path"
         setup_cmd+=(--genesisPath "$genesis_path")
       else

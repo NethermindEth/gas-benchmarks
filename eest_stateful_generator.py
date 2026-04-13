@@ -899,8 +899,7 @@ def start_nethermind_container(
         cmd += ["--config", "none", "--Init.ChainSpecPath", "/genesis/custom.json"]
     else:
         chain_name = str(chain).strip().lower()
-        # perf-devnet-2 uses mainnet-format DB/genesis in this workflow; Nethermind has no built-in "perf-devnet-2" config.
-        runtime_config = "mainnet" if chain_name in ("perf-devnet-2", "mainnet", "ethereum") else str(chain)
+        runtime_config = "mainnet" if chain_name in ("mainnet", "ethereum") else str(chain)
         if runtime_config != str(chain):
             print(f"[INFO] Overriding Nethermind runtime --config from {chain!r} to {runtime_config!r}")
         cmd += ["--config", runtime_config]

@@ -28,7 +28,7 @@ DEFAULT_GENESIS = GENESIS_FILES["geth"]
 
 def resolve_nethermind_config_network(network: str) -> str:
     normalized = str(network).strip().lower()
-    if normalized in {"mainnet", "perf-devnet-2"}:
+    if normalized == "mainnet":
         return "mainnet"
     return normalized
 
