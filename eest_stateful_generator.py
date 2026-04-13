@@ -713,6 +713,7 @@ def _replay_preparation_payloads(
     """Replay existing gas-bump and funding payload files against the running node."""
     import hmac, hashlib
 
+    global _PREP_SLOT_COUNTER
     session = _get_http_session()
 
     def _send_engine_line(line: str) -> dict:
@@ -755,6 +756,7 @@ def _replay_preparation_payloads(
                     obj["method"] = target_np_method
                     line = json.dumps(obj, separators=(",", ":"))
                 replayed += 1
+                _PREP_SLOT_COUNTER += 1
                 now = time.monotonic()
                 if replayed == 1 or replayed == np_count or now - last_log >= 5:
                     print(f"[DEBUG] Replaying {label} payload {replayed}/{np_count}")
