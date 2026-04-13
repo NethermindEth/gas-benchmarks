@@ -708,7 +708,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload assets to GitHub release
-        if: ${{ always() && inputs.release_tag != '' }}
+        if: ${{ success() && inputs.release_tag != '' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
