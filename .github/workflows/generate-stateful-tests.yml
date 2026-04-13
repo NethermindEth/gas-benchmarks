@@ -287,6 +287,15 @@ jobs:
               ;;
           esac
 
+          # Address stubs are only meaningful for stateful tests. For repricing
+          # runs we always use the dedicated repricing stubs file regardless of
+          # chain. Compute tests get no stubs at all.
+          if [[ "$CFG_MODE" != "stateful" ]]; then
+            STUBS_FILE=""
+          elif [[ "$CFG_EEST_MODE" == "repricing" ]]; then
+            STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_repricing.json"
+          fi
+
           PAYLOAD_DIR="$CFG_PAYLOAD_DIR"
           WARMUP_DIR="${PAYLOAD_DIR}_warmup"
           GAS_BUMP_COUNT="$CFG_GAS_BUMP_COUNT"
@@ -424,7 +433,7 @@ jobs:
             --gas-bump-count "$GAS_BUMP_COUNT" \
             ${CFG_EEST_MODE:+--eest_mode "$CFG_EEST_MODE"} \
             --gas-benchmark-values "$CFG_GAS_BENCHMARK_VALUES" \
-            --stubs-file "$STUBS_FILE" \
+            ${STUBS_FILE:+--stubs-file "$STUBS_FILE"} \
             --snapshot-dir "$SNAPSHOT_DIR_NM" \
             --chain "$EXECUTION_CHAIN" \
             "${GENESIS_ARGS[@]}" \
