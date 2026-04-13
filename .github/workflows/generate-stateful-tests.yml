@@ -748,12 +748,15 @@ jobs:
             # Delete stale variants of this asset on the release (single + parts)
             # so clobbering old format with new doesn't leave orphans behind.
             delete_stale_assets() {
-              gh release view "$TAG" --json assets --jq ".assets[].name" 2>/dev/null | \
-                grep -E "^${ARCHIVE//./\\.}(\\.[0-9]+\\.part)?$" | \
-                while read -r name; do
-                  echo "  Deleting stale asset: $name"
-                  gh release delete-asset "$TAG" "$name" --yes >/dev/null 2>&1 || true
-                done
+              # grep returns 1 on no match; || true so pipefail doesn't kill the script
+              local names
+              names=$(gh release view "$TAG" --json assets --jq ".assets[].name" 2>/dev/null \
+                | grep -E "^${ARCHIVE//./\\.}(\\.[0-9]+\\.part)?$" || true)
+              [ -z "$names" ] && return 0
+              while read -r name; do
+                echo "  Deleting stale asset: $name"
+                gh release delete-asset "$TAG" "$name" --yes >/dev/null 2>&1 || true
+              done <<< "$names"
             }
 
             # For partial regen: if content is unchanged, re-upload the exact
