@@ -243,9 +243,10 @@ jobs:
           | Parameter | Value |
           |-----------|-------|
           | Fork | \`${FORK}\` |
-          | EEST mode | \`${EEST_MODE:-all}\` |
+          | EELS mode | \`${EEST_MODE:-all}\` |
           | Nethermind image | \`${{ inputs.nethermind_image }}\` |
-          | EEST branch | \`${{ inputs.eest_branch }}\` |
+          | EELS repo | \`${{ inputs.eest_repo }}\` |
+          | EELS branch | \`${{ inputs.eest_branch }}\` |
           | Gas benchmark values | \`${GAS_VALUES}\` |
           | Warmups | disabled |
           | Chains | \`${{ inputs.chains || 'all' }}\` |
