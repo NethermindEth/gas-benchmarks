@@ -96,7 +96,6 @@ jobs:
               FULL_MATRIX='[
                 {"mode":"compute","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
                 {"mode":"compute","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"},
-                {"mode":"stateful","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
                 {"mode":"stateful","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"}
               ]'
               ;;
@@ -120,7 +119,6 @@ jobs:
               FULL_MATRIX='[
                 {"mode":"compute","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
                 {"mode":"compute","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"},
-                {"mode":"stateful","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
                 {"mode":"stateful","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"}
               ]'
               ;;
