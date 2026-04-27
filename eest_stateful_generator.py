@@ -6,6 +6,7 @@ import os
 import shlex
 import shutil
 import signal
+import stat
 import socket
 import subprocess
 import sys
@@ -895,14 +896,18 @@ def start_nethermind_container(
 
     cmd.append(image)
 
-    if genesis_path:
-        cmd += ["--config", "none", "--Init.ChainSpecPath", "/genesis/custom.json"]
+    chain_name = str(chain).strip().lower()
+    if chain_name == "none":
+        runtime_config = "none"
+    elif chain_name in ("mainnet", "ethereum"):
+        runtime_config = "mainnet"
     else:
-        chain_name = str(chain).strip().lower()
-        runtime_config = "mainnet" if chain_name in ("mainnet", "ethereum") else str(chain)
-        if runtime_config != str(chain):
-            print(f"[INFO] Overriding Nethermind runtime --config from {chain!r} to {runtime_config!r}")
-        cmd += ["--config", runtime_config]
+        runtime_config = str(chain)
+    if runtime_config != str(chain):
+        print(f"[INFO] Overriding Nethermind runtime --config from {chain!r} to {runtime_config!r}")
+    cmd += ["--config", runtime_config]
+    if genesis_path:
+        cmd += ["--Init.ChainSpecPath", "/genesis/custom.json"]
 
     cmd += [
         "--JsonRpc.Enabled",
@@ -1447,11 +1452,15 @@ def main():
     resume_file = control_dir / "resume.json"
 
 
+    def _rm_readonly(func, path, _exc_info):
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+
     repo_dir = Path("execution-specs")
     repo_url = args.eest_repo
     if args.eest_clean_clone and repo_dir.exists():
         print(f"[INFO] --eest-clean-clone enabled; removing existing {repo_dir}")
-        shutil.rmtree(repo_dir)
+        shutil.rmtree(repo_dir, onerror=_rm_readonly)
     if repo_dir.exists():
         if not args.eest_no_pull:
             run(["git", "remote", "set-url", "origin", repo_url], cwd=str(repo_dir))
@@ -1480,8 +1489,12 @@ def main():
         run([sys.executable, "-m", "pip", "install", "-U", "uv"])
     run(["uv", "python", "install", "3.11"])
     run(["uv", "python", "pin", "3.11"], cwd=str(repo_dir))
-    run(["uv", "sync", "--all-extras"], cwd=str(repo_dir))
-    run(["uv", "pip", "install", "-e", ".", "--break-system-packages"], cwd=str(repo_dir))
+    if sys.platform == "win32":
+        run(["uv", "sync", "--no-dev", "--group", "test"], cwd=str(repo_dir))
+    else:
+        run(["uv", "sync", "--all-extras"], cwd=str(repo_dir))
+    if sys.platform != "win32":
+        run(["uv", "pip", "install", "-e", ".", "--break-system-packages"], cwd=str(repo_dir))
 
     snapshot_dir = Path(args.snapshot_dir).expanduser().resolve()
 
@@ -1707,8 +1720,11 @@ def main():
             if mode_key not in mode_map:
                 raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
             eest_mode = mode_map[mode_key]
-        uv_cmd = [
-            "uv", "run", "execute", "remote", "-v",
+        uv_run_prefix = ["uv", "run"]
+        if sys.platform == "win32":
+            uv_run_prefix += ["--no-dev", "--group", "test"]
+        uv_cmd = uv_run_prefix + [
+            "execute", "remote", "-v",
             f"--fork={args.fork}",
             f"--rpc-seed-key={args.rpc_seed_key}",
             f"--rpc-chain-id={chain_id}",
