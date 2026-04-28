@@ -1,0 +1,29 @@
+name: Run Command on Stateful Generator
+run-name: "Remote exec: ${{ inputs.command }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Shell command to execute"
+        required: true
+        type: string
+      timeout:
+        description: "Timeout in minutes"
+        required: false
+        type: number
+        default: 30
+
+jobs:
+  exec:
+    runs-on: stateful-generator
+    timeout-minutes: ${{ fromJson(inputs.timeout) }}
+    steps:
+      - name: Execute command
+        run: |
+          echo "::group::Command"
+          echo "${{ inputs.command }}"
+          echo "::endgroup::"
+          echo "::group::Output"
+          eval "${{ inputs.command }}"
+          echo "::endgroup::"
