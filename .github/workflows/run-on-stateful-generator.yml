@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Execute command
         run: |
-          COMMAND="${{ inputs.command || 'ls /mnt/sda' }}"
+          COMMAND="${{ inputs.command || 'ls -la /mnt/sda' }}"
           echo "::group::Command"
           echo "$COMMAND"
           echo "::endgroup::"
