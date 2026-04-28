@@ -246,7 +246,7 @@ jobs:
       CFG_WARMUP_SNAPSHOT_BACKEND: ${{ inputs.warmup_snapshot_backend || 'overlay' }}
       CFG_CHAINSPEC_FILE: ${{ inputs.chainspec_file || '' }}
       CFG_NETHERMIND_EXTRA_FLAGS: ${{ inputs.nethermind_extra_flags || '' }}
-      CFG_TRACE_JSON: ${{ inputs.trace_json || 'true' }}
+      CFG_TRACE_JSON: ${{ inputs.trace_json == false && 'false' || inputs.trace_json == 'false' && 'false' || 'true' }}
       CFG_NETHERMIND_DIAG_MODE: ${{ inputs.diagnostics_mode || 'none' }}
       CFG_NETHERMIND_DIAG_STOP_TIMEOUT: ${{ inputs.diagnostics_stop_timeout || '180' }}
       ARTIFACT_SUFFIX: ${{ format('{0}-{1}', inputs.mode || 'compute', inputs.chain || 'mainnet') }}
