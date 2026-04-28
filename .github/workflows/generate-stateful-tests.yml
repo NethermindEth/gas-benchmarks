@@ -82,6 +82,11 @@ on:
         description: "Extra Nethermind CLI flags passed to the container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None')"
         required: false
         default: ""
+      trace_json:
+        description: "Enable opcode tracing (--trace-json)"
+        required: false
+        type: boolean
+        default: true
       diagnostics_mode:
         description: "Run Nethermind through Dockerfile.diag entrypoint"
         required: false
@@ -177,6 +182,9 @@ on:
       nethermind_extra_flags:
         type: string
         default: ""
+      trace_json:
+        type: string
+        default: "true"
       diagnostics_mode:
         type: string
         default: "none"
@@ -238,6 +246,7 @@ jobs:
       CFG_WARMUP_SNAPSHOT_BACKEND: ${{ inputs.warmup_snapshot_backend || 'overlay' }}
       CFG_CHAINSPEC_FILE: ${{ inputs.chainspec_file || '' }}
       CFG_NETHERMIND_EXTRA_FLAGS: ${{ inputs.nethermind_extra_flags || '' }}
+      CFG_TRACE_JSON: ${{ inputs.trace_json || 'true' }}
       CFG_NETHERMIND_DIAG_MODE: ${{ inputs.diagnostics_mode || 'none' }}
       CFG_NETHERMIND_DIAG_STOP_TIMEOUT: ${{ inputs.diagnostics_stop_timeout || '180' }}
       ARTIFACT_SUFFIX: ${{ format('{0}-{1}', inputs.mode || 'compute', inputs.chain || 'mainnet') }}
@@ -473,8 +482,7 @@ jobs:
             "${GENESIS_ARGS[@]}" \
             --overlay-root "$OVERLAY_ROOT" \
             --allow-execute-remote-failures \
-            --trace-json \
-            --trace-json-output "$TRACES_JSON" \
+            $( [[ "$CFG_TRACE_JSON" == "true" ]] && echo "--trace-json --trace-json-output $TRACES_JSON" ) \
             ${CFG_PARAMETER_FILTER:+--parameter_filter "$CFG_PARAMETER_FILTER"} \
             "${DIAG_ARGS[@]}" \
             ${CFG_NETHERMIND_EXTRA_FLAGS:+--nethermind-extra-flags="$CFG_NETHERMIND_EXTRA_FLAGS"} \
@@ -609,7 +617,7 @@ jobs:
           fi
 
       - name: Upload traces metadata to DB
-        if: ${{ inputs.push_to_db == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ inputs.push_to_db == 'true' && env.CFG_TRACE_JSON == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         env:
           DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
@@ -629,7 +637,7 @@ jobs:
             --table-name "$DB_TABLE"
 
       - name: Prepare opcodes tracing artifact
-        if: ${{ always() && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ always() && env.CFG_TRACE_JSON == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -649,7 +657,7 @@ jobs:
           rm -f base_opcodes_tracing.json
 
       - name: Upload opcodes tracing artifact
-        if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_TRACE_JSON == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         uses: actions/upload-artifact@v4
         with:
           name: opcodes-tracing-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
