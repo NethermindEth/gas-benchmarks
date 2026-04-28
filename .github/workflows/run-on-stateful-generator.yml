@@ -22,12 +22,40 @@ jobs:
     runs-on: stateful-generator
     timeout-minutes: ${{ fromJson(inputs.timeout || '720') }}
     steps:
-      - name: Execute command
+      - name: Download and extract jochemnet snapshot
+        if: ${{ inputs.command == '' }}
         run: |
-          COMMAND="${{ inputs.command || 'rm -rf /mnt/sda/jochemnet && mkdir -p /mnt/sda/jochemnet/nethermind && cd /mnt/sda/jochemnet/nethermind && echo \"Downloading and extracting jochemnet snapshot...\" && curl -fL https://snapshots.ethpandaops.io/jochemnet/nethermind/24402727/snapshot.tar.zst | zstd -d --threads=0 | tar xf - && echo \"Done. Contents:\" && ls -la /mnt/sda/jochemnet/nethermind/' }}"
+          set -e
+          URL="https://snapshots.ethpandaops.io/jochemnet/nethermind/24402727/snapshot.tar.zst"
+          DEST="/mnt/sda/jochemnet/nethermind"
+          ARCHIVE="/mnt/sda/jochemnet/snapshot.tar.zst"
+
+          rm -rf /mnt/sda/jochemnet
+          mkdir -p "$DEST"
+
+          echo "Downloading snapshot (resumable)..."
+          until curl -fL -C - --retry 10 --retry-delay 30 --retry-max-time 3600 -o "$ARCHIVE" "$URL"; do
+            echo "Download interrupted, retrying in 60s..."
+            sleep 60
+          done
+
+          echo "Download complete. Size: $(du -h "$ARCHIVE" | cut -f1)"
+          echo "Extracting..."
+          cd "$DEST"
+          zstd -d --threads=0 "$ARCHIVE" --stdout | tar xf -
+
+          echo "Removing archive..."
+          rm -f "$ARCHIVE"
+
+          echo "Done. Contents:"
+          ls -la "$DEST"
+
+      - name: Execute command
+        if: ${{ inputs.command != '' }}
+        run: |
           echo "::group::Command"
-          echo "$COMMAND"
+          echo "${{ inputs.command }}"
           echo "::endgroup::"
           echo "::group::Output"
-          eval "$COMMAND"
+          eval "${{ inputs.command }}"
           echo "::endgroup::"
