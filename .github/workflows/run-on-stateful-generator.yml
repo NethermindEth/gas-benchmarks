@@ -2,9 +2,6 @@ name: Run Command on Stateful Generator
 run-name: "Remote exec: ${{ inputs.command }}"
 
 on:
-  push:
-    branches:
-      - stateful-runner-interaction
   workflow_dispatch:
     inputs:
       command:
