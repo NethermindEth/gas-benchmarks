@@ -415,7 +415,27 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         print(f"[WARN] Testing directory {testing_dir} does not exist")
         return
 
+    print(f"[DEBUG] Opcode tracing directory: {opcode_tracing_dir} (exists={opcode_tracing_dir.exists()})")
+    if opcode_tracing_dir.exists():
+        all_files = sorted(opcode_tracing_dir.rglob("*"))
+        print(f"[DEBUG] All files in opcode tracing dir ({len(all_files)} total):")
+        for f in all_files:
+            try:
+                size = f.stat().st_size if f.is_file() else -1
+            except Exception:
+                size = -1
+            print(f"[DEBUG]   {f.relative_to(opcode_tracing_dir)}  ({size} bytes)")
+        cumulative_files = sorted(opcode_tracing_dir.rglob("opcode-trace-all-*.json"))
+        if cumulative_files:
+            for cf in cumulative_files:
+                try:
+                    preview = cf.read_text(encoding="utf-8")[:2000]
+                    print(f"[DEBUG] Cumulative trace file {cf.name} preview:\n{preview}\n[DEBUG] ... (truncated)")
+                except Exception as e:
+                    print(f"[DEBUG] Could not read {cf.name}: {e}")
+
     trace_files = sorted(opcode_tracing_dir.rglob("opcode-trace-block-*.json"))
+    print(f"[DEBUG] Matched opcode-trace-block-*.json files: {len(trace_files)}")
     trace_entries: List[Dict[str, Any]] = []
     seen_signatures: set[Any] = set()
 
