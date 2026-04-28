@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Execute command
         run: |
-          COMMAND="${{ inputs.command || 'ls -R /mnt/sda/mainnet' }}"
+          COMMAND="${{ inputs.command || 'mkdir -p /mnt/sda/jochemnet/nethermind && cd /mnt/sda/jochemnet/nethermind && echo \"Downloading and extracting snapshot...\" && curl -fL https://snapshots.ethpandaops.io/jochemnet/nethermind/24402727/snapshot.tar.zst | tar --zstd -xf - && echo \"Done. Contents:\" && ls -la /mnt/sda/jochemnet/nethermind/' }}"
           echo "::group::Command"
           echo "$COMMAND"
           echo "::endgroup::"
