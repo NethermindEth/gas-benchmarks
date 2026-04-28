@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Execute command
         run: |
-          COMMAND="${{ inputs.command || 'echo \"Waiting 30 minutes before starting...\" && sleep 1800 && rm -rf /mnt/sda/jochemnet && mkdir -p /mnt/sda/jochemnet/nethermind && cd /mnt/sda/jochemnet/nethermind && echo \"Downloading and extracting jochemnet snapshot...\" && curl -fL https://snapshots.ethpandaops.io/jochemnet/nethermind/24402727/snapshot.tar.zst | zstd -d --threads=0 | tar xf - && echo \"Done. Contents:\" && ls -la /mnt/sda/jochemnet/nethermind/' }}"
+          COMMAND="${{ inputs.command || 'rm -rf /mnt/sda/jochemnet && mkdir -p /mnt/sda/jochemnet/nethermind && cd /mnt/sda/jochemnet/nethermind && echo \"Downloading and extracting jochemnet snapshot...\" && curl -fL https://snapshots.ethpandaops.io/jochemnet/nethermind/24402727/snapshot.tar.zst | zstd -d --threads=0 | tar xf - && echo \"Done. Contents:\" && ls -la /mnt/sda/jochemnet/nethermind/' }}"
           echo "::group::Command"
           echo "$COMMAND"
           echo "::endgroup::"
