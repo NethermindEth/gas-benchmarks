@@ -22,33 +22,34 @@ jobs:
     runs-on: stateful-generator
     timeout-minutes: ${{ fromJson(inputs.timeout || '720') }}
     steps:
-      - name: Download and extract jochemnet snapshot
+      - name: Fire-and-forget jochemnet download
         if: ${{ inputs.command == '' }}
         run: |
-          set -e
           URL="https://snapshots.ethpandaops.io/jochemnet/nethermind/24402727/snapshot.tar.zst"
           DEST="/mnt/sda/jochemnet/nethermind"
           ARCHIVE="/mnt/sda/jochemnet/snapshot.tar.zst"
+          LOG="/tmp/jochemnet-download.log"
 
-          rm -rf /mnt/sda/jochemnet
           mkdir -p "$DEST"
 
-          echo "Downloading snapshot (resumable)..."
-          until curl -fL -C - --retry 10 --retry-delay 30 --retry-max-time 3600 -o "$ARCHIVE" "$URL"; do
-            echo "Download interrupted, retrying in 60s..."
-            sleep 60
-          done
+          nohup bash -c "
+            until curl -fL -C - --retry 10 --retry-delay 30 --retry-max-time 3600 -o '$ARCHIVE' '$URL'; do
+              echo 'Download interrupted, retrying in 60s...'
+              sleep 60
+            done
+            echo 'Download complete. Extracting...'
+            cd '$DEST'
+            zstd -d --threads=0 '$ARCHIVE' --stdout | tar xf -
+            rm -f '$ARCHIVE'
+            echo 'Done.'
+          " > "$LOG" 2>&1 &
 
-          echo "Download complete. Size: $(du -h "$ARCHIVE" | cut -f1)"
-          echo "Extracting..."
-          cd "$DEST"
-          zstd -d --threads=0 "$ARCHIVE" --stdout | tar xf -
-
-          echo "Removing archive..."
-          rm -f "$ARCHIVE"
-
-          echo "Done. Contents:"
-          ls -la "$DEST"
+          echo "Download launched in background (PID: $!)"
+          echo "Log: $LOG"
+          echo "Archive: $ARCHIVE"
+          sleep 5
+          echo "Initial progress:"
+          tail -3 "$LOG"
 
       - name: Execute command
         if: ${{ inputs.command != '' }}
