@@ -82,9 +82,9 @@ jobs:
               DEFAULT_FORK="Osaka"
               DEFAULT_CHAINSPEC=""
               FULL_MATRIX='[
-                {"mode":"compute","chain":"mainnet"},
+                {"mode":"compute","chain":"jochemnet"},
                 {"mode":"compute","chain":"perf-devnet-3"},
-                {"mode":"stateful","chain":"mainnet"},
+                {"mode":"stateful","chain":"jochemnet"},
                 {"mode":"stateful","chain":"perf-devnet-3"}
               ]'
               ;;
@@ -94,8 +94,9 @@ jobs:
               DEFAULT_FORK="Amsterdam"
               DEFAULT_CHAINSPEC=""
               FULL_MATRIX='[
-                {"mode":"compute","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
+                {"mode":"compute","chain":"jochemnet","chainspec":"generator-amsterdam-jochemnet.json"},
                 {"mode":"compute","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"},
+                {"mode":"stateful","chain":"jochemnet","chainspec":"generator-amsterdam-jochemnet.json"},
                 {"mode":"stateful","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"}
               ]'
               ;;
@@ -105,9 +106,9 @@ jobs:
               DEFAULT_FORK="Osaka"
               DEFAULT_CHAINSPEC=""
               FULL_MATRIX='[
-                {"mode":"compute","chain":"mainnet"},
+                {"mode":"compute","chain":"jochemnet"},
                 {"mode":"compute","chain":"perf-devnet-3"},
-                {"mode":"stateful","chain":"mainnet"},
+                {"mode":"stateful","chain":"jochemnet"},
                 {"mode":"stateful","chain":"perf-devnet-3"}
               ]'
               ;;
@@ -117,8 +118,9 @@ jobs:
               DEFAULT_FORK="Amsterdam"
               DEFAULT_CHAINSPEC=""
               FULL_MATRIX='[
-                {"mode":"compute","chain":"mainnet","chainspec":"generator-amsterdam-mainnet.json"},
+                {"mode":"compute","chain":"jochemnet","chainspec":"generator-amsterdam-jochemnet.json"},
                 {"mode":"compute","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"},
+                {"mode":"stateful","chain":"jochemnet","chainspec":"generator-amsterdam-jochemnet.json"},
                 {"mode":"stateful","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"}
               ]'
               ;;
