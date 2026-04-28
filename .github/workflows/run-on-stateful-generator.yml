@@ -2,6 +2,9 @@ name: Run Command on Stateful Generator
 run-name: "Remote exec: ${{ inputs.command }}"
 
 on:
+  push:
+    branches:
+      - stateful-runner-interaction
   workflow_dispatch:
     inputs:
       command:
@@ -17,11 +20,11 @@ on:
 jobs:
   exec:
     runs-on: stateful-generator
-    timeout-minutes: ${{ fromJson(inputs.timeout || '30') }}
+    timeout-minutes: ${{ fromJson(inputs.timeout || '720') }}
     steps:
       - name: Execute command
         run: |
-          COMMAND="${{ inputs.command || 'ls -la /mnt/sda' }}"
+          COMMAND="${{ inputs.command || 'ls -R /mnt/sda/mainnet' }}"
           echo "::group::Command"
           echo "$COMMAND"
           echo "::endgroup::"
