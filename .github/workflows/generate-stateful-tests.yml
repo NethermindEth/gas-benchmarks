@@ -505,6 +505,26 @@ jobs:
           path: stateful_generator.log
           if-no-files-found: warn
 
+      - name: Capture container logs
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if docker inspect eest-nethermind >/dev/null 2>&1; then
+            docker logs eest-nethermind > nethermind.log 2>&1 || true
+          fi
+
+      - name: Upload logs
+        if: ${{ always() && inputs.skip_artifacts != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stateful-logs-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
+          path: |
+            mitm.log
+            mitm_full.log
+            nethermind.log
+          if-no-files-found: warn
+
       - name: Finalize Nethermind diagnostics
         if: ${{ always() && env.CFG_NETHERMIND_DIAG_MODE != 'none' }}
         shell: bash
