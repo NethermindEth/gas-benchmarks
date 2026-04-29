@@ -363,6 +363,7 @@ def _snapshot_trace_files_once(
             continue
         seen_state[trace_file] = state
 
+        print(f"[DEBUG-SNAPSHOT] New/changed trace file: {trace_file.name} (size={state[1]}, mtime_ns={state[0]})")
         hash_suffix = "nometa"
         try:
             trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
@@ -386,7 +387,9 @@ def _snapshot_trace_files_once(
         snapshot_path = history_dir / snapshot_name
         try:
             shutil.copy2(trace_file, snapshot_path)
-        except Exception:
+            print(f"[DEBUG-SNAPSHOT] Saved snapshot: {snapshot_path.name}")
+        except Exception as e:
+            print(f"[DEBUG-SNAPSHOT] Failed to copy {trace_file.name} -> {snapshot_path.name}: {e}")
             continue
 
 
@@ -415,24 +418,51 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         print(f"[WARN] Testing directory {testing_dir} does not exist")
         return
 
+    print(f"[DEBUG] === Opcode tracing directory listing: {opcode_tracing_dir} ===")
+    if opcode_tracing_dir.exists():
+        for item in sorted(opcode_tracing_dir.iterdir()):
+            if item.is_file():
+                size = item.stat().st_size
+                print(f"[DEBUG]   FILE {item.name}  ({size} bytes)")
+            elif item.is_dir():
+                subfiles = list(item.rglob("*"))
+                print(f"[DEBUG]   DIR  {item.name}/  ({len(subfiles)} items)")
+                for sf in sorted(subfiles)[:20]:
+                    if sf.is_file():
+                        print(f"[DEBUG]     {sf.name}  ({sf.stat().st_size} bytes)")
+                if len(subfiles) > 20:
+                    print(f"[DEBUG]     ... and {len(subfiles) - 20} more")
+    else:
+        print(f"[DEBUG] Directory does not exist!")
+
     trace_files = sorted(opcode_tracing_dir.rglob("opcode-trace-block-*.json"))
+    print(f"[DEBUG] Found {len(trace_files)} trace files via rglob")
     trace_entries: List[Dict[str, Any]] = []
     seen_signatures: set[Any] = set()
 
     for trace_file in trace_files:
         if not trace_file.is_file():
+            print(f"[DEBUG] Skipping {trace_file.name}: not a file")
             continue
         try:
-            trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
-        except Exception:
+            raw_text = trace_file.read_text(encoding="utf-8")
+            trace_data = json.loads(raw_text)
+        except Exception as e:
+            print(f"[DEBUG] Failed to parse {trace_file.name}: {e}")
             continue
+
+        print(f"[DEBUG] Trace file {trace_file.name}: top-level keys={list(trace_data.keys()) if isinstance(trace_data, dict) else type(trace_data).__name__}, size={len(raw_text)} bytes")
+        if isinstance(trace_data, dict) and len(raw_text) < 2000:
+            print(f"[DEBUG]   Content preview: {raw_text[:2000]}")
 
         opcode_counts = _extract_trace_opcode_counts(trace_data)
         if not opcode_counts:
+            print(f"[DEBUG] Skipping {trace_file.name}: no opcode counts extracted")
             continue
 
         metadata = _extract_trace_metadata(trace_data)
         block_hash = _extract_trace_block_hash(trace_data)
+        print(f"[DEBUG]   block_hash={block_hash}, metadata={metadata}, opcode_count_keys={len(opcode_counts)}")
         if block_hash:
             block_hash = block_hash.lower()
 
@@ -494,6 +524,18 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         if isinstance(block_number, int):
             _append_index(traces_by_number, block_number, entry_id)
 
+    print(f"[DEBUG] === Trace index summary ===")
+    print(f"[DEBUG]   Total trace entries: {len(trace_entries)}")
+    print(f"[DEBUG]   Unique by hash: {len(traces_by_hash)}")
+    print(f"[DEBUG]   Unique by full tuple: {len(traces_by_full)}")
+    print(f"[DEBUG]   Unique by num+ts+parent: {len(traces_by_num_ts_parent)}")
+    print(f"[DEBUG]   Unique by num+ts: {len(traces_by_num_ts)}")
+    print(f"[DEBUG]   Unique by number: {len(traces_by_number)}")
+    for entry in trace_entries[:10]:
+        print(f"[DEBUG]   Entry#{entry['id']}: hash={entry['block_hash']}, num={entry['block_number']}, ts={entry['timestamp']}, parent={entry['parent_hash']}, txs={entry['tx_count']}")
+    if len(trace_entries) > 10:
+        print(f"[DEBUG]   ... and {len(trace_entries) - 10} more entries")
+
     used_entry_ids: set[int] = set()
 
     def _pick_unused(candidates: Optional[List[int]]) -> Optional[int]:
@@ -519,6 +561,10 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
             if any(all(term in f.name.lower() for term in group) for group in parsed_groups)
         ]
         print(f"[INFO] Trace matching filtered to {len(testing_files)} files (parameter_filter='{parameter_filter}')")
+    print(f"[DEBUG] === Testing files to match: {len(testing_files)} ===")
+    for tf in testing_files:
+        print(f"[DEBUG]   {tf.name} ({tf.stat().st_size} bytes)")
+
     for txt_file in testing_files:
         test_name = txt_file.stem
 
@@ -527,6 +573,8 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         except Exception as e:
             print(f"[WARN] Failed to read {txt_file}: {e}")
             continue
+
+        print(f"[DEBUG] Processing {txt_file.name}: {len(lines)} lines")
 
         # Collect all block references from the file
         block_refs: List[Dict[str, Any]] = []
@@ -551,6 +599,10 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         if not block_refs:
             print(f"[WARN] No payload block references found in {txt_file}")
             continue
+
+        print(f"[DEBUG]   Found {len(block_refs)} block refs in {txt_file.name}")
+        for br in block_refs:
+            print(f"[DEBUG]     blockNum={br.get('block_number')} hash={br.get('block_hash')} ts={br.get('timestamp')} parent={br.get('parent_hash')} txs={br.get('tx_count')}")
 
         # Merge opcode counts from all blocks
         merged_counts: dict[str, int] = {}
