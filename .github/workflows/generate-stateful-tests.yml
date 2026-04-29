@@ -280,7 +280,7 @@ jobs:
               SNAPSHOT_DIR_NM="/mnt/sda/jochemnet/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
               EXECUTION_CHAIN="mainnet"
-              STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_bloatnet.json"
+              STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_jochemnet.json"
               ;;
             *)
               echo "Unsupported chain: $CFG_CHAIN" >&2
