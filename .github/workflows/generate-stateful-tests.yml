@@ -288,10 +288,11 @@ jobs:
               ;;
           esac
 
-          # Address stubs are only meaningful for stateful tests. For repricing
-          # runs we always use the dedicated repricing stubs file regardless of
-          # chain. Compute tests get no stubs at all.
-          if [[ "$CFG_MODE" != "stateful" ]]; then
+          # Jochemnet always uses its network-specific stubs. Other networks only
+          # use address stubs for stateful tests, with repricing using dedicated stubs.
+          if [[ "$CFG_CHAIN" == "jochemnet" ]]; then
+            STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_jochemnet.json"
+          elif [[ "$CFG_MODE" != "stateful" ]]; then
             STUBS_FILE=""
           elif [[ "$CFG_EEST_MODE" == "repricing" ]]; then
             STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_repricing.json"
