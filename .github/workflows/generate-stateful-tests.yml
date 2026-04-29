@@ -263,7 +263,36 @@ jobs:
         run: |
           set -euo pipefail
 
-          case "$CFG_CHAIN" in
+          EFFECTIVE_CHAIN="$CFG_CHAIN"
+          EFFECTIVE_CHAINSPEC_FILE="$CFG_CHAINSPEC_FILE"
+          if [[ -z "$EFFECTIVE_CHAINSPEC_FILE" && "${CFG_FORK,,}" == "amsterdam" ]]; then
+            case "$CFG_CHAIN" in
+              jochemnet)
+                EFFECTIVE_CHAINSPEC_FILE="generator-amsterdam-jochemnet.json"
+                ;;
+              perf-devnet-3)
+                EFFECTIVE_CHAINSPEC_FILE="generator-amsterdam-perf-devnet-3.json"
+                ;;
+            esac
+          fi
+
+          case "$EFFECTIVE_CHAINSPEC_FILE" in
+            generator-amsterdam-jochemnet.json)
+              EFFECTIVE_CHAIN="jochemnet"
+              ;;
+            generator-amsterdam-perf-devnet-3.json)
+              EFFECTIVE_CHAIN="perf-devnet-3"
+              ;;
+            generator-amsterdam-mainnet.json)
+              EFFECTIVE_CHAIN="mainnet"
+              ;;
+          esac
+
+          if [[ "$EFFECTIVE_CHAIN" != "$CFG_CHAIN" ]]; then
+            echo "[INFO] Using effective chain '$EFFECTIVE_CHAIN' from chainspec '$CFG_CHAINSPEC_FILE' (input chain was '$CFG_CHAIN')."
+          fi
+
+          case "$EFFECTIVE_CHAIN" in
             mainnet)
               SNAPSHOT_DIR_NM="/mnt/sda/mainnet/nethermind"
               SNAPSHOT_DIR_WARMUP="$SNAPSHOT_DIR_NM"
@@ -283,14 +312,14 @@ jobs:
               STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_jochemnet.json"
               ;;
             *)
-              echo "Unsupported chain: $CFG_CHAIN" >&2
+              echo "Unsupported chain: $EFFECTIVE_CHAIN" >&2
               exit 1
               ;;
           esac
 
           # Jochemnet always uses its network-specific stubs. Other networks only
           # use address stubs for stateful tests, with repricing using dedicated stubs.
-          if [[ "$CFG_CHAIN" == "jochemnet" ]]; then
+          if [[ "$EFFECTIVE_CHAIN" == "jochemnet" ]]; then
             STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_jochemnet.json"
           elif [[ "$CFG_MODE" != "stateful" ]]; then
             STUBS_FILE=""
@@ -298,11 +327,11 @@ jobs:
             STUBS_FILE="execution-specs/tests/benchmark/stateful/stubs/stubs_repricing.json"
           fi
 
-          PAYLOAD_DIR="$CFG_PAYLOAD_DIR"
+          PAYLOAD_DIR="repricings_${CFG_MODE}/${EFFECTIVE_CHAIN}"
           WARMUP_DIR="${PAYLOAD_DIR}_warmup"
           GAS_BUMP_COUNT="$CFG_GAS_BUMP_COUNT"
           if [[ "$GAS_BUMP_COUNT" == "-1" ]]; then
-            if [[ "$CFG_CHAIN" == "perf-devnet-3" || "$CFG_CHAIN" == "jochemnet" ]]; then
+            if [[ "$EFFECTIVE_CHAIN" == "perf-devnet-3" || "$EFFECTIVE_CHAIN" == "jochemnet" ]]; then
               GAS_BUMP_COUNT="5000"
             else
               GAS_BUMP_COUNT="10000"
@@ -325,6 +354,10 @@ jobs:
             DB_TABLE="${TABLE_BASE}_metadata"
           fi
 
+          echo "CFG_CHAIN=$EFFECTIVE_CHAIN" >> "$GITHUB_ENV"
+          echo "CFG_PAYLOAD_DIR=$PAYLOAD_DIR" >> "$GITHUB_ENV"
+          echo "CFG_CHAINSPEC_FILE=$EFFECTIVE_CHAINSPEC_FILE" >> "$GITHUB_ENV"
+          echo "EFFECTIVE_CHAIN=$EFFECTIVE_CHAIN" >> "$GITHUB_ENV"
           echo "SNAPSHOT_DIR_NM=$SNAPSHOT_DIR_NM" >> "$GITHUB_ENV"
           echo "SNAPSHOT_DIR_WARMUP=$SNAPSHOT_DIR_WARMUP" >> "$GITHUB_ENV"
           echo "EXECUTION_CHAIN=$EXECUTION_CHAIN" >> "$GITHUB_ENV"
@@ -333,6 +366,7 @@ jobs:
           echo "WARMUP_DIR=$WARMUP_DIR" >> "$GITHUB_ENV"
           echo "GAS_BUMP_COUNT=$GAS_BUMP_COUNT" >> "$GITHUB_ENV"
           echo "DB_TABLE=$DB_TABLE" >> "$GITHUB_ENV"
+          echo "ARTIFACT_SUFFIX=${CFG_MODE}-${EFFECTIVE_CHAIN}" >> "$GITHUB_ENV"
 
       - name: Clean stale outputs from previous runs on runner
         shell: bash
