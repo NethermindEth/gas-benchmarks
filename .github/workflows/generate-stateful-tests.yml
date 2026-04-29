@@ -24,7 +24,7 @@ on:
       nethermind_image:
         description: "Nethermind Docker image"
         required: true
-        default: "nethermindeth/nethermind:testing_build_block_with_opcode_tracing"
+        default: "nethermindeth/nethermind:master"
       fork:
         description: "Fork name"
         required: true
@@ -83,7 +83,7 @@ on:
       nethermind_extra_flags:
         description: "Extra Nethermind CLI flags passed to the container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None')"
         required: false
-        default: ""
+        default: "--Blocks.ParallelExecution=false"
       commit_results:
         description: "Commit generated data to the repo"
         required: false
@@ -126,7 +126,7 @@ on:
         required: true
       nethermind_image:
         type: string
-        default: "nethermindeth/nethermind:testing_build_block_with_opcode_tracing"
+        default: "nethermindeth/nethermind:master"
       fork:
         type: string
         default: "Osaka"
@@ -159,7 +159,7 @@ on:
         default: "full"
       nethermind_extra_flags:
         type: string
-        default: ""
+        default: "--Blocks.ParallelExecution=false"
       commit_results:
         type: string
         default: "false"
@@ -194,7 +194,7 @@ jobs:
       DB_PORT: ${{ secrets.PERFNET_0_DB_PORT }}
       DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
       DB_NAME: ${{ secrets.PERFNET_0_DB_NAME }}
-      CFG_NETHERMIND_IMAGE: ${{ inputs.nethermind_image || 'nethermindeth/nethermind:testing_build_block_with_opcode_tracing' }}
+      CFG_NETHERMIND_IMAGE: ${{ inputs.nethermind_image || 'nethermindeth/nethermind:master' }}
       CFG_FORK: ${{ inputs.fork || 'Osaka' }}
       CFG_CHAIN: ${{ inputs.chain || 'mainnet' }}
       CFG_MODE: ${{ inputs.mode || 'compute' }}
@@ -211,7 +211,7 @@ jobs:
       CFG_GENERATION_MODE: ${{ inputs.generation_mode || 'full' }}
       CFG_WARMUP_SNAPSHOT_BACKEND: ${{ inputs.warmup_snapshot_backend || 'overlay' }}
       CFG_CHAINSPEC_FILE: ${{ inputs.chainspec_file || '' }}
-      CFG_NETHERMIND_EXTRA_FLAGS: ${{ inputs.nethermind_extra_flags || '' }}
+      CFG_NETHERMIND_EXTRA_FLAGS: ${{ inputs.nethermind_extra_flags || '--Blocks.ParallelExecution=false' }}
       ARTIFACT_SUFFIX: ${{ format('{0}-{1}', inputs.mode || 'compute', inputs.chain || 'mainnet') }}
 
     steps:
