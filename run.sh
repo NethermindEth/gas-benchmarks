@@ -26,6 +26,12 @@ SKIP_EMPTY=true
 RPC_READINESS_MAX_ATTEMPTS="${RPC_READINESS_MAX_ATTEMPTS:-50}"
 OVERLAY_MOUNT_EXTRA_OPTS="${OVERLAY_MOUNT_EXTRA_OPTS:-}"
 OVERLAY_USE_VOLATILE="${OVERLAY_USE_VOLATILE:-false}"
+OPCODE_TRACING_TEMP_DISABLED=true
+
+if [ "$OPCODE_TRACING_TEMP_DISABLED" = true ] && [ "${TRACE_BLOCKS:-false}" = true ]; then
+  echo "[WARN] TRACE_BLOCKS requested, but opcode tracing is temporarily disabled on devnets/bal/3; forcing TRACE_BLOCKS=false."
+  TRACE_BLOCKS=false
+fi
 
 # Prevent inherited low API pin from older docker clients/wrappers.
 unset DOCKER_API_VERSION
