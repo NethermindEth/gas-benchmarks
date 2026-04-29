@@ -25,9 +25,6 @@ CHAIN_TO_ID = {
     "goerli": 5,
 }
 
-# Temporary branch guard: opcode tracing is disabled on devnets/bal/3.
-OPCODE_TRACING_TEMP_DISABLED = True
-
 CLEANUP = {
     "keep": False,
     "container": None,
@@ -868,10 +865,6 @@ def start_nethermind_container(
     trace_json: bool = False,
     extra_flags: Optional[list] = None,
 ) -> str:
-    if trace_json and OPCODE_TRACING_TEMP_DISABLED:
-        print("[WARN] Opcode tracing is temporarily disabled on devnets/bal/3; starting Nethermind without it.")
-        trace_json = False
-
     subprocess.run(["docker", "pull", image], check=False)
     resolved_db = db_dir.resolve()
     resolved_jwt_parent = jwt_path.parent.resolve()
@@ -1358,7 +1351,7 @@ def main():
     parser.add_argument(
         "--trace-json",
         action="store_true",
-        help="Enable opcode tracing and generate JSON output mapping tests to opcode counts (temporarily disabled on devnets/bal/3).",
+        help="Enable opcode tracing and generate JSON output mapping tests to opcode counts.",
     )
     parser.add_argument(
         "--trace-json-output",
@@ -1384,10 +1377,6 @@ def main():
              "still fail on startup/infra errors or when no phase payloads were produced.",
     )
     args = parser.parse_args()
-
-    if args.trace_json and OPCODE_TRACING_TEMP_DISABLED:
-        print("[WARN] --trace-json requested, but opcode tracing is temporarily disabled on devnets/bal/3; continuing without trace output.")
-        args.trace_json = False
 
     CLEANUP["keep"] = args.keep
     ensure_pip_pkg("requests")
