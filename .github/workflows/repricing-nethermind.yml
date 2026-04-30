@@ -53,10 +53,10 @@ on:
         description: 'Runner labels as JSON array. Default = ["stateful-generator"].'
         default: ''
       snapshot_root:
-        description: 'Override snapshot root path (e.g. /mnt/sda/mainnet/nethermind for stateful-generator)'
+        description: 'Override snapshot root path. Default = /mnt/sda/<network>/nethermind'
         default: ''
       overlay_root:
-        description: 'Override overlay workspace path (e.g. /mnt/sda/overlay-workspace)'
+        description: 'Override overlay workspace path. Default = /mnt/sda/overlay-workspace'
         default: ''
 
 concurrency:
@@ -412,8 +412,8 @@ jobs:
             # for nethermind. Snapshot backend is still activated by -B.
             ./run.sh \
               -t "$TEST_PATH" \
-              -B "${CUSTOM_SNAPSHOT:-/data/snapshots/nethermind/$NETWORK}" \
-              -O "${CUSTOM_OVERLAY:-/data/overlay-workspace}" \
+              -B "${CUSTOM_SNAPSHOT:-/mnt/sda/$NETWORK/nethermind}" \
+              -O "${CUSTOM_OVERLAY:-/mnt/sda/overlay-workspace}" \
               -c nethermind \
               -r 1 \
               -i '${{ inputs.images }}' \
@@ -426,8 +426,8 @@ jobs:
             ./run.sh \
               -t "$TEST_PATH" \
               -n "$NETWORK" \
-              -B "${CUSTOM_SNAPSHOT:-/data/snapshots/nethermind/$NETWORK}" \
-              -O "${CUSTOM_OVERLAY:-/data/overlay-workspace}" \
+              -B "${CUSTOM_SNAPSHOT:-/mnt/sda/$NETWORK/nethermind}" \
+              -O "${CUSTOM_OVERLAY:-/mnt/sda/overlay-workspace}" \
               -c nethermind \
               -r 1 \
               -i '${{ inputs.images }}' \
