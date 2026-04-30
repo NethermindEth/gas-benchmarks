@@ -50,7 +50,7 @@ on:
         type: boolean
         default: false
       runner:
-        description: 'Runner labels as JSON array (e.g. ["stateful-generator"]). Empty = default repricing runner.'
+        description: 'Runner labels as JSON array. Default = ["stateful-generator"].'
         default: ''
       snapshot_root:
         description: 'Override snapshot root path (e.g. /mnt/sda/mainnet/nethermind for stateful-generator)'
@@ -133,7 +133,7 @@ jobs:
 
   repricing:
     needs: set-matrix
-    runs-on: ${{ inputs.runner != '' && fromJson(inputs.runner) || fromJson('["self-hosted","repricing","nethermind"]') }}
+    runs-on: ${{ inputs.runner != '' && fromJson(inputs.runner) || fromJson('["stateful-generator"]') }}
     timeout-minutes: 10080
 
     strategy:
