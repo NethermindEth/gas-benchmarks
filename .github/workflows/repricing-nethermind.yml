@@ -21,8 +21,11 @@ on:
       fork:
         description: 'Fork name (osaka, amsterdam)'
         default: 'osaka'
+      release_tag:
+        description: 'GitHub release tag to download test data from (e.g. amsterdam-compute-mainnet/v4.0)'
+        default: ''
       artifact_name:
-        description: 'Artifact name to download (generated test data from a previous run)'
+        description: 'Workflow artifact name to download (alternative to release_tag)'
         default: ''
       artifact_run_id:
         description: 'GitHub Actions run ID to download the artifact from'
@@ -263,8 +266,37 @@ jobs:
         with:
           lfs: true
 
-      - name: Download benchmark test data artifact
-        if: ${{ inputs.artifact_name != '' }}
+      - name: Download test data from release
+        if: ${{ inputs.release_tag != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.release_tag }}"
+          echo "Downloading release assets from tag: $TAG"
+          mkdir -p /tmp/release-assets
+          gh release download "$TAG" -D /tmp/release-assets --clobber
+
+          for archive in /tmp/release-assets/generated-tests-*.tar.gz; do
+            [ -f "$archive" ] || continue
+            echo "Extracting $(basename "$archive")"
+            tar xzf "$archive"
+          done
+
+          # Handle multi-part archives: reassemble .tar.gz.NN.part files
+          for first_part in /tmp/release-assets/generated-tests-*.tar.gz.00.part; do
+            [ -f "$first_part" ] || continue
+            base="${first_part%.00.part}"
+            echo "Reassembling multi-part archive: $(basename "$base")"
+            cat "${base}".*.part | tar xzf -
+          done
+
+          echo "Test data after extraction:"
+          find repricings_* -maxdepth 2 -type d 2>/dev/null || echo "(no repricings_* dirs found)"
+
+      - name: Download test data from workflow artifact
+        if: ${{ inputs.release_tag == '' && inputs.artifact_name != '' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
