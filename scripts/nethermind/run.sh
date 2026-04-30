@@ -32,10 +32,13 @@ if [ -n "$IMAGE" ]; then
 fi
 
 pushd "$SCRIPT_DIR" >/dev/null
-echo "[diag] Merged compose config (environment):"
-compose_cmd config 2>/dev/null | grep -A10 'environment:' | head -12 || true
 compose_cmd up --detach
 popd >/dev/null
+
+if [ -n "${DIAG_WITH:-}" ]; then
+    echo "[diag] Verifying DIAG_WITH inside container:"
+    docker exec gas-execution-client printenv DIAG_WITH 2>/dev/null || echo "[diag] DIAG_WITH NOT SET in container"
+fi
 
 echo "Invoking wait_for_rpc for Nethermind RPC readiness..."
 if ! wait_for_rpc "http://0.0.0.0:8545" 300; then
