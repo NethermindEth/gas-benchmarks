@@ -599,14 +599,4 @@ jobs:
           path: dottrace-xml
           if-no-files-found: warn
 
-  retrigger:
-    needs: repricing
-    runs-on: ubuntu-latest
-    steps:
-      - name: Retrigger workflow
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: repricing-nethermind.yml
-          ref: "${{ github.ref }}"
-          token: "${{ secrets.GH_TOKEN }}"
-          inputs: ${{ toJson(github.event.inputs) }}
+
