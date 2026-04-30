@@ -11,10 +11,15 @@ source "$REPO_ROOT/scripts/common/wait_for_rpc.sh"
 # shellcheck source=/dev/null
 source "$REPO_ROOT/scripts/common/docker_compose.sh"
 
+echo "[diag] SCRIPT_DIR=$SCRIPT_DIR"
+echo "[diag] .env path: $SCRIPT_DIR/.env"
+echo "[diag] .env BEFORE append:"
+cat "$SCRIPT_DIR/.env" || echo "(cat failed)"
+echo "[diag] DIAG_WITH from env: '${DIAG_WITH:-}'"
 if [ -n "${DIAG_WITH:-}" ]; then
     printf '\n%s\n' "DIAG_WITH=$DIAG_WITH" >> "$SCRIPT_DIR/.env"
-    echo "[diag] Appended DIAG_WITH=$DIAG_WITH to .env"
-    echo "[diag] .env tail:" && tail -3 "$SCRIPT_DIR/.env"
+    echo "[diag] .env AFTER append:"
+    cat "$SCRIPT_DIR/.env"
 fi
 
 pushd "$SCRIPT_DIR" >/dev/null
