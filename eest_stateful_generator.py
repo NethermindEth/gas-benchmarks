@@ -594,10 +594,19 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
                 result_key = f"{result_key}__{duplicate_idx}"
             results[result_key] = merged_counts
 
-    # Write output JSON
+    # Write merged output JSON
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
     print(f"[INFO] Opcode trace results written to {output_path}")
+
+    # Write individual per-scenario JSON files
+    individual_dir = output_path.parent / f"{output_path.stem}_individual"
+    individual_dir.mkdir(parents=True, exist_ok=True)
+    for result_key, opcode_counts in results.items():
+        safe_name = result_key.replace("/", "__")
+        individual_path = individual_dir / f"{safe_name}.json"
+        individual_path.write_text(json.dumps(opcode_counts, indent=2), encoding="utf-8")
+    print(f"[INFO] Individual opcode trace files written to {individual_dir} ({len(results)} files)")
 
 
 def _read_json_file(path: Path):
