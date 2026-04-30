@@ -13,8 +13,9 @@ source "$REPO_ROOT/scripts/common/docker_compose.sh"
 
 if [ -n "${DIAG_WITH:-}" ]; then
     echo "[diag] Injecting DIAG_WITH=$DIAG_WITH into docker-compose.yaml"
-    sed -i "/COLORTERM/a\\      - DIAG_WITH=$DIAG_WITH" "$SCRIPT_DIR/docker-compose.yaml"
-    grep -n 'DIAG_WITH' "$SCRIPT_DIR/docker-compose.yaml" || true
+    sed -i "s|COLORTERM=truecolor|COLORTERM=truecolor\n      - DIAG_WITH=${DIAG_WITH}|" "$SCRIPT_DIR/docker-compose.yaml"
+    echo "[diag] environment section after injection:"
+    grep -A3 'environment:' "$SCRIPT_DIR/docker-compose.yaml" | head -5
 fi
 
 pushd "$SCRIPT_DIR" >/dev/null
