@@ -17,7 +17,7 @@ start_dottrace() {
   echo "Starting dotTrace ($tool)..."
   exec "$tool" start \
     --framework=netcore \
-    --profiling-type=timeline \
+    --profiling-type=sampling \
     --propagate-exit-code \
     --save-to=/nethermind/diag/dottrace \
     --service-output=on \
