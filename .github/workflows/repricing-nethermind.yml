@@ -11,7 +11,7 @@ on:
         default: '1'
       images:
         description: 'JSON map of images for the clients'
-        default: '{"nethermind":"default"}'
+        default: '{"nethermind":"nethermindeth/nethermind:masterdiag"}'
       opcodes_warmup_count:
         description: 'Number of opcode-warmup iterations (empty = auto: 1 for compute, 0 for stateful)'
         default: ''
