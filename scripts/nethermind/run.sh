@@ -19,7 +19,16 @@ services:
       - DIAG_WITH=${DIAG_WITH}
 OVERRIDE
     echo "[diag] Created override with DIAG_WITH=$DIAG_WITH"
-    cat "$SCRIPT_DIR/docker-compose.override.yml"
+fi
+
+# After compose pull, inspect the image entrypoint
+IMAGE=$(grep '^EC_IMAGE_VERSION=' "$SCRIPT_DIR/.env" | cut -d= -f2-)
+if [ -n "$IMAGE" ]; then
+    docker pull "$IMAGE" >/dev/null 2>&1 || true
+    echo "[diag] Image: $IMAGE"
+    echo "[diag] Entrypoint: $(docker inspect "$IMAGE" --format '{{json .Config.Entrypoint}}' 2>/dev/null || echo 'N/A')"
+    echo "[diag] Cmd: $(docker inspect "$IMAGE" --format '{{json .Config.Cmd}}' 2>/dev/null || echo 'N/A')"
+    echo "[diag] Has entrypoint.sh: $(docker run --rm --entrypoint='' "$IMAGE" ls -la ./entrypoint.sh 2>&1 || echo 'NOT FOUND')"
 fi
 
 pushd "$SCRIPT_DIR" >/dev/null
