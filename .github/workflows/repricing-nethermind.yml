@@ -11,7 +11,7 @@ on:
         default: '1'
       images:
         description: 'JSON map of images for the clients'
-        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+        default: '{"nethermind":"default"}'
       opcodes_warmup_count:
         description: 'Number of opcode-warmup iterations (empty = auto: 1 for compute, 0 for stateful)'
         default: ''
@@ -21,22 +21,606 @@ on:
       fork:
         description: 'Fork name (osaka, amsterdam)'
         default: 'osaka'
+      artifact_name:
+        description: 'Artifact name to download (generated test data from a previous run)'
+        default: ''
+      artifact_run_id:
+        description: 'GitHub Actions run ID to download the artifact from'
+        default: ''
+      genesis_file:
+        description: 'Nethermind chainspec filename in scripts/genesisfiles/nethermind/ (e.g. generator-amsterdam-mainnet.json)'
+        default: ''
+      diagnostics_mode:
+        description: 'Run Nethermind through Dockerfile.diag entrypoint'
+        type: choice
+        options:
+          - none
+          - dottrace
+          - dotmemory
+          - dotnet-trace
+        default: 'none'
+      diagnostics_stop_timeout:
+        description: 'Seconds to wait after SIGINT for diagnostic snapshot flush'
+        default: '180'
+      diagnostics_xml:
+        description: 'Convert dotTrace sampling/tracing snapshots to XML on Windows'
+        type: boolean
+        default: false
+      runner:
+        description: 'Runner labels as JSON array (e.g. ["stateful-generator"]). Empty = default repricing runner.'
+        default: ''
+      snapshot_root:
+        description: 'Override snapshot root path (e.g. /mnt/sda/mainnet/nethermind for stateful-generator)'
+        default: ''
+      overlay_root:
+        description: 'Override overlay workspace path (e.g. /mnt/sda/overlay-workspace)'
+        default: ''
+
 concurrency:
   group: repricing-nethermind-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  set-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix dynamically
+        id: set-matrix
+        run: |
+          runs="${{ inputs.runs }}"
+          if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
+            runs=1
+          fi
+          tests_input="${{ inputs.test }}"
+          targets=()
+
+          ALL_TARGETS=(
+            "repricings_compute/mainnet|mainnet"
+            "repricings_compute/perf-devnet-3|perf-devnet-3"
+            "repricings_stateful/mainnet|mainnet"
+            "repricings_stateful/perf-devnet-3|perf-devnet-3"
+          )
+
+          if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
+            targets=("${ALL_TARGETS[@]}")
+          else
+            IFS=',' read -ra requested_paths <<< "$tests_input"
+            for raw_path in "${requested_paths[@]}"; do
+              test_path="$(printf '%s' "$raw_path" | xargs)"
+              test_path="${test_path%/}"
+              [ -z "$test_path" ] && continue
+
+              matched=false
+              for candidate in "${ALL_TARGETS[@]}"; do
+                candidate_path="${candidate%%|*}"
+                case "$candidate_path" in
+                  "${test_path}"/*)
+                    targets+=("$candidate")
+                    matched=true
+                    ;;
+                esac
+              done
+
+              if [ "$matched" = false ]; then
+                network="$(basename "$test_path")"
+                targets+=("${test_path}|${network}")
+              fi
+            done
+          fi
+
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No test targets selected"
+            exit 1
+          fi
+
+          matrix_elements=()
+          for ((i=1; i<=runs; i++)); do
+            for target in "${targets[@]}"; do
+              test_path="${target%%|*}"
+              network="${target##*|}"
+              element="{'run': '$i', 'test_path': '$test_path', 'network': '$network'}"
+              matrix_elements+=("$element")
+            done
+          done
+
+          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   repricing:
-    uses: ./.github/workflows/repricing-client.yml
-    with:
-      client: nethermind
-      test: ${{ inputs.test || 'all' }}
-      runs: ${{ inputs.runs || '1' }}
-      images: ${{ inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
-      opcodes_warmup_count: ${{ inputs.opcodes_warmup_count }}
-      filter: ${{ inputs.filter || '' }}
-      fork: ${{ inputs.fork || 'osaka' }}
-    secrets: inherit
+    needs: set-matrix
+    runs-on: ${{ inputs.runner != '' && fromJson(inputs.runner) || fromJson('["self-hosted","repricing","nethermind"]') }}
+    timeout-minutes: 10080
+
+    strategy:
+      matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+      fail-fast: false
+      max-parallel: 1
+
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      MIN_DOCKER_API_VERSION: "1.44"
+      NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT: "12"
+      NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS: "5000"
+      NUGET_ENHANCED_NETWORK_TIMEOUT_MILLISECONDS: "300000"
+      NUGET_PACKAGES: "/data/nuget/packages"
+      DIAG_WITH: ${{ inputs.diagnostics_mode != 'none' && inputs.diagnostics_mode || '' }}
+      CFG_DIAGNOSTICS_MODE: ${{ inputs.diagnostics_mode || 'none' }}
+      CFG_DIAGNOSTICS_STOP_TIMEOUT: ${{ inputs.diagnostics_stop_timeout || '180' }}
+      NETHERMIND_DIAG_DIR: ${{ format('repricing-diagnostics/nethermind-{0}', github.run_id) }}
+
+    steps:
+      - name: Ensure base tools are installed
+        run: |
+          set -euo pipefail
+          missing=()
+          docker_missing=false
+          compose_missing=false
+
+          if ! command -v git-lfs >/dev/null 2>&1; then missing+=("git-lfs"); fi
+          if ! command -v zip >/dev/null 2>&1; then missing+=("zip"); fi
+          if ! command -v curl >/dev/null 2>&1; then missing+=("curl"); fi
+          if ! command -v make >/dev/null 2>&1; then missing+=("make"); fi
+
+          if ! command -v docker >/dev/null 2>&1; then
+            docker_missing=true
+            compose_missing=true
+          else
+            if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+              compose_missing=true
+            fi
+          fi
+
+          packages=("${missing[@]}")
+          if [ "$docker_missing" = true ]; then packages+=("docker.io"); fi
+          if [ "$compose_missing" = true ]; then
+            if command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+              packages+=("docker-compose-plugin")
+            elif command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+              packages+=("docker-compose-v2")
+            fi
+          fi
+
+          if [ ${#packages[@]} -gt 0 ]; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+            else
+              echo "Missing packages: ${packages[*]}. Install them on the runner or provide apt-get."
+              exit 1
+            fi
+          fi
+
+          if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl start docker >/dev/null 2>&1 || true
+          elif command -v service >/dev/null 2>&1; then
+            sudo service docker start >/dev/null 2>&1 || true
+          fi
+
+          if ! docker compose version >/dev/null 2>&1; then
+            arch="$(uname -m)"
+            case "$arch" in
+              x86_64|amd64) arch="x86_64" ;;
+              aarch64|arm64) arch="aarch64" ;;
+              *) echo "Unsupported architecture: $arch"; exit 1 ;;
+            esac
+            os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+            compose_version="${COMPOSE_VERSION:-v2.29.7}"
+            plugin_dir="$HOME/.docker/cli-plugins"
+            mkdir -p "$plugin_dir"
+            curl -fsSL "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-${os}-${arch}" -o "$plugin_dir/docker-compose"
+            chmod +x "$plugin_dir/docker-compose"
+            mkdir -p "$HOME/.local/bin"
+            ln -sf "$plugin_dir/docker-compose" "$HOME/.local/bin/docker-compose"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+          mkdir -p "$NUGET_PACKAGES"
+          docker version --format 'CLIENT={{.Client.Version}} API={{.Client.APIVersion}} SERVER_MIN={{.Server.MinAPIVersion}}' || true
+
+      - name: Ensure Docker client API compatibility
+        run: |
+          set -euo pipefail
+
+          version_ge() {
+            local lhs="$1" rhs="$2"
+            [ "$lhs" = "$rhs" ] && return 0
+            [ "$(printf '%s\n%s\n' "$lhs" "$rhs" | sort -V | tail -n 1)" = "$lhs" ]
+          }
+
+          required="${MIN_DOCKER_API_VERSION:-1.44}"
+          docker_bin="$(command -v docker || true)"
+          while IFS= read -r candidate; do
+            if [ -n "$candidate" ] && [[ "$candidate" != *"/.native-bin/"* ]] && [ -x "$candidate" ]; then
+              docker_bin="$candidate"; break
+            fi
+          done < <(which -a docker 2>/dev/null | awk '!seen[$0]++')
+
+          if [ -z "${docker_bin}" ] || [ ! -x "${docker_bin}" ]; then
+            echo "docker CLI is missing on runner."; exit 1
+          fi
+          echo "DOCKER_BIN=${docker_bin}" >> "$GITHUB_ENV"
+
+          if [ -n "${DOCKER_API_VERSION:-}" ]; then
+            echo "DOCKER_API_VERSION=" >> "$GITHUB_ENV"
+            unset DOCKER_API_VERSION
+          fi
+
+          client_api="$("${docker_bin}" version --format '{{.Client.APIVersion}}' 2>/dev/null || true)"
+          daemon_min="$("${docker_bin}" version --format '{{.Server.MinAPIVersion}}' 2>/dev/null || true)"
+          if [ -n "$daemon_min" ] && version_ge "$daemon_min" "$required"; then required="$daemon_min"; fi
+
+          if [ -z "$client_api" ]; then
+            "${docker_bin}" version || true; exit 1
+          fi
+          if ! version_ge "$client_api" "$required"; then
+            echo "ERROR: Docker client API ${client_api} too old (requires >= ${required})."; exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Download benchmark test data artifact
+        if: ${{ inputs.artifact_name != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          ARTIFACT_NAME="${{ inputs.artifact_name }}"
+          RUN_ID="${{ inputs.artifact_run_id }}"
+          if [[ -n "$RUN_ID" ]]; then
+            echo "Downloading artifact '$ARTIFACT_NAME' from run $RUN_ID"
+            gh run download "$RUN_ID" -n "$ARTIFACT_NAME"
+          else
+            echo "Downloading artifact '$ARTIFACT_NAME' from current run"
+            gh run download -n "$ARTIFACT_NAME"
+          fi
+          echo "Downloaded contents:"
+          find . -maxdepth 3 -newer .git -type f | head -50 || true
+
+      - name: Prepare diagnostics directory
+        if: ${{ inputs.diagnostics_mode != 'none' && inputs.diagnostics_mode != '' }}
+        shell: bash
+        run: |
+          mkdir -p "$NETHERMIND_DIAG_DIR"
+          mkdir -p scripts/nethermind/diagfiles
+
+      - name: Ensure Python is available
+        run: |
+          if ! command -v python3 >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-pip python3-venv
+            else
+              echo "python3 not found and apt-get is unavailable."; exit 1
+            fi
+          fi
+          if ! python3 -m pip --version >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-pip
+            else
+              echo "pip is unavailable."; exit 1
+            fi
+          fi
+          if ! command -v pip >/dev/null 2>&1; then
+            mkdir -p "$HOME/.local/bin"
+            printf '%s\n' '#!/usr/bin/env bash' 'exec python3 -m pip "$@"' > "$HOME/.local/bin/pip"
+            chmod +x "$HOME/.local/bin/pip"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          python3 --version
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Ensure .NET SDK is available
+        run: |
+          set -euo pipefail
+          if ! command -v dotnet >/dev/null 2>&1 || ! dotnet --list-sdks | grep -q '^10\.'; then
+            curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+            bash /tmp/dotnet-install.sh --channel 10.0 --quality ga --install-dir "$HOME/.dotnet"
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+            export PATH="$HOME/.dotnet:$PATH"
+          fi
+          dotnet --info
+
+      - name: Install Python dependencies
+        run: python3 -m pip install --user --ignore-installed -r requirements.txt
+
+      - name: Make run.sh executable
+        run: chmod +x ./run.sh
+
+      - name: Run benchmarks
+        run: |
+          TEST_PATH="${{ matrix.test_path }}"
+          NETWORK="${{ matrix.network }}"
+          WARMUP_PATH="${TEST_PATH}_warmup"
+
+          WARMUP_COUNT="${{ inputs.opcodes_warmup_count }}"
+          if [ -z "$WARMUP_COUNT" ]; then
+            case "$TEST_PATH" in
+              repricings_stateful/*) WARMUP_COUNT="0" ;;
+              *) WARMUP_COUNT="1" ;;
+            esac
+            echo "Auto-resolved opcodes_warmup_count=$WARMUP_COUNT for $TEST_PATH"
+          fi
+
+          if [ ! -d "$TEST_PATH" ]; then
+            echo "Test path does not exist: $TEST_PATH"
+            exit 1
+          fi
+
+          WARMUP_ARGS=()
+          if [ -d "$WARMUP_PATH" ]; then
+            WARMUP_ARGS=(-W "$WARMUP_PATH")
+          else
+            echo "Warmup path not found: $WARMUP_PATH; continuing without warmup"
+          fi
+
+          EFFECTIVE_FILTER="${{ inputs.filter }}"
+          FORK_NAME="${{ inputs.fork || 'osaka' }}"
+          CUSTOM_SNAPSHOT="${{ inputs.snapshot_root }}"
+          CUSTOM_OVERLAY="${{ inputs.overlay_root }}"
+          GENESIS_FILE="${{ inputs.genesis_file }}"
+
+          GENESIS_ARGS=()
+          if [[ -n "$GENESIS_FILE" ]]; then
+            echo "Using custom genesis: $GENESIS_FILE"
+            GENESIS_ARGS=(-g "$GENESIS_FILE")
+          fi
+
+          if [[ -n "$GENESIS_FILE" ]]; then
+            # Custom genesis: skip -n so run.sh doesn't override the chainspec
+            # for nethermind. Snapshot backend is still activated by -B.
+            ./run.sh \
+              -t "$TEST_PATH" \
+              -B "${CUSTOM_SNAPSHOT:-/data/snapshots/nethermind/$NETWORK}" \
+              -O "${CUSTOM_OVERLAY:-/data/overlay-workspace}" \
+              -c nethermind \
+              -r 1 \
+              -i '${{ inputs.images }}' \
+              -o "$WARMUP_COUNT" \
+              -f "$EFFECTIVE_FILTER" \
+              -K "$FORK_NAME" \
+              "${GENESIS_ARGS[@]}" \
+              "${WARMUP_ARGS[@]}"
+          else
+            ./run.sh \
+              -t "$TEST_PATH" \
+              -n "$NETWORK" \
+              -B "${CUSTOM_SNAPSHOT:-/data/snapshots/nethermind/$NETWORK}" \
+              -O "${CUSTOM_OVERLAY:-/data/overlay-workspace}" \
+              -c nethermind \
+              -r 1 \
+              -i '${{ inputs.images }}' \
+              -o "$WARMUP_COUNT" \
+              -f "$EFFECTIVE_FILTER" \
+              -K "$FORK_NAME" \
+              "${WARMUP_ARGS[@]}"
+          fi
+
+      - name: Dump latest Docker logs
+        if: always()
+        run: |
+          LATEST=$(ls -1t logs/docker_nethermind_*.log 2>/dev/null | head -n1 || true)
+          LATEST_SYNC=$(ls -1t logs/docker_sync_nethermind_*.log 2>/dev/null | head -n1 || true)
+          if [[ -n "$LATEST" ]]; then echo "=== $LATEST ==="; cat "$LATEST"; fi
+          if [[ -n "$LATEST_SYNC" ]]; then echo "=== $LATEST_SYNC ==="; cat "$LATEST_SYNC"; fi
+
+      - name: Generate report CSVs
+        run: |
+          python3 report_html.py \
+            --resultsPath "results" \
+            --clients nethermind \
+            --testsPath "${{ matrix.test_path }}" \
+            --runs "${{ inputs.runs }}" \
+            --images '${{ inputs.images }}'
+
+      - name: Publish results to DB
+        env:
+          PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+          PERFNET_DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+          PERFNET_DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+          PERFNET_DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          TEST_PATH="${{ matrix.test_path }}"
+
+          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-3)$ ]]; then
+            SUITE="${BASH_REMATCH[1]}"
+            NETWORK="${BASH_REMATCH[2]}"
+            DB_NETWORK="${NETWORK//-/_}"
+            DB_NAME="monitoring"
+          else
+            echo "Skipping DB upload for non-repricing path: $TEST_PATH"
+            exit 0
+          fi
+
+          if [ ! -d "reports" ]; then
+            echo "No reports directory found, skipping DB upload"
+            exit 0
+          fi
+
+          FORK_NAME="${{ inputs.fork || 'osaka' }}"
+          FORK_SUFFIX=$(echo "$FORK_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+          TABLE_NAME="${SUITE}_${DB_NETWORK}_${FORK_SUFFIX}"
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          if [[ "$BRANCH_NAME" != "main" ]]; then
+            BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+            TABLE_NAME="${TABLE_NAME}_${BRANCH_SUFFIX}"
+          fi
+
+          echo "Publishing results to table: $TABLE_NAME"
+          python3 fill_postgres_db.py \
+            --db-host "$PERFNET_DB_HOST" \
+            --db-port "$PERFNET_DB_PORT" \
+            --db-user "$PERFNET_DB_USER" \
+            --db-name "$DB_NAME" \
+            --table-name "$TABLE_NAME" \
+            --db-password "$PERFNET_DB_PASSWORD" \
+            --log-level DEBUG \
+            --reports-dir "reports"
+
+      - name: Zip results
+        run: |
+          CLEANED_TEST_PATH=$(echo "${{ matrix.test_path }}" | tr -d '\n' | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+          echo "CLEANED_TEST_PATH=$CLEANED_TEST_PATH" >> $GITHUB_ENV
+          zip -r "results-${{ matrix.run }}-nethermind-${CLEANED_TEST_PATH}.zip" results
+
+      - name: Upload results artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.run }}-nethermind-${{ env.CLEANED_TEST_PATH }}
+          path: results-${{ matrix.run }}-nethermind-${{ env.CLEANED_TEST_PATH }}.zip
+
+      - name: Finalize Nethermind diagnostics
+        if: ${{ always() && inputs.diagnostics_mode != 'none' && inputs.diagnostics_mode != '' }}
+        shell: bash
+        run: |
+          set +e
+          CONTAINER="gas-execution-client"
+          DIAG_DIR="$NETHERMIND_DIAG_DIR"
+          mkdir -p "$DIAG_DIR"
+          {
+            echo "diagnostics_mode=$CFG_DIAGNOSTICS_MODE"
+            echo "diagnostics_dir=$DIAG_DIR"
+            echo "stop_signal=SIGINT"
+            echo "stop_timeout_seconds=$CFG_DIAGNOSTICS_STOP_TIMEOUT"
+          } >> "$DIAG_DIR/diagnostics_stop.log"
+
+          if docker inspect "$CONTAINER" >/dev/null 2>&1; then
+            running="$(docker inspect --format='{{.State.Running}}' "$CONTAINER" 2>/dev/null || echo false)"
+            if [[ "$running" == "true" ]]; then
+              echo "Sending SIGINT to $CONTAINER" | tee -a "$DIAG_DIR/diagnostics_stop.log"
+              docker kill --signal=SIGINT "$CONTAINER" >/dev/null 2>&1 || true
+              timeout "${CFG_DIAGNOSTICS_STOP_TIMEOUT}s" docker wait "$CONTAINER" >/dev/null 2>&1 || {
+                echo "SIGINT timeout elapsed; force-removing $CONTAINER" | tee -a "$DIAG_DIR/diagnostics_stop.log"
+                docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+              }
+            fi
+            docker logs "$CONTAINER" > "$DIAG_DIR/nethermind-container.log" 2>&1 || true
+          fi
+
+          DIAG_SRC="scripts/nethermind/diagfiles"
+          if [ -d "$DIAG_SRC" ]; then
+            cp -r "$DIAG_SRC"/* "$DIAG_DIR/" 2>/dev/null || true
+          fi
+
+          echo "Diagnostic files:"
+          find "$DIAG_DIR" -maxdepth 4 -type f -printf "%p %s bytes\n" | sort || true
+
+      - name: Upload Nethermind diagnostic artifacts
+        if: ${{ always() && inputs.diagnostics_mode != 'none' && inputs.diagnostics_mode != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: repricing-nethermind-diagnostics-${{ inputs.diagnostics_mode }}-${{ matrix.network }}-${{ github.run_id }}
+          path: ${{ env.NETHERMIND_DIAG_DIR }}
+          if-no-files-found: warn
+          compression-level: 0
+
+      - name: Capture container logs
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if docker inspect gas-execution-client >/dev/null 2>&1; then
+            docker logs gas-execution-client > nethermind-repricing.log 2>&1 || true
+          fi
+
+      - name: Upload container logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: repricing-logs-nethermind-${{ matrix.network }}-${{ github.run_id }}
+          path: |
+            nethermind-repricing.log
+            logs/
+          if-no-files-found: warn
+
+      - name: Docker full prune
+        if: always()
+        run: |
+          docker ps -q | xargs -r docker stop || true
+          docker ps -aq | xargs -r docker rm -f || true
+          docker system prune -af --volumes || true
+
+  dottrace-xml:
+    needs: repricing
+    if: ${{ always() && inputs.diagnostics_xml == true && inputs.diagnostics_mode == 'dottrace' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Download dotTrace diagnostic artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: repricing-nethermind-diagnostics-dottrace-*
+          path: downloaded-diagnostics
+          merge-multiple: true
+
+      - name: Convert dotTrace snapshot to XML
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          New-Item -ItemType Directory -Force -Path dottrace-xml | Out-Null
+          $log = "dottrace-xml/dottrace-xml-conversion.log"
+          "Installing JetBrains dotTrace command line tools" | Tee-Object -FilePath $log
+
+          $toolsDir = Join-Path $env:RUNNER_TEMP "dottrace-tools"
+          nuget install JetBrains.dotTrace.CommandLineTools.windows-x64 -Version 2026.1.0.1 -OutputDirectory $toolsDir -NonInteractive *>&1 |
+            Tee-Object -FilePath $log -Append
+
+          $reporter = Get-ChildItem $toolsDir -Recurse -Filter Reporter.exe | Select-Object -First 1
+          if (-not $reporter) {
+            "Reporter.exe was not found." | Tee-Object -FilePath $log -Append
+            exit 0
+          }
+
+          $pattern = "dottrace-xml/dottrace-patterns.xml"
+          @"
+          <Patterns>
+            <Pattern PrintCallstacks="MethodNameOnly">Nethermind\..*</Pattern>
+          </Patterns>
+          "@ | Set-Content -Path $pattern -Encoding UTF8
+
+          $snapshots = Get-ChildItem downloaded-diagnostics -Recurse -File |
+            Where-Object { $_.Extension -in ".dtp", ".dtc" -or $_.Name -eq "dottrace" }
+
+          if (-not $snapshots) {
+            "No dotTrace sampling/tracing snapshot candidates found." |
+              Tee-Object -FilePath $log -Append
+            exit 0
+          }
+
+          $index = 0
+          foreach ($snapshot in $snapshots) {
+            $index += 1
+            $out = "dottrace-xml/dottrace-report-$index.xml"
+            "Converting $($snapshot.FullName) to $out" | Tee-Object -FilePath $log -Append
+            & $reporter.FullName report $snapshot.FullName --pattern=$pattern --save-to=$out --save-signature *>&1 |
+              Tee-Object -FilePath $log -Append
+            if (Test-Path $out) {
+              "Created $out" | Tee-Object -FilePath $log -Append
+            } else {
+              "Reporter.exe did not create $out (expected for Timeline snapshots)." |
+                Tee-Object -FilePath $log -Append
+            }
+          }
+
+      - name: Upload dotTrace XML artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repricing-nethermind-dottrace-xml-${{ github.run_id }}
+          path: dottrace-xml
+          if-no-files-found: warn
 
   retrigger:
     needs: repricing
