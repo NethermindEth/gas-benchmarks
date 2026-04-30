@@ -12,7 +12,7 @@ source "$REPO_ROOT/scripts/common/wait_for_rpc.sh"
 source "$REPO_ROOT/scripts/common/docker_compose.sh"
 
 if [ -n "${DIAG_WITH:-}" ]; then
-    echo "DIAG_WITH=$DIAG_WITH" >> "$SCRIPT_DIR/.env"
+    printf '\n%s\n' "DIAG_WITH=$DIAG_WITH" >> "$SCRIPT_DIR/.env"
 fi
 
 pushd "$SCRIPT_DIR" >/dev/null
