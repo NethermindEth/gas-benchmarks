@@ -11,6 +11,10 @@ source "$REPO_ROOT/scripts/common/wait_for_rpc.sh"
 # shellcheck source=/dev/null
 source "$REPO_ROOT/scripts/common/docker_compose.sh"
 
+if [ -n "${DIAG_WITH:-}" ]; then
+    echo "DIAG_WITH=$DIAG_WITH" >> "$SCRIPT_DIR/.env"
+fi
+
 pushd "$SCRIPT_DIR" >/dev/null
 compose_cmd up --detach
 popd >/dev/null
