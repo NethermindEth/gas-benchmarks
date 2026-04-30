@@ -38,6 +38,11 @@ popd >/dev/null
 if [ -n "${DIAG_WITH:-}" ]; then
     echo "[diag] Verifying DIAG_WITH inside container:"
     docker exec gas-execution-client printenv DIAG_WITH 2>/dev/null || echo "[diag] DIAG_WITH NOT SET in container"
+    echo "[diag] entrypoint.sh content:"
+    docker exec gas-execution-client cat /nethermind/entrypoint.sh 2>/dev/null || echo "[diag] entrypoint.sh not found"
+    echo "[diag] PID 1 cmdline:"
+    docker exec gas-execution-client cat /proc/1/cmdline 2>/dev/null | tr '\0' ' ' || true
+    echo ""
 fi
 
 echo "Invoking wait_for_rpc for Nethermind RPC readiness..."
