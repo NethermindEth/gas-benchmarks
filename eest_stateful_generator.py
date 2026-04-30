@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import atexit
 import re
-import threading
 
 CHAIN_TO_ID = {
     "mainnet": 1,
@@ -197,41 +196,6 @@ def _ensure_testing_placeholders(payload_dir: Path) -> None:
 
 # --------------------------------------------------------------------------------
 
-def _looks_like_block_hash(value: Any) -> bool:
-    return isinstance(value, str) and value.startswith("0x") and len(value) == 66
-
-
-def _parse_block_number(value: Any) -> Optional[int]:
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            if value.startswith("0x"):
-                return int(value, 16)
-            return int(value)
-        except Exception:
-            return None
-    return None
-
-
-def _extract_trace_block_hash(trace_data: Dict[str, Any]) -> Optional[str]:
-    candidates: List[Dict[str, Any]] = [trace_data]
-    for key in ("metadata", "meta", "result", "block", "header", "blockHeader", "executionPayload"):
-        value = trace_data.get(key)
-        if isinstance(value, dict):
-            candidates.append(value)
-            nested_meta = value.get("metadata")
-            if isinstance(nested_meta, dict):
-                candidates.append(nested_meta)
-
-    for candidate in candidates:
-        for key in ("blockHash", "block_hash", "hash", "blockhash"):
-            value = candidate.get(key)
-            if _looks_like_block_hash(value):
-                return value.lower()
-    return None
-
-
 def _extract_trace_opcode_counts(trace_data: Dict[str, Any]) -> Dict[str, int]:
     raw = trace_data.get("opcodeCounts")
     if not isinstance(raw, dict):
@@ -256,337 +220,112 @@ def _extract_trace_opcode_counts(trace_data: Dict[str, Any]) -> Dict[str, int]:
     return merged
 
 
-def _extract_trace_metadata(trace_data: Dict[str, Any]) -> Dict[str, Any]:
-    candidates: List[Dict[str, Any]] = [trace_data]
-    for key in ("metadata", "meta", "result", "block", "header", "blockHeader", "executionPayload"):
-        value = trace_data.get(key)
-        if isinstance(value, dict):
-            candidates.append(value)
-            nested_meta = value.get("metadata")
-            if isinstance(nested_meta, dict):
-                candidates.append(nested_meta)
-
-    block_number: Optional[int] = None
-    timestamp: Optional[int] = None
-    parent_hash: Optional[str] = None
-    tx_count: Optional[int] = None
-
-    for candidate in candidates:
-        if block_number is None:
-            for key in ("blockNumber", "block_number", "number"):
-                parsed = _parse_block_number(candidate.get(key))
-                if parsed is not None:
-                    block_number = parsed
-                    break
-
-        if timestamp is None:
-            for key in ("timestamp", "blockTimestamp"):
-                parsed = _parse_block_number(candidate.get(key))
-                if parsed is not None:
-                    timestamp = parsed
-                    break
-
-        if parent_hash is None:
-            for key in ("parentHash", "parent_hash", "parentBlockHash"):
-                raw_parent = candidate.get(key)
-                if isinstance(raw_parent, str):
-                    parent_hash = raw_parent.lower()
-                    break
-
-        if tx_count is None:
-            tx_count_raw = None
-            for key in ("transactionCount", "transaction_count", "txCount"):
-                if key in candidate:
-                    tx_count_raw = candidate.get(key)
-                    break
-            if tx_count_raw is not None:
-                try:
-                    tx_count = int(tx_count_raw)
-                except Exception:
-                    tx_count = None
-
-    return {
-        "block_number": block_number,
-        "timestamp": timestamp,
-        "parent_hash": parent_hash,
-        "tx_count": tx_count,
-    }
-
-
-def _extract_payload_block_ref(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    block_number = _parse_block_number(payload.get("blockNumber"))
-    if block_number is None:
-        return None
-
-    block_hash = payload.get("blockHash")
-    if isinstance(block_hash, str):
-        block_hash = block_hash.lower()
-    else:
-        block_hash = None
-
-    timestamp = _parse_block_number(payload.get("timestamp"))
-    parent_hash = payload.get("parentHash")
-    if isinstance(parent_hash, str):
-        parent_hash = parent_hash.lower()
-    else:
-        parent_hash = None
-
-    tx_count = None
-    transactions = payload.get("transactions")
-    if isinstance(transactions, list):
-        tx_count = len(transactions)
-
-    return {
-        "block_number": block_number,
-        "block_hash": block_hash,
-        "timestamp": timestamp,
-        "parent_hash": parent_hash,
-        "tx_count": tx_count,
-    }
-
-
-def _snapshot_trace_files_once(
+def _collect_scenario_traces(
     opcode_tracing_dir: Path,
-    history_dir: Path,
-    seen_state: Dict[Path, tuple[int, int]],
+    testing_dir: Path,
+    seen_testing_files: set[str],
 ) -> None:
-    history_dir.mkdir(parents=True, exist_ok=True)
-    for trace_file in opcode_tracing_dir.glob("opcode-trace-block-*.json"):
-        if not trace_file.is_file():
-            continue
-        try:
-            stat = trace_file.stat()
-        except Exception:
-            continue
-        state = (stat.st_mtime_ns, stat.st_size)
-        if seen_state.get(trace_file) == state:
-            continue
-        seen_state[trace_file] = state
+    """Move current trace files into per-scenario subdirectories.
 
-        hash_suffix = "nometa"
-        try:
-            trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
-            block_hash = _extract_trace_block_hash(trace_data)
-            if block_hash:
-                hash_suffix = block_hash[2:14]
-            else:
-                metadata = _extract_trace_metadata(trace_data)
-                ts = metadata.get("timestamp")
-                parent_hash = metadata.get("parent_hash")
-                if ts is not None and isinstance(parent_hash, str):
-                    hash_suffix = f"ts{ts}-ph{parent_hash[2:10]}"
-                elif ts is not None:
-                    hash_suffix = f"ts{ts}"
-                elif isinstance(parent_hash, str):
-                    hash_suffix = f"ph{parent_hash[2:10]}"
-        except Exception:
-            pass
-
-        snapshot_name = f"{trace_file.stem}--{state[0]}--{hash_suffix}.json"
-        snapshot_path = history_dir / snapshot_name
-        try:
-            shutil.copy2(trace_file, snapshot_path)
-        except Exception:
-            continue
-
-
-def _snapshot_trace_files_worker(stop_event: threading.Event, opcode_tracing_dir: Path) -> None:
-    history_dir = opcode_tracing_dir / "_history"
-    seen_state: Dict[Path, tuple[int, int]] = {}
-    while not stop_event.is_set():
-        _snapshot_trace_files_once(opcode_tracing_dir, history_dir, seen_state)
-        stop_event.wait(0.1)
-    _snapshot_trace_files_once(opcode_tracing_dir, history_dir, seen_state)
-
-
-def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, output_path: Path, parameter_filter: str = "") -> None:
+    Determines which scenario just ran by checking for new .txt files in
+    testing_dir that weren't present in seen_testing_files. Each new file
+    corresponds to a scenario whose trace files are in opcode_tracing_dir.
     """
-    Process test files in testing_dir and create a JSON mapping test names to opcode counts.
-
-    For each test file:
-    1. Extract block metadata from engine_newPayloadV* requests
-    2. Match opcode traces by blockHash or trace metadata
-    3. Extract opcodeCounts from the trace file
-    4. If multiple blocks, merge (sum) opcode counts
-    """
-    results = {}
-
-    if not testing_dir.exists():
-        print(f"[WARN] Testing directory {testing_dir} does not exist")
+    trace_files = list(opcode_tracing_dir.glob("opcode-trace-block-*.json"))
+    if not trace_files:
         return
 
-    trace_files = sorted(opcode_tracing_dir.rglob("opcode-trace-block-*.json"))
-    trace_entries: List[Dict[str, Any]] = []
-    seen_signatures: set[Any] = set()
+    current_files = {f.stem for f in testing_dir.glob("*.txt") if f.is_file()}
+    new_scenarios = current_files - seen_testing_files
+    seen_testing_files.update(current_files)
 
-    for trace_file in trace_files:
-        if not trace_file.is_file():
-            continue
-        try:
-            trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
-        except Exception:
-            continue
+    if not new_scenarios:
+        for trace_file in trace_files:
+            try:
+                trace_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+        return
 
-        opcode_counts = _extract_trace_opcode_counts(trace_data)
-        if not opcode_counts:
-            continue
+    if len(new_scenarios) > 1:
+        print(f"[WARN] Multiple new scenarios detected between pauses: {sorted(new_scenarios)}; "
+              "assigning trace files to all of them (duplicated)")
 
-        metadata = _extract_trace_metadata(trace_data)
-        block_hash = _extract_trace_block_hash(trace_data)
-        if block_hash:
-            block_hash = block_hash.lower()
+    for scenario_name in new_scenarios:
+        scenario_dir = opcode_tracing_dir / scenario_name
+        scenario_dir.mkdir(parents=True, exist_ok=True)
+        for trace_file in trace_files:
+            if not trace_file.is_file():
+                continue
+            try:
+                dest = scenario_dir / trace_file.name
+                if len(new_scenarios) == 1:
+                    shutil.move(str(trace_file), str(dest))
+                else:
+                    shutil.copy2(str(trace_file), str(dest))
+            except Exception as exc:
+                print(f"[WARN] Failed to move/copy trace file {trace_file} to {scenario_dir}: {exc}")
 
-        try:
-            mtime_ns = trace_file.stat().st_mtime_ns
-        except Exception:
-            mtime_ns = 0
+    if len(new_scenarios) > 1:
+        for trace_file in trace_files:
+            try:
+                trace_file.unlink(missing_ok=True)
+            except Exception:
+                pass
 
-        signature = (
-            block_hash,
-            metadata.get("block_number"),
-            metadata.get("timestamp"),
-            metadata.get("parent_hash"),
-            metadata.get("tx_count"),
-            tuple(sorted(opcode_counts.items())),
-        )
-        if signature in seen_signatures:
-            continue
-        seen_signatures.add(signature)
 
-        trace_entries.append({
-            "block_hash": block_hash,
-            "block_number": metadata.get("block_number"),
-            "timestamp": metadata.get("timestamp"),
-            "parent_hash": metadata.get("parent_hash"),
-            "tx_count": metadata.get("tx_count"),
-            "opcode_counts": opcode_counts,
-            "mtime_ns": mtime_ns,
-        })
+def generate_opcode_trace_json(opcode_tracing_dir: Path, output_path: Path, parameter_filter: str = "") -> None:
+    """
+    Build a JSON mapping test names to opcode counts from per-scenario trace directories.
 
-    trace_entries.sort(key=lambda entry: entry["mtime_ns"])
-    for idx, entry in enumerate(trace_entries):
-        entry["id"] = idx
+    Each subdirectory under opcode_tracing_dir corresponds to a single test scenario
+    (created by _collect_scenario_traces). For each scenario directory, all trace files
+    are read and their opcode counts summed to produce one entry in the output.
+    """
+    results: Dict[str, Dict[str, int]] = {}
 
-    def _append_index(index: Dict[Any, List[int]], key: Any, entry_id: int) -> None:
-        if key is None:
-            return
-        index.setdefault(key, []).append(entry_id)
+    if not opcode_tracing_dir.exists():
+        print(f"[WARN] Opcode tracing directory {opcode_tracing_dir} does not exist")
+        return
 
-    traces_by_hash: Dict[str, List[int]] = {}
-    traces_by_full: Dict[Any, List[int]] = {}
-    traces_by_num_ts_parent: Dict[Any, List[int]] = {}
-    traces_by_num_ts: Dict[Any, List[int]] = {}
-    traces_by_number: Dict[int, List[int]] = {}
+    scenario_dirs = sorted(
+        [d for d in opcode_tracing_dir.iterdir() if d.is_dir()],
+        key=lambda d: d.name,
+    )
+    if not scenario_dirs:
+        print(f"[WARN] No scenario trace directories found in {opcode_tracing_dir}")
+        return
 
-    for entry in trace_entries:
-        entry_id = int(entry["id"])
-        block_hash = entry.get("block_hash")
-        block_number = entry.get("block_number")
-        timestamp = entry.get("timestamp")
-        parent_hash = entry.get("parent_hash")
-        tx_count = entry.get("tx_count")
-
-        if isinstance(block_hash, str):
-            _append_index(traces_by_hash, block_hash, entry_id)
-        _append_index(traces_by_full, (block_number, timestamp, parent_hash, tx_count), entry_id)
-        _append_index(traces_by_num_ts_parent, (block_number, timestamp, parent_hash), entry_id)
-        _append_index(traces_by_num_ts, (block_number, timestamp), entry_id)
-        if isinstance(block_number, int):
-            _append_index(traces_by_number, block_number, entry_id)
-
-    used_entry_ids: set[int] = set()
-
-    def _pick_unused(candidates: Optional[List[int]]) -> Optional[int]:
-        if not candidates:
-            return None
-        for candidate in candidates:
-            if candidate not in used_entry_ids:
-                return candidate
-        return None
-
-    testing_files = sorted([p for p in testing_dir.rglob("*.txt") if p.is_file()])
     if parameter_filter:
-        # Parse AND/OR groups with the same semantics as the file deletion filter:
-        # "A and B" requires both terms; "A or B" / "A, B" matches either group.
         or_groups = [g.strip() for g in parameter_filter.replace(",", " or ").split(" or ") if g.strip()]
         parsed_groups = []
         for group in or_groups:
             terms = [t.strip().lower() for t in group.split(" and ") if t.strip()]
             if terms:
                 parsed_groups.append(terms)
-        testing_files = [
-            f for f in testing_files
-            if any(all(term in f.name.lower() for term in group) for group in parsed_groups)
+        scenario_dirs = [
+            d for d in scenario_dirs
+            if any(all(term in d.name.lower() for term in group) for group in parsed_groups)
         ]
-        print(f"[INFO] Trace matching filtered to {len(testing_files)} files (parameter_filter='{parameter_filter}')")
-    for txt_file in testing_files:
-        test_name = txt_file.stem
+        print(f"[INFO] Trace aggregation filtered to {len(scenario_dirs)} scenarios (parameter_filter='{parameter_filter}')")
 
-        try:
-            lines = txt_file.read_text(encoding="utf-8").splitlines()
-        except Exception as e:
-            print(f"[WARN] Failed to read {txt_file}: {e}")
+    for scenario_dir in scenario_dirs:
+        trace_files = sorted(scenario_dir.glob("opcode-trace-block-*.json"))
+        if not trace_files:
             continue
 
-        # Collect all block references from the file
-        block_refs: List[Dict[str, Any]] = []
-        for line in lines:
-            if not line.strip():
-                continue
+        merged_counts: Dict[str, int] = {}
+        for trace_file in trace_files:
             try:
-                data = json.loads(line)
-                method = data.get("method")
-                if not isinstance(method, str) or not method.startswith("engine_newPayloadV"):
-                    continue
-                params = data.get("params", [])
-                if not params or not isinstance(params[0], dict):
-                    continue
-                payload = params[0]
-                block_ref = _extract_payload_block_ref(payload)
-                if block_ref is not None:
-                    block_refs.append(block_ref)
+                trace_data = json.loads(trace_file.read_text(encoding="utf-8"))
             except Exception:
                 continue
-
-        if not block_refs:
-            print(f"[WARN] No payload block references found in {txt_file}")
-            continue
-
-        # Merge opcode counts from all blocks
-        merged_counts: dict[str, int] = {}
-        for block_ref in block_refs:
-            block_number = block_ref.get("block_number")
-            block_hash = block_ref.get("block_hash")
-            timestamp = block_ref.get("timestamp")
-            parent_hash = block_ref.get("parent_hash")
-            tx_count = block_ref.get("tx_count")
-            entry_id: Optional[int] = None
-
-            if isinstance(block_hash, str):
-                entry_id = _pick_unused(traces_by_hash.get(block_hash))
-            if entry_id is None:
-                entry_id = _pick_unused(traces_by_full.get((block_number, timestamp, parent_hash, tx_count)))
-            if entry_id is None:
-                entry_id = _pick_unused(traces_by_num_ts_parent.get((block_number, timestamp, parent_hash)))
-            if entry_id is None:
-                entry_id = _pick_unused(traces_by_num_ts.get((block_number, timestamp)))
-            if entry_id is None and isinstance(block_number, int):
-                entry_id = _pick_unused(traces_by_number.get(block_number))
-
-            if entry_id is None:
-                print(
-                    f"[WARN] No trace match for blockNumber={block_number} "
-                    f"blockHash={block_hash} timestamp={timestamp} parentHash={parent_hash} in {txt_file.name}"
-                )
-                continue
-
-            used_entry_ids.add(entry_id)
-            opcode_counts = trace_entries[entry_id]["opcode_counts"]
+            opcode_counts = _extract_trace_opcode_counts(trace_data)
             for opcode, count in opcode_counts.items():
                 merged_counts[opcode] = merged_counts.get(opcode, 0) + count
 
         if merged_counts:
-            result_key = str(txt_file.relative_to(testing_dir).with_suffix("")).replace("\\", "/")
+            result_key = scenario_dir.name
             if result_key in results:
                 duplicate_idx = 1
                 while f"{result_key}__{duplicate_idx}" in results:
@@ -594,10 +333,19 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
                 result_key = f"{result_key}__{duplicate_idx}"
             results[result_key] = merged_counts
 
-    # Write output JSON
+    # Write merged output JSON
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    print(f"[INFO] Opcode trace results written to {output_path}")
+    print(f"[INFO] Opcode trace results written to {output_path} ({len(results)} scenarios)")
+
+    # Write individual per-scenario JSON files
+    individual_dir = output_path.parent / f"{output_path.stem}_individual"
+    individual_dir.mkdir(parents=True, exist_ok=True)
+    for result_key, opcode_counts in results.items():
+        safe_name = result_key.replace("/", "__")
+        individual_path = individual_dir / f"{safe_name}.json"
+        individual_path.write_text(json.dumps(opcode_counts, indent=2), encoding="utf-8")
+    print(f"[INFO] Individual opcode trace files written to {individual_dir} ({len(results)} files)")
 
 
 def _read_json_file(path: Path):
@@ -1750,16 +1498,10 @@ def main():
             run_env["PYTHONPATH"] = src_path
         run_env["EEST_POLL_INTERVAL"] = "0.01"
 
-        trace_snapshot_stop: Optional[threading.Event] = None
-        trace_snapshot_thread: Optional[threading.Thread] = None
-        if args.trace_json:
-            trace_snapshot_stop = threading.Event()
-            trace_snapshot_thread = threading.Thread(
-                target=_snapshot_trace_files_worker,
-                args=(trace_snapshot_stop, opcode_tracing_dir),
-                daemon=True,
-            )
-            trace_snapshot_thread.start()
+        testing_dir = payloads_dir / "testing"
+        seen_testing_files: set[str] = set()
+        if testing_dir.exists():
+            seen_testing_files = {f.stem for f in testing_dir.glob("*.txt") if f.is_file()}
 
         tests_proc = subprocess.Popen(uv_cmd, cwd=str(repo_dir), env=run_env)
         processed_tokens: set[str] = set()
@@ -1771,6 +1513,8 @@ def main():
                 print(f"[WARN] Ignoring pause payload without token: {payload}")
                 return
             scenario_name = payload.get("scenario") or "unknown"
+            if args.trace_json:
+                _collect_scenario_traces(opcode_tracing_dir, testing_dir, seen_testing_files)
             try:
                 resume_file.unlink(missing_ok=True)
             except Exception:
@@ -1806,16 +1550,13 @@ def main():
                 except subprocess.TimeoutExpired:
                     tests_proc.kill()
                     tests_proc.wait()
-            if trace_snapshot_stop is not None:
-                trace_snapshot_stop.set()
-            if trace_snapshot_thread is not None:
-                trace_snapshot_thread.join(timeout=10)
+            if args.trace_json:
+                _collect_scenario_traces(opcode_tracing_dir, testing_dir, seen_testing_files)
 
         if return_code is None:
             return_code = tests_proc.returncode
         if args.trace_json:
             generate_opcode_trace_json(
-                testing_dir=Path(payloads_dir / "testing"),
                 opcode_tracing_dir=opcode_tracing_dir,
                 output_path=Path(args.trace_json_output),
                 parameter_filter=args.parameter_filter or "",
