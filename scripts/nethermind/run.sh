@@ -32,6 +32,8 @@ if [ -n "$IMAGE" ]; then
 fi
 
 pushd "$SCRIPT_DIR" >/dev/null
+echo "[diag] Merged compose config (environment):"
+compose_cmd config 2>/dev/null | grep -A10 'environment:' | head -12 || true
 compose_cmd up --detach
 popd >/dev/null
 
