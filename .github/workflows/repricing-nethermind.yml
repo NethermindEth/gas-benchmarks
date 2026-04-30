@@ -407,9 +407,11 @@ jobs:
             GENESIS_ARGS=(-g "$GENESIS_FILE")
           fi
 
+          # Snapshot path: /mnt/sda/<network>/nethermind on stateful-generator.
+          # When -n is passed, run.sh appends network to -B, so give it
+          # the parent without network.  When genesis is set we skip -n
+          # and give the full path directly.
           if [[ -n "$GENESIS_FILE" ]]; then
-            # Custom genesis: skip -n so run.sh doesn't override the chainspec
-            # for nethermind. Snapshot backend is still activated by -B.
             ./run.sh \
               -t "$TEST_PATH" \
               -B "${CUSTOM_SNAPSHOT:-/mnt/sda/$NETWORK/nethermind}" \
@@ -426,7 +428,7 @@ jobs:
             ./run.sh \
               -t "$TEST_PATH" \
               -n "$NETWORK" \
-              -B "${CUSTOM_SNAPSHOT:-/mnt/sda/$NETWORK/nethermind}" \
+              -B "${CUSTOM_SNAPSHOT:-/mnt/sda/nethermind}" \
               -O "${CUSTOM_OVERLAY:-/mnt/sda/overlay-workspace}" \
               -c nethermind \
               -r 1 \
