@@ -12,10 +12,14 @@ source "$REPO_ROOT/scripts/common/wait_for_rpc.sh"
 source "$REPO_ROOT/scripts/common/docker_compose.sh"
 
 if [ -n "${DIAG_WITH:-}" ]; then
-    echo "[diag] Injecting DIAG_WITH=$DIAG_WITH into docker-compose.yaml"
-    sed -i "s|COLORTERM=truecolor|COLORTERM=truecolor\n      - DIAG_WITH=${DIAG_WITH}|" "$SCRIPT_DIR/docker-compose.yaml"
-    echo "[diag] environment section after injection:"
-    grep -A3 'environment:' "$SCRIPT_DIR/docker-compose.yaml" | head -5
+    cat > "$SCRIPT_DIR/docker-compose.override.yml" <<OVERRIDE
+services:
+  execution:
+    environment:
+      - DIAG_WITH=${DIAG_WITH}
+OVERRIDE
+    echo "[diag] Created override with DIAG_WITH=$DIAG_WITH"
+    cat "$SCRIPT_DIR/docker-compose.override.yml"
 fi
 
 pushd "$SCRIPT_DIR" >/dev/null
