@@ -72,68 +72,11 @@ jobs:
       - name: Set matrix dynamically
         id: set-matrix
         run: |
-          runs="${{ inputs.runs }}"
-          if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
-            runs=1
-          fi
-          tests_input="${{ inputs.test }}"
-          targets=()
-
-          ALL_TARGETS=(
-            "repricings_compute/mainnet|mainnet"
-            "repricings_compute/perf-devnet-3|perf-devnet-3"
-            "repricings_stateful/mainnet|mainnet"
-            "repricings_stateful/perf-devnet-3|perf-devnet-3"
-          )
-
-          if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
-            targets=("${ALL_TARGETS[@]}")
-          else
-            IFS=',' read -ra requested_paths <<< "$tests_input"
-            for raw_path in "${requested_paths[@]}"; do
-              test_path="$(printf '%s' "$raw_path" | xargs)"
-              test_path="${test_path%/}"
-              [ -z "$test_path" ] && continue
-
-              matched=false
-              for candidate in "${ALL_TARGETS[@]}"; do
-                candidate_path="${candidate%%|*}"
-                case "$candidate_path" in
-                  "$test_path"|"$test_path"/*)
-                    targets+=("$candidate")
-                    matched=true
-                    ;;
-                esac
-              done
-
-              if [ "$matched" = false ]; then
-                network="$(basename "$test_path")"
-                targets+=("${test_path}|${network}")
-              fi
-            done
-          fi
-
-          if [ "${#targets[@]}" -eq 0 ]; then
-            echo "No test targets selected"
-            exit 1
-          fi
-
-          matrix_elements=()
-          for ((i=1; i<=runs; i++)); do
-            for target in "${targets[@]}"; do
-              test_path="${target%%|*}"
-              network="${target##*|}"
-              element="{\"run\":\"$i\",\"test_path\":\"$test_path\",\"network\":\"$network\"}"
-              matrix_elements+=("$element")
-            done
-          done
-
-          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo 'matrix={"include":[{"run":"1","test_path":"repricings_stateful/perf-devnet-3","network":"perf-devnet-3"}]}' >> "$GITHUB_OUTPUT"
 
   repricing:
     needs: set-matrix
-    runs-on: ${{ inputs.runner != '' && fromJson(inputs.runner) || fromJson('["self-hosted","repricing","nethermind"]') }}
+    runs-on: stateful-generator
     timeout-minutes: 10080
 
     strategy:
