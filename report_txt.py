@@ -55,38 +55,7 @@ def read_responses(text):
 
 
 def read_results(text):
-    sections = {}
-    for sections_text in text.split('--------------------------------------------------------------'):
-        timestamp = None
-        measurement = None
-        tags = {}
-        fields = {}
-        for full_lines in sections_text.split('#'):
-            if not full_lines:
-                continue
-
-            if full_lines.startswith(' TIMESTAMP:'):
-                timestamp = int(full_lines.split(':')[1])
-            elif full_lines.startswith(' MEASUREMENT:'):
-                measurement = full_lines.split(' ')[3].strip()
-            elif full_lines.startswith(' TAGS:'):
-                for line in full_lines.split('\n')[1:]:
-                    if not line:
-                        continue
-                    data = line.strip().split(' = ')
-                    tags[data[0]] = data[1]
-                pass
-            elif full_lines.startswith(' FIELDS:'):
-                for line in full_lines.split('\n')[1:]:
-                    if not line:
-                        continue
-                    data = line.strip().split(' = ')
-                    fields[data[0]] = data[1]
-
-        if timestamp is not None and measurement is not None:
-            sections[measurement] = utils.SectionData(timestamp, measurement, tags, fields)
-
-    return sections
+    return utils.read_results(text)
 
 
 def extract_data_per_client(client, results_paths, test_case):

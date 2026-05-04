@@ -7,6 +7,8 @@ IMAGES = '{"nethermind":"default","geth":"ethereum/client-go:latest","reth":"def
 KUTE_BINARY = Path("./nethermind/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute")
 WARMUP_NETHERMIND_LOG = Path("warmup_nethermind.log")
 WARMUP_CLIENT = "nethermind"
+ZFS_RUNTIME_DATASET_ROOT = "gasbench-runtime"
+ZFS_SNAPSHOT_PREFIX = "gasbench_tmp"
 
 _ACTIVE_CLEANUP = {
     "client": WARMUP_CLIENT,
@@ -130,20 +132,18 @@ def _parse_response_payloads(raw: str):
         return []
 
     payloads = []
-    try:
-        payloads.append(json.loads(raw))
-        return payloads
-    except Exception:
-        pass
-
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
+    decoder = json.JSONDecoder()
+    idx = 0
+    while idx < len(raw):
+        if raw[idx] in (' ', '\t', '\n', '\r'):
+            idx += 1
             continue
         try:
-            payloads.append(json.loads(line))
-        except Exception:
-            continue
+            obj, end = decoder.raw_decode(raw, idx)
+            payloads.append(obj)
+            idx = end
+        except json.JSONDecodeError:
+            idx += 1
     return payloads
 
 
@@ -186,30 +186,91 @@ def collect_mismatches_from_kute(response_dir: Path, log_path: Path = None, scop
 
 
 def fix_blockhashes(pattern: str, tests_root: Path, mapping: dict) -> int:
-    replaced_files = 0
-    print("[debug] blockHash mapping:")
+    normalized_mapping = {}
     for got, want in mapping.items():
-        print(f"  {got!r} → {want!r}")
+        if isinstance(got, str) and isinstance(want, str):
+            normalized_mapping[got.lower()] = want.lower()
+
+    replaced_files = 0
+    replaced_payloads = 0
 
     for txt in tests_root.rglob(pattern):
-        text = txt.read_text()
-        new_text = text
-        file_changed = False
-        for got, want in mapping.items():
-            before = f'"blockHash": "{got}"'
-            after = f'"blockHash": "{want}"'
-            if before in new_text:
-                file_changed = True
-                print(f"[debug] {txt}: replacing {before} → {after}")
-                new_text = new_text.replace(before, after)
-        if file_changed:
-            txt.write_text(new_text)
-            replaced_files += 1
-        else:
-            print(f"[debug] No blockHash replaced in {txt}")
+        try:
+            lines = txt.read_text(encoding="utf-8").splitlines(keepends=True)
+        except Exception as exc:
+            print(f"[warn] Failed to read {txt}: {exc}")
+            continue
 
-    print(f"[debug] total files changed: {replaced_files}")
+        new_lines = []
+        file_changed = False
+        file_replaced = 0
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                new_lines.append(line)
+                continue
+
+            line_body = line.rstrip("\r\n")
+            line_suffix = line[len(line_body):]
+            try:
+                obj = json.loads(line_body)
+            except json.JSONDecodeError:
+                new_lines.append(line)
+                continue
+
+            replaced_this_line = False
+            if isinstance(obj, dict):
+                params = obj.get("params")
+                if isinstance(params, list) and params and isinstance(params[0], dict):
+                    payload = params[0]
+                    current = payload.get("blockHash")
+                    if isinstance(current, str):
+                        replacement = normalized_mapping.get(current.lower())
+                        if replacement and replacement != current.lower():
+                            payload["blockHash"] = replacement
+                            replaced_this_line = True
+
+            if replaced_this_line:
+                file_changed = True
+                file_replaced += 1
+                new_lines.append(json.dumps(obj, separators=(",", ":")) + line_suffix)
+            else:
+                new_lines.append(line)
+
+        if file_changed:
+            txt.write_text("".join(new_lines), encoding="utf-8")
+            replaced_files += 1
+            replaced_payloads += file_replaced
+    print(f"[info] blockHash patching complete: files changed={replaced_files}, payload lines replaced={replaced_payloads}")
     return replaced_files
+
+
+def _parse_k_filter(expr: str) -> list:
+    """Parse a pytest -k style filter into a list of OR-groups of AND-terms.
+
+    Returns a list of groups (OR). Each group is a list of terms (AND).
+    A filename matches if ANY group matches, where a group matches when ALL
+    its terms are substrings of the filename (case-insensitive).
+    """
+    if not expr:
+        return []
+    groups = []
+    for or_part in re.split(r'\s+or\s+', expr, flags=re.IGNORECASE):
+        terms = [t.strip() for t in re.split(r'\s+and\s+', or_part, flags=re.IGNORECASE) if t.strip()]
+        if terms:
+            groups.append(terms)
+    return groups
+
+
+def _matches_k_filter(name: str, filter_groups: list) -> bool:
+    """Check if a filename matches parsed -k filter groups."""
+    if not filter_groups:
+        return True
+    name_lower = name.lower()
+    return any(
+        all(term.lower() in name_lower for term in group)
+        for group in filter_groups
+    )
 
 
 def _dir_has_content(path: Path) -> bool:
@@ -218,8 +279,6 @@ def _dir_has_content(path: Path) -> bool:
 
 def _resolve_snapshot_lower(snapshot_root: Path, network, client: str) -> Path:
     snapshot_root = snapshot_root.expanduser().resolve()
-    if _dir_has_content(snapshot_root):
-        return snapshot_root
 
     candidates = []
     if network:
@@ -237,6 +296,9 @@ def _resolve_snapshot_lower(snapshot_root: Path, network, client: str) -> Path:
     for candidate in candidates:
         if _dir_has_content(candidate):
             return candidate
+
+    if _dir_has_content(snapshot_root):
+        return snapshot_root
 
     raise RuntimeError(f"Unable to locate snapshot directory for {client} under {snapshot_root}")
 
@@ -294,6 +356,74 @@ def _overlay_base_from_lower(lower: Path, overlay_root: Path) -> Path:
         return overlay_root
     return lower.parent / overlay_root
 
+def _run_zfs_command(args, capture_output: bool = False) -> str:
+    cmd = ["zfs", *args]
+    kwargs = {"check": True, "text": True}
+    if capture_output:
+        kwargs["capture_output"] = True
+
+    try:
+        result = subprocess.run(cmd, **kwargs)
+        return result.stdout if capture_output else ""
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        if not (hasattr(os, "geteuid") and os.geteuid() != 0 and shutil.which("sudo")):
+            raise
+        sudo_cmd = ["sudo", *cmd]
+        result = subprocess.run(sudo_cmd, **kwargs)
+        return result.stdout if capture_output else ""
+
+
+def _resolve_zfs_dataset_for_path(target: Path) -> tuple[str, Path]:
+    target_abs = target.resolve()
+    output = _run_zfs_command(["list", "-H", "-o", "name,mountpoint", "-t", "filesystem"], capture_output=True)
+
+    best_dataset = ""
+    best_mount = None
+    best_len = -1
+
+    for raw in output.splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        parts = raw.split("\t")
+        if len(parts) != 2:
+            continue
+        dataset, mountpoint = parts
+        if mountpoint in ("-", "none", "legacy"):
+            continue
+
+        mount_path = Path(mountpoint)
+        try:
+            mount_abs = mount_path.resolve()
+        except Exception:
+            continue
+
+        mount_str = str(mount_abs)
+        target_str = str(target_abs)
+        if target_str == mount_str or target_str.startswith(mount_str + os.sep):
+            if len(mount_str) > best_len:
+                best_len = len(mount_str)
+                best_dataset = dataset
+                best_mount = mount_abs
+
+    if not best_dataset or best_mount is None:
+        raise RuntimeError(f"Unable to resolve ZFS dataset for path: {target_abs}")
+
+    return best_dataset, best_mount
+
+
+def _ensure_zfs_parent_dataset(pool: str, client: str) -> Path:
+    base_dataset = f"{pool}/{ZFS_RUNTIME_DATASET_ROOT}"
+    client_dataset = f"{base_dataset}/{client}"
+
+    for dataset in (base_dataset, client_dataset):
+        try:
+            _run_zfs_command(["list", "-H", "-o", "name", dataset], capture_output=True)
+        except Exception:
+            _run_zfs_command(["create", "-o", "mountpoint=none", dataset])
+
+    return Path(client_dataset)
+
 
 def _prepare_overlay_for_client(snapshot_root: Path, network, overlay_root: Path, client: str):
     lower = _resolve_snapshot_lower(snapshot_root, network, client)
@@ -320,10 +450,55 @@ def _prepare_overlay_for_client(snapshot_root: Path, network, overlay_root: Path
 
     return {
         "lower": lower,
+        "backend": "overlay",
         "root": overlay_root,
         "merged": merged,
         "upper": upper,
         "work": work,
+    }
+
+
+def _prepare_zfs_clone_for_client(snapshot_root: Path, network, runtime_root: Path, client: str):
+    lower = _resolve_snapshot_lower(snapshot_root, network, client)
+    lower_abs = lower.resolve()
+
+    dataset, mountpoint = _resolve_zfs_dataset_for_path(lower_abs)
+    lower_suffix = Path(".")
+    if lower_abs != mountpoint:
+        lower_suffix = lower_abs.relative_to(mountpoint)
+
+    runtime_base = _overlay_base_from_lower(lower_abs, runtime_root)
+    clone_id = f"{time.time_ns()}_{os.getpid()}"
+    clone_mount_root = runtime_base / client / clone_id
+    clone_mount_root.parent.mkdir(parents=True, exist_ok=True)
+    clone_mount_root.mkdir(parents=True, exist_ok=True)
+
+    pool = dataset.split("/", 1)[0]
+    _ensure_zfs_parent_dataset(pool, client)
+
+    clone_dataset = f"{pool}/{ZFS_RUNTIME_DATASET_ROOT}/{client}/{clone_id}"
+    snapshot_name = f"{dataset}@{ZFS_SNAPSHOT_PREFIX}_{client}_{clone_id}"
+
+    _run_zfs_command(["snapshot", snapshot_name])
+    try:
+        _run_zfs_command(["clone", "-o", f"mountpoint={clone_mount_root}", snapshot_name, clone_dataset])
+    except Exception:
+        _run_zfs_command(["destroy", snapshot_name])
+        raise
+
+    data_dir = clone_mount_root if lower_suffix == Path(".") else (clone_mount_root / lower_suffix)
+    if not data_dir.exists():
+        _run_zfs_command(["destroy", "-r", "-f", clone_dataset])
+        _run_zfs_command(["destroy", snapshot_name])
+        raise RuntimeError(f"ZFS clone data dir missing: {data_dir}")
+
+    return {
+        "backend": "zfs",
+        "lower": lower_abs,
+        "root": clone_mount_root,
+        "data_dir": data_dir,
+        "dataset": clone_dataset,
+        "snapshot": snapshot_name,
     }
 
 
@@ -348,6 +523,40 @@ def _cleanup_overlay(overlay: dict) -> None:
             except Exception:
                 pass
 
+def _cleanup_zfs_clone(runtime: dict) -> None:
+    dataset = runtime.get("dataset")
+    snapshot_name = runtime.get("snapshot")
+    root = runtime.get("root")
+
+    if dataset:
+        try:
+            _run_zfs_command(["destroy", "-r", "-f", str(dataset)])
+        except Exception as exc:
+            print(f"[warn] failed to destroy ZFS clone dataset {dataset}: {exc}")
+
+    if snapshot_name:
+        try:
+            _run_zfs_command(["destroy", str(snapshot_name)])
+        except Exception:
+            pass
+
+    if root and Path(root).exists():
+        shutil.rmtree(root, ignore_errors=True)
+        parent = Path(root).parent
+        try:
+            if parent.exists() and not any(parent.iterdir()):
+                parent.rmdir()
+        except Exception:
+            pass
+
+
+def _cleanup_runtime(runtime: dict) -> None:
+    backend = str(runtime.get("backend") or "overlay").lower()
+    if backend == "zfs":
+        _cleanup_zfs_clone(runtime)
+    else:
+        _cleanup_overlay(runtime)
+
 
 def teardown(cl_name: str, data_dir: Path = None, overlay: dict = None):
     script_dir = Path("scripts") / cl_name
@@ -358,7 +567,7 @@ def teardown(cl_name: str, data_dir: Path = None, overlay: dict = None):
     if down.returncode != 0:
         print(f"[warn] docker compose down returned {down.returncode} in {script_dir}")
     if overlay:
-        _cleanup_overlay(overlay)
+        _cleanup_runtime(overlay)
         return
     if data_dir is None:
         data_dir = script_dir / "execution-data"
@@ -398,14 +607,24 @@ def main():
         help="Overlay runtime root (relative to snapshot parent unless absolute)",
     )
     p.add_argument(
+        "--snapshotBackend",
+        default="overlay",
+        choices=["overlay", "zfs"],
+        help="Snapshot backend (overlay or zfs) used when --snapshotRoot is set",
+    )
+    p.add_argument(
         "--network",
         help="Optional network name to resolve snapshot subdirectories (and passed to setup_node.py)",
+    )
+    p.add_argument(
+        "--filter",
+        default="",
+        help="Only regenerate warmups for test files whose names contain this substring (preserves existing warmups for other tests)",
     )
     args = p.parse_args()
     _ensure_kute_binary()
 
     # Optionally override GENESIS_ROOT from --genesisPath when a valid top-level stateRoot exists.
-    print("[debug] Starting warmup test generation")
     genesis_state_root_applied = False
     if args.genesisPath:
         try:
@@ -414,9 +633,7 @@ def main():
             global GENESIS_ROOT
             state_root = gen_data.get("stateRoot")
             if isinstance(state_root, str) and _is_hex32(state_root):
-                print(f"[debug] Overriding GENESIS_ROOT:\n  before: {GENESIS_ROOT}")
                 GENESIS_ROOT = state_root
-                print(f"  after: {GENESIS_ROOT}")
                 genesis_state_root_applied = True
             else:
                 print(
@@ -455,21 +672,29 @@ def main():
         sys.exit(1)
 
     dst_root = Path(args.dest)
+    warmup_filter_raw = args.filter.strip() if args.filter else ""
+    warmup_filter_parts = _parse_k_filter(warmup_filter_raw)
     if dst_root.exists():
-        shutil.rmtree(dst_root)
-    dst_root.mkdir(parents=True)
+        if warmup_filter_parts:
+            print(f"[INFO] --filter is set ('{warmup_filter_raw}'); preserving existing warmup directory")
+        else:
+            shutil.rmtree(dst_root)
+    dst_root.mkdir(parents=True, exist_ok=True)
     pattern = args.pattern
 
     counters = {"total": 0, "bumped": 0, "dropped": 0}
     WARMUP_NETHERMIND_LOG.write_text("", encoding="utf-8")
-    use_overlay = bool(args.snapshotRoot)
-    snapshot_root = Path(args.snapshotRoot).expanduser() if use_overlay else None
+    use_snapshot_runtime = bool(args.snapshotRoot)
+    snapshot_root = Path(args.snapshotRoot).expanduser() if use_snapshot_runtime else None
     overlay_root = Path(args.overlayRoot).expanduser()
-    if not use_overlay and args.overlayRoot != "overlay-runtime":
+    if not use_snapshot_runtime and args.overlayRoot != "overlay-runtime":
         print("[error] --overlayRoot requires --snapshotRoot")
         sys.exit(1)
-    if use_overlay and snapshot_root and not snapshot_root.exists():
+    if use_snapshot_runtime and snapshot_root and not snapshot_root.exists():
         print(f"[error] Snapshot root does not exist: {snapshot_root}")
+        sys.exit(1)
+    if use_snapshot_runtime and args.snapshotBackend == "zfs" and not shutil.which("zfs"):
+        print("[error] zfs backend requested but 'zfs' command is not available")
         sys.exit(1)
 
     # Process each source path
@@ -483,21 +708,19 @@ def main():
             normalized = src.as_posix()
             if "/setup/" in normalized or "/cleanup/" in normalized:
                 continue
+            if warmup_filter_parts and not _matches_k_filter(src.name, warmup_filter_parts):
+                continue
 
             rel = src.relative_to(src_root)
             out = dst_root / prefix / rel
             out.parent.mkdir(parents=True, exist_ok=True)
 
             with src.open() as fin, out.open("w") as fout:
-                total_payloads = sum(1 for line in fin if "engine_newPayload" in line)
-                fin.seek(0)
-                seen_payloads = 0
+                payload_lines = [line for line in fin if "engine_newPayload" in line]
+                total_payloads = len(payload_lines)
 
-                for line in fin:
-                    if "engine_newPayload" not in line:
-                        continue
-                    seen_payloads += 1
-                    bump = change_all or (seen_payloads == total_payloads)
+                for idx, line in enumerate(payload_lines, start=1):
+                    bump = change_all or (idx == total_payloads)
                     nl = process_line(line, counters, bump)
                     if nl:
                         fout.write(nl)
@@ -518,10 +741,15 @@ def main():
         overlay = None
         data_dir = None
         try:
-            if use_overlay and snapshot_root is not None:
-                overlay = _prepare_overlay_for_client(snapshot_root, args.network, overlay_root, WARMUP_CLIENT)
-                data_dir = Path(overlay["merged"]).resolve()
-                print(f"[debug] Using overlay data dir: {data_dir}")
+            if use_snapshot_runtime and snapshot_root is not None:
+                if args.snapshotBackend == "zfs":
+                    overlay = _prepare_zfs_clone_for_client(snapshot_root, args.network, overlay_root, WARMUP_CLIENT)
+                    data_dir = Path(overlay["data_dir"]).resolve()
+                    print(f"[info] Using zfs clone data dir: {data_dir}")
+                else:
+                    overlay = _prepare_overlay_for_client(snapshot_root, args.network, overlay_root, WARMUP_CLIENT)
+                    data_dir = Path(overlay["merged"]).resolve()
+                    print(f"[info] Using overlay data dir: {data_dir}")
             else:
                 data_dir = Path(f"scripts/{WARMUP_CLIENT}/execution-data").resolve()
                 data_dir.mkdir(parents=True, exist_ok=True)
@@ -536,6 +764,8 @@ def main():
                 IMAGES,
                 "--dataDir",
                 str(data_dir),
+                "--dataBackend",
+                args.snapshotBackend if use_snapshot_runtime else "direct",
             ]
             if args.network:
                 setup_node_cmd += ["--network", args.network]
@@ -602,3 +832,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

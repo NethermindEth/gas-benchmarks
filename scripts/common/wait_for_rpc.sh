@@ -2,7 +2,7 @@
 
 wait_for_rpc() {
   local url="${1:-http://localhost:8545}"
-  local max_attempts="${2:-600}"
+  local max_attempts="${2:-${WAIT_FOR_RPC_MAX_ATTEMPTS:-50}}"
   local attempt=1
   local response
   local curl_status
@@ -35,6 +35,6 @@ wait_for_rpc() {
     attempt=$((attempt + 1))
   done
 
-  echo "⚠️  RPC endpoint $url did not become ready after $max_attempts attempts" >&2
+  echo "[ERROR] RPC endpoint $url did not become ready after $max_attempts attempts" >&2
   return 1
 }

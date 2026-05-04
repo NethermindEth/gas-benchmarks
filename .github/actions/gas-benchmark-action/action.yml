@@ -29,6 +29,22 @@ inputs:
     description: 'Comma-separated include-only filename patterns for stateful scenarios'
     required: false
     default: ''
+  snapshotBackend:
+    description: 'Snapshot backend mode (direct|overlay|zfs)'
+    required: false
+    default: 'direct'
+  snapshotRoot:
+    description: 'Snapshot root path (required for overlay/zfs backends)'
+    required: false
+    default: ''
+  snapshotRuntimeRoot:
+    description: 'Runtime root path for overlay/zfs writable data'
+    required: false
+    default: ''
+  network:
+    description: 'Optional network name passed to run.sh for snapshot path resolution'
+    required: false
+    default: ''
   images:
     description: 'JSON map of images per client (same format as multi-parallel workflow)'
     required: false
@@ -133,18 +149,39 @@ runs:
         IMAGES: ${{ inputs.images }}
         OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
         FILTER: ${{ inputs.filter }}
+        SNAPSHOT_BACKEND: ${{ inputs.snapshotBackend }}
+        SNAPSHOT_ROOT: ${{ inputs.snapshotRoot }}
+        SNAPSHOT_RUNTIME_ROOT: ${{ inputs.snapshotRuntimeRoot }}
+        NETWORK_NAME: ${{ inputs.network }}
       run: |
         set -euo pipefail
         TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
-
-        ./run.sh \
-          -T "$TEST_PATHS_JSON" \
-          -w "$WARMUP_FILE" \
-          -c "$CLIENTS" \
-          -r "$RUNS" \
-          -i "$IMAGES" \
-          -o "$OPCODE_WARMUP_COUNT" \
+        RUN_ARGS=(
+          -T "$TEST_PATHS_JSON"
+          -W "$WARMUP_FILE"
+          -c "$CLIENTS"
+          -r "$RUNS"
+          -i "$IMAGES"
+          -o "$OPCODE_WARMUP_COUNT"
           -f "$FILTER"
+        )
+
+        if [ "$SNAPSHOT_BACKEND" = "overlay" ] || [ "$SNAPSHOT_BACKEND" = "zfs" ]; then
+          if [ -z "$SNAPSHOT_ROOT" ]; then
+            echo "snapshotRoot input is required when snapshotBackend is '$SNAPSHOT_BACKEND'" >&2
+            exit 1
+          fi
+          RUN_ARGS+=(-S "$SNAPSHOT_BACKEND")
+          RUN_ARGS+=(-B "$SNAPSHOT_ROOT")
+          if [ -n "$NETWORK_NAME" ]; then
+            RUN_ARGS+=(-n "$NETWORK_NAME")
+          fi
+          if [ -n "$SNAPSHOT_RUNTIME_ROOT" ]; then
+            RUN_ARGS+=(-O "$SNAPSHOT_RUNTIME_ROOT")
+          fi
+        fi
+
+        ./run.sh "${RUN_ARGS[@]}"
 
     - name: Generate TXT report (optional)
       if: ${{ inputs.txtReport == 'true' }}

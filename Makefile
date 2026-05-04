@@ -1,8 +1,9 @@
 .PHONY: prepare_tools clean
 
 NETHERMIND_DIR := nethermind
-NETHERMIND_COMMIT := e1857d7ca6613ccdc40973899290f565f367e235
 KUTE_BIN := $(NETHERMIND_DIR)/tools/artifacts/bin/Nethermind.Tools.Kute/release/Nethermind.Tools.Kute
+DOTNET_CHANNEL ?= 10.0
+DOTNET_REQUIRED_MAJOR ?= 10
 
 prepare_tools:
 	@set -e; \
@@ -11,11 +12,82 @@ prepare_tools:
 	fi; \
 	cd "$(NETHERMIND_DIR)"; \
 	git fetch --all --prune; \
-	git checkout "$(NETHERMIND_COMMIT)"; \
+	default_branch=$$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##'); \
+	if [ -z "$$default_branch" ]; then default_branch=main; fi; \
+	git checkout "$$default_branch"; \
+	git pull --ff-only origin "$$default_branch"; \
 	git lfs pull; \
 	cd ..; \
+	required_major="$(DOTNET_REQUIRED_MAJOR)"; \
+	if [ -f "$(NETHERMIND_DIR)/global.json" ]; then \
+		global_major=$$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9][0-9]*\)\..*/\1/p' "$(NETHERMIND_DIR)/global.json" | head -n 1); \
+		if [ -n "$$global_major" ]; then \
+			required_major="$$global_major"; \
+		fi; \
+	fi; \
+	echo "Required .NET SDK major for Nethermind: $$required_major"; \
+	curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh; \
+	echo "Installing latest .NET SDK channel $(DOTNET_CHANNEL) to $$HOME/.dotnet"; \
+	bash /tmp/dotnet-install.sh --channel "$(DOTNET_CHANNEL)" --quality ga --install-dir "$$HOME/.dotnet"; \
+	export DOTNET_ROOT="$$HOME/.dotnet"; \
+	export PATH="$$HOME/.dotnet:$$PATH"; \
+	if ! dotnet --list-sdks | grep -q "^$$required_major\\."; then \
+		echo ".NET SDK $$required_major.x not found; installing local .NET SDK $$required_major.0 to $$HOME/.dotnet"; \
+		bash /tmp/dotnet-install.sh --channel "$$required_major.0" --quality ga --install-dir "$$HOME/.dotnet"; \
+	fi; \
+	echo "Installed SDKs:"; \
+	dotnet --list-sdks; \
+	kute_project=$$(find "./$(NETHERMIND_DIR)/tools" -maxdepth 4 -type f -name '*Kute*.csproj' | head -n 1); \
+	if [ -z "$$kute_project" ]; then \
+		echo "ERROR: Unable to find a Kute project file under ./$(NETHERMIND_DIR)/tools"; \
+		exit 1; \
+	fi; \
+	echo "Using Kute project: $$kute_project"; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
-		dotnet build "./$(NETHERMIND_DIR)/tools/Nethermind.Tools.Kute" -c Release --property WarningLevel=0; \
+		restore_args=""; \
+		if [ -n "$$NUGET_PACKAGES" ]; then \
+			mkdir -p "$$NUGET_PACKAGES"; \
+			restore_args="--packages $$NUGET_PACKAGES"; \
+		fi; \
+		restore_ok=false; \
+		for attempt in 1 2 3; do \
+			echo "Running dotnet restore for Kute (attempt $$attempt/3)"; \
+			if dotnet restore "$$kute_project" $$restore_args --disable-parallel; then \
+				restore_ok=true; \
+				break; \
+			fi; \
+			if [ "$$attempt" -lt 3 ]; then \
+				sleep $$((attempt * 20)); \
+			fi; \
+		done; \
+		if [ "$$restore_ok" != true ]; then \
+			echo "ERROR: dotnet restore failed for Kute after 3 attempts."; \
+			exit 1; \
+		fi; \
+		build_ok=false; \
+		for attempt in 1 2 3; do \
+			echo "Running dotnet build for Kute (attempt $$attempt/3)"; \
+			if dotnet build "$$kute_project" -c Release --no-restore --property WarningLevel=0; then \
+				build_ok=true; \
+				break; \
+			fi; \
+			if [ "$$attempt" -lt 3 ]; then \
+				sleep $$((attempt * 20)); \
+			fi; \
+		done; \
+		if [ "$$build_ok" != true ]; then \
+			echo "ERROR: dotnet build failed for Kute after 3 attempts."; \
+			exit 1; \
+		fi; \
+	fi; \
+	if [ ! -f "$(KUTE_BIN)" ]; then \
+		kute_candidate=$$(find "./$(NETHERMIND_DIR)/tools/artifacts/bin" -maxdepth 8 -type f \( -name 'Nethermind.Tools.Kute' -o -name 'Nethermind.Tools.Kute.exe' -o -name 'Kute' -o -name 'Kute.exe' -o -name 'Nethermind.Tools.Kute.dll' -o -name 'Kute.dll' \) | head -n 1); \
+		if [ -n "$$kute_candidate" ]; then \
+			echo "Linking detected Kute artifact $$kute_candidate to $(KUTE_BIN)"; \
+			mkdir -p "$$(dirname "$(KUTE_BIN)")"; \
+			ln -sf "$$kute_candidate" "$(KUTE_BIN)" 2>/dev/null || cp -f "$$kute_candidate" "$(KUTE_BIN)"; \
+			chmod +x "$(KUTE_BIN)" 2>/dev/null || true; \
+		fi; \
 	fi; \
 	if [ ! -f "$(KUTE_BIN)" ]; then \
 		echo "ERROR: Kute binary not found at $(KUTE_BIN) after build."; \

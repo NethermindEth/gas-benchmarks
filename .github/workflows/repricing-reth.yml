@@ -1,0 +1,51 @@
+name: Repricing - Reth
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Path(s) to repricing test directories (comma-separated) or 'all'"
+        default: 'all'
+      runs:
+        description: 'Number of runs for the application'
+        default: '1'
+      images:
+        description: 'JSON map of images for the clients'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+      opcodes_warmup_count:
+        description: 'Number of opcode-warmup iterations (empty = auto: 1 for compute, 0 for stateful)'
+        default: ''
+      filter:
+        description: 'Comma-separated include-only filename patterns'
+        default: ''
+      fork:
+        description: 'Fork name (osaka, amsterdam)'
+        default: 'osaka'
+concurrency:
+  group: repricing-reth-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repricing:
+    uses: ./.github/workflows/repricing-client.yml
+    with:
+      client: reth
+      test: ${{ inputs.test || 'all' }}
+      runs: ${{ inputs.runs || '1' }}
+      images: ${{ inputs.images || '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}' }}
+      opcodes_warmup_count: ${{ inputs.opcodes_warmup_count }}
+      filter: ${{ inputs.filter || '' }}
+      fork: ${{ inputs.fork || 'osaka' }}
+    secrets: inherit
+
+  retrigger:
+    needs: repricing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrigger workflow
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: repricing-reth.yml
+          ref: "${{ github.ref }}"
+          token: "${{ secrets.GH_TOKEN }}"
+          inputs: ${{ toJson(github.event.inputs) }}

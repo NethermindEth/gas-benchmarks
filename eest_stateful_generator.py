@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 import os
+import shlex
 import shutil
 import signal
 import socket
@@ -36,6 +37,28 @@ CLEANUP = {
     "mitm": None,
 }
 
+_HTTP_SESSION = None
+
+
+def _get_http_session():
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        import requests
+        _HTTP_SESSION = requests.Session()
+    return _HTTP_SESSION
+
+
+def _close_http_session():
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        return
+    try:
+        _HTTP_SESSION.close()
+    except Exception:
+        pass
+    _HTTP_SESSION = None
+
+
 def run(cmd, cwd=None, env=None, check=True):
     print("\n[RUN] " + " ".join(cmd))
     return subprocess.run(cmd, cwd=cwd, env=env, check=check)
@@ -60,9 +83,9 @@ def ensure_pip_pkg(pkg):
         run([sys.executable, "-m", "pip", "install", "-U", pkg])
 
 def rpc_call(url, method, params=None, headers=None, timeout=10):
-    import requests
+    session = _get_http_session()
     body = {"jsonrpc": "2.0", "id": int(time.time()), "method": method, "params": params or []}
-    r = requests.post(url, json=body, headers=headers or {}, timeout=timeout)
+    r = session.post(url, json=body, headers=headers or {}, timeout=timeout)
     r.raise_for_status()
     data = r.json()
     if "error" in data: raise RuntimeError(f"RPC error from {url}: {data['error']}")
@@ -108,7 +131,12 @@ def _append_suffix_to_scenarios(payload_dir: Path, suffix: str) -> None:
             continue
         for path in sorted(phase_dir.glob("**/*.txt")):
             stem = path.stem
-            if stem.endswith(f"_{suffix}") or "gas-value" in stem:
+            stem_upper = stem.upper()
+            # Skip if the gas value is already embedded in the filename:
+            # - trailing _30M (legacy suffix)
+            # - benchmark_30M inside parametrized name (after _scenario_name normalisation)
+            # - raw -benchmark-gas-value_ from EEST
+            if stem_upper.endswith(f"_{suffix}") or f"BENCHMARK_{suffix}" in stem_upper or "gas-value" in stem:
                 continue
             base_name = stem
             target = path.with_name(f"{base_name}_{suffix}{path.suffix}")
@@ -371,7 +399,7 @@ def _snapshot_trace_files_worker(stop_event: threading.Event, opcode_tracing_dir
     _snapshot_trace_files_once(opcode_tracing_dir, history_dir, seen_state)
 
 
-def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, output_path: Path) -> None:
+def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, output_path: Path, parameter_filter: str = "") -> None:
     """
     Process test files in testing_dir and create a JSON mapping test names to opcode counts.
 
@@ -477,6 +505,20 @@ def generate_opcode_trace_json(testing_dir: Path, opcode_tracing_dir: Path, outp
         return None
 
     testing_files = sorted([p for p in testing_dir.rglob("*.txt") if p.is_file()])
+    if parameter_filter:
+        # Parse AND/OR groups with the same semantics as the file deletion filter:
+        # "A and B" requires both terms; "A or B" / "A, B" matches either group.
+        or_groups = [g.strip() for g in parameter_filter.replace(",", " or ").split(" or ") if g.strip()]
+        parsed_groups = []
+        for group in or_groups:
+            terms = [t.strip().lower() for t in group.split(" and ") if t.strip()]
+            if terms:
+                parsed_groups.append(terms)
+        testing_files = [
+            f for f in testing_files
+            if any(all(term in f.name.lower() for term in group) for group in parsed_groups)
+        ]
+        print(f"[INFO] Trace matching filtered to {len(testing_files)} files (parameter_filter='{parameter_filter}')")
     for txt_file in testing_files:
         test_name = txt_file.stem
 
@@ -606,20 +648,27 @@ def _generate_preparation_payloads(
     _truncate_file(gas_bump_file)
     _truncate_file(funding_file)
     try:
-        max_count = max(args.gas_bump_count, 1)
-        last_log = time.monotonic()
-        for idx in range(max_count):
-            now = time.monotonic()
-            if idx == 0 or idx == max_count - 1 or now - last_log >= 5:
-                print(f"[DEBUG] Generating gas-bump payload {idx + 1}/{max_count}")
-                last_log = now
-            preparation_getpayload(
-                "http://127.0.0.1:8551",
-                jwt_path,
-                "EMPTY",
-                save_path=gas_bump_file,
-                timestamp_hack=args.testing_buildblock_timestamp_hack,
-            )
+        gas_bump_count = int(args.gas_bump_count)
+        if gas_bump_count < 0:
+            print(f"[WARN] Negative gas-bump count {gas_bump_count}; treating as 0.")
+            gas_bump_count = 0
+        if gas_bump_count == 0:
+            print("[INFO] Gas-bump count is 0; skipping gas-bump payload generation.")
+        else:
+            last_log = time.monotonic()
+            for idx in range(gas_bump_count):
+                now = time.monotonic()
+                if idx == 0 or idx == gas_bump_count - 1 or now - last_log >= 5:
+                    print(f"[DEBUG] Generating gas-bump payload {idx + 1}/{gas_bump_count}")
+                    last_log = now
+                preparation_getpayload(
+                    "http://127.0.0.1:8551",
+                    jwt_path,
+                    "EMPTY",
+                    save_path=gas_bump_file,
+                    timestamp_hack=args.testing_buildblock_timestamp_hack,
+                    fork=args.fork,
+                )
     except Exception as exc:
         print(f"[WARN] Gas bump failed: {exc}")
     finalized = ""
@@ -630,10 +679,96 @@ def _generate_preparation_payloads(
             args.rpc_address,
             save_path=funding_file,
             timestamp_hack=args.testing_buildblock_timestamp_hack,
+            fork=args.fork,
         )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
     return finalized or ""
+
+def _count_payload_pairs(path: Path) -> int:
+    """Count the number of newPayload+FCU pairs in a payload file."""
+    try:
+        lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    except Exception:
+        return 0
+    count = 0
+    for line in lines:
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        method = obj.get("method", "")
+        if isinstance(method, str) and method.startswith("engine_newPayload"):
+            count += 1
+    return count
+
+
+def _replay_preparation_payloads(
+    engine_url: str,
+    jwt_hex_path: Path,
+    gas_bump_file: Path,
+    funding_file: Path,
+    fork: str = "Prague",
+) -> str:
+    """Replay existing gas-bump and funding payload files against the running node."""
+    import hmac, hashlib
+
+    global _PREP_SLOT_COUNTER
+    session = _get_http_session()
+
+    def _send_engine_line(line: str) -> dict:
+        secret_hex = Path(jwt_hex_path).read_text().strip().replace("0x", "")
+        header = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"JWT"}').rstrip(b'=')
+        payload = base64.urlsafe_b64encode(json.dumps({"iat": int(time.time())}).encode()).rstrip(b'=')
+        unsigned = header + b"." + payload
+        sig = hmac.new(bytes.fromhex(secret_hex), unsigned, hashlib.sha256).digest()
+        token = (unsigned + b"." + base64.urlsafe_b64encode(sig).rstrip(b'=')).decode()
+        body = json.loads(line)
+        r = session.post(engine_url, json=body, headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        r.raise_for_status()
+        j = r.json()
+        if "error" in j:
+            raise RuntimeError(f"Engine error replaying {body.get('method')}: {j['error']}")
+        return j
+
+    target_np_method = _newpayload_method_for_fork(fork)
+    finalized = ""
+    for label, path in [("gas-bump", gas_bump_file), ("funding", funding_file)]:
+        if not path.exists():
+            print(f"[WARN] {label} file not found: {path}")
+            continue
+        lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        if not lines:
+            print(f"[INFO] {label} file is empty; skipping replay.")
+            continue
+        np_count = sum(1 for ln in lines if '"engine_newPayload' in ln)
+        print(f"[INFO] Replaying {np_count} payloads from {label} file: {path}")
+        last_log = time.monotonic()
+        replayed = 0
+        for line in lines:
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            method = obj.get("method", "")
+            if isinstance(method, str) and method.startswith("engine_newPayload"):
+                if method != target_np_method:
+                    obj["method"] = target_np_method
+                    line = json.dumps(obj, separators=(",", ":"))
+                replayed += 1
+                _PREP_SLOT_COUNTER += 1
+                now = time.monotonic()
+                if replayed == 1 or replayed == np_count or now - last_log >= 5:
+                    print(f"[DEBUG] Replaying {label} payload {replayed}/{np_count}")
+                    last_log = now
+                params = obj.get("params", [])
+                if params and isinstance(params[0], dict):
+                    block_hash = params[0].get("blockHash")
+                    if isinstance(block_hash, str):
+                        finalized = block_hash
+            _send_engine_line(line)
+    return finalized
+
 
 def _latest_block_hash_from_payload_file(path: Path) -> Optional[str]:
     try:
@@ -728,6 +863,7 @@ def start_nethermind_container(
     image: str = "nethermindeth/nethermind:gp-hacked",
     genesis_path: Optional[Path] = None,
     trace_json: bool = False,
+    extra_flags: Optional[list] = None,
 ) -> str:
     subprocess.run(["docker", "pull", image], check=False)
     resolved_db = db_dir.resolve()
@@ -762,7 +898,11 @@ def start_nethermind_container(
     if genesis_path:
         cmd += ["--config", "none", "--Init.ChainSpecPath", "/genesis/custom.json"]
     else:
-        cmd += ["--config", str(chain)]
+        chain_name = str(chain).strip().lower()
+        runtime_config = "mainnet" if chain_name in ("mainnet", "ethereum") else str(chain)
+        if runtime_config != str(chain):
+            print(f"[INFO] Overriding Nethermind runtime --config from {chain!r} to {runtime_config!r}")
+        cmd += ["--config", runtime_config]
 
     cmd += [
         "--JsonRpc.Enabled",
@@ -787,8 +927,6 @@ def start_nethermind_container(
         "1000000000000",
         "--data-dir",
         "/db",
-        "--log",
-        "INFO",
         "--Network.MaxActivePeers",
         "0",
         "--TxPool.Size",
@@ -807,6 +945,12 @@ def start_nethermind_container(
         "70000",
         "--Init.BaseDbPath",
         "/db/mainnet",
+        "--JsonRpc.MaxBatchSize",
+        "10000000",
+        "--JsonRpc.MaxBatchResponseBodySize",
+        "3355443200",
+        "--FlatDb.Enabled",
+        "true",
     ]
     if trace_json:
         cmd += [
@@ -816,6 +960,8 @@ def start_nethermind_container(
             "--OpcodeTracing.EndBlock", "2",
             "--OpcodeTracing.OutputDirectory", "/test-output",
         ]
+    if extra_flags:
+        cmd += extra_flags
     cp = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, text=True)
     return cp.stdout.strip()
 
@@ -846,7 +992,8 @@ def start_mitm_proxy(addon_path: Path, listen_port=8549, upstream="http://127.0.
     return subprocess.Popen(cmd, env=env)
 
 def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: list, timeout=30):
-    import requests, hmac, hashlib
+    import hmac, hashlib
+    session = _get_http_session()
     header = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"JWT"}').rstrip(b'=')
     payload = base64.urlsafe_b64encode(json.dumps({"iat": int(time.time())}).encode()).rstrip(b'=')
     unsigned = header + b"." + payload
@@ -855,7 +1002,7 @@ def _engine_with_jwt(engine_url: str, jwt_hex_path: Path, method: str, params: l
     token = unsigned + b"." + base64.urlsafe_b64encode(sig).rstrip(b'=')
     token_str = token.decode()
     body = {"jsonrpc":"2.0","id":int(time.time()),"method":method,"params":params}
-    r = requests.post(engine_url, json=body, headers={"Authorization": f"Bearer {token_str}"}, timeout=timeout)
+    r = session.post(engine_url, json=body, headers={"Authorization": f"Bearer {token_str}"}, timeout=timeout)
     r.raise_for_status()
     j = r.json()
     if "error" in j: raise RuntimeError(f"Engine error: {j['error']}")
@@ -913,6 +1060,12 @@ def _extract_execution_requests(payload: Dict[str, Any]) -> List[Any]:
     return []
 
 
+def _newpayload_method_for_fork(fork: str) -> str:
+    if fork.lower() in ("amsterdam",):
+        return "engine_newPayloadV5"
+    return "engine_newPayloadV4"
+
+
 def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dict[str, Any]) -> Optional[str]:
     for key in ("parentBeaconBlockRoot", "parent_beacon_block_root"):
         val = payload.get(key)
@@ -925,6 +1078,8 @@ def _extract_parent_beacon_block_root(payload: Dict[str, Any], exec_payload: Dic
     return None
 
 
+_PREP_SLOT_COUNTER: int = 0
+
 def preparation_getpayload(
     engine_url: str,
     jwt_hex_path: Path,
@@ -932,9 +1087,10 @@ def preparation_getpayload(
     save_path: Path | None = None,
     *,
     timestamp_hack: bool = False,
+    fork: str = "Prague",
 ):
     """
-    Build a payload on the engine via testing_buildBlockV1, POST engine_newPayloadV4,
+    Build a payload on the engine via testing_buildBlockV1, POST engine_newPayload,
     then engine_forkchoiceUpdatedV3.
     If save_path is provided, append TWO minified JSON-RPC lines to that file:
       1) the engine_newPayloadV4 request body
@@ -970,6 +1126,10 @@ def preparation_getpayload(
         "withdrawals": withdrawals,
         "parentBeaconBlockRoot": parent_hash,
     }
+    if fork.lower() in ("amsterdam",):
+        global _PREP_SLOT_COUNTER
+        _PREP_SLOT_COUNTER += 1
+        payload_attributes["slotNumber"] = hex(_PREP_SLOT_COUNTER)
     payload = _engine_with_jwt(
         engine_url,
         jwt_hex_path,
@@ -988,12 +1148,15 @@ def preparation_getpayload(
     parent_beacon_block_root = payload_attributes["parentBeaconBlockRoot"]
     execution_requests = _extract_execution_requests(payload)
 
+    np_method = _newpayload_method_for_fork(fork)
+    np_params = [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests]
+
     # Send NP
     _ = _engine_with_jwt(
         engine_url,
         jwt_hex_path,
-        "engine_newPayloadV4",
-        [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+        np_method,
+        np_params,
     )
     block_hash = exec_payload.get("blockHash")
 
@@ -1018,8 +1181,8 @@ def preparation_getpayload(
         np_body = {
             "jsonrpc": "2.0",
             "id": int(time.time()),
-            "method": "engine_newPayloadV4",
-            "params": [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests],
+            "method": np_method,
+            "params": np_params,
         }
         fcu_body = {"jsonrpc":"2.0","id":int(time.time()),"method":"engine_forkchoiceUpdatedV3","params":[fcs, None]}
         _append_line(save_path, _minified_json_line(np_body))
@@ -1072,6 +1235,7 @@ def _cleanup():
         except Exception:
             pass
 
+atexit.register(_close_http_session)
 atexit.register(_cleanup)
 
 def _sig_handler(signum, frame):
@@ -1134,6 +1298,11 @@ def main():
         help="Docker image to use when launching the Nethermind container.",
     )
     parser.add_argument(
+        "--nethermind-extra-flags",
+        default="",
+        help="Extra CLI flags passed to the Nethermind container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None').",
+    )
+    parser.add_argument(
         "--gas-bump-count",
         type=int,
         default=301,
@@ -1158,6 +1327,11 @@ def main():
         "--eest-branch",
         default="main",
         help="Git branch of execution-specs to checkout before running (default: main).",
+    )
+    parser.add_argument(
+        "--eest-commit",
+        default="",
+        help="Pin execution-specs to a specific commit SHA after checkout (optional).",
     )
     parser.add_argument(
         "--eest-no-pull",
@@ -1188,8 +1362,8 @@ def main():
         "--eest-mode",
         "--eest_mode",
         dest="eest_mode",
-        default="Benchmark",
-        help="Mode passed to execute remote via -m (supports repricings/benchmarks/stateful).",
+        default="",
+        help="Mode passed to execute remote via -m (e.g. repricing). Leave empty to omit -m entirely.",
     )
     parser.add_argument(
         "--eest-stateful-testing",
@@ -1227,10 +1401,43 @@ def main():
             pass
 
 
-    for subdir in ("setup", "testing", "cleanup"):
-        sub_path = payloads_dir / subdir
-        if sub_path.exists():
-            shutil.rmtree(sub_path)
+    if args.parameter_filter:
+        # Only remove files matching the filter so they get cleanly regenerated;
+        # preserve all other tests.
+        # Parse "A and B" as AND-groups and "A or B" / "A, B" as OR-groups,
+        # matching pytest -k semantics: file must satisfy ALL terms in an AND-group
+        # and at least one OR-group.
+        or_groups = [g.strip() for g in args.parameter_filter.replace(",", " or ").split(" or ") if g.strip()]
+        parsed_groups = []
+        for group in or_groups:
+            terms = [t.strip().lower() for t in group.split(" and ") if t.strip()]
+            if terms:
+                parsed_groups.append(terms)
+        # Only delete files for gas values being regenerated in this run,
+        # so e.g. running with gas_benchmark_values=30 doesn't wipe 60M/90M/etc.
+        gas_value_lower = {v.lower() for v in gas_values}
+        removed = 0
+        for subdir in ("setup", "testing", "cleanup"):
+            sub_path = payloads_dir / subdir
+            if not sub_path.exists():
+                continue
+            for f in sub_path.rglob("*.txt"):
+                name_lower = f.name.lower()
+                if not any(all(term in name_lower for term in group) for group in parsed_groups):
+                    continue
+                # Check gas value: file contains e.g. "benchmark_120M" — only delete
+                # if it matches one of the gas values being regenerated.
+                gas_match = re.search(r"benchmark_(\d+)", name_lower)
+                if gas_match and gas_match.group(1) not in gas_value_lower:
+                    continue
+                f.unlink()
+                removed += 1
+        print(f"[INFO] parameter_filter is set ('{args.parameter_filter}'); removed {removed} matching files (gas values: {gas_values}), preserved the rest")
+    else:
+        for subdir in ("setup", "testing", "cleanup"):
+            sub_path = payloads_dir / subdir
+            if sub_path.exists():
+                shutil.rmtree(sub_path)
 
     control_dir = payloads_dir / "_control"
     if control_dir.exists():
@@ -1251,6 +1458,7 @@ def main():
             run(["git", "fetch", "origin"], cwd=str(repo_dir))
             run(["git", "checkout", args.eest_branch], cwd=str(repo_dir))
             run(["git", "pull", "origin", args.eest_branch], cwd=str(repo_dir))
+            run(["git", "submodule", "update", "--init", "--recursive"], cwd=str(repo_dir))
         else:
             print("[INFO] --eest-no-pull specified; using existing execution-specs checkout as-is.")
     else:
@@ -1263,6 +1471,11 @@ def main():
             repo_url,
             str(repo_dir),
         ])
+        run(["git", "submodule", "update", "--init", "--recursive"], cwd=str(repo_dir))
+    if args.eest_commit:
+        print(f"[INFO] Pinning execution-specs to commit {args.eest_commit}")
+        run(["git", "checkout", args.eest_commit], cwd=str(repo_dir))
+        run(["git", "submodule", "update", "--init", "--recursive"], cwd=str(repo_dir))
     if not check_cmd_exists("uv"):
         run([sys.executable, "-m", "pip", "install", "-U", "uv"])
     run(["uv", "python", "install", "3.11"])
@@ -1343,6 +1556,9 @@ def main():
     container_name = "eest-nethermind"
     CLEANUP["container"] = container_name
     active_db_dir = primary_merged
+    nm_extra_flags = shlex.split(args.nethermind_extra_flags) if args.nethermind_extra_flags else []
+    if nm_extra_flags:
+        print(f"[INFO] Extra Nethermind flags: {nm_extra_flags}")
 
     def restart_node(db_dir: Path, *, show_logs: bool = False) -> None:
         nonlocal active_db_dir
@@ -1357,6 +1573,7 @@ def main():
             image=args.nethermind_image,
             genesis_path=genesis_file,
             trace_json=args.trace_json,
+            extra_flags=nm_extra_flags,
         )
         if not wait_for_port("127.0.0.1", 8545, timeout=300):
             print("ERROR: 8545 not reachable.")
@@ -1396,10 +1613,40 @@ def main():
                 chain_id = 1
 
     ensure_pip_pkg("mitmproxy")
+    ensure_pip_pkg("pycryptodome")
 
     finalized_hash = ""
     rpc_url = "http://127.0.0.1:8545"
-    if reuse_preparation:
+    engine_url = "http://127.0.0.1:8551"
+    target_np_method = _newpayload_method_for_fork(args.fork)
+    if reuse_preparation and gas_bump_file.exists():
+        # Check if the existing gas-bump file uses the correct newPayload version
+        try:
+            first_np_line = next(
+                (ln for ln in gas_bump_file.read_text(encoding="utf-8").splitlines()
+                 if '"engine_newPayload' in ln),
+                None,
+            )
+            if first_np_line:
+                file_method = json.loads(first_np_line).get("method", "")
+                if file_method != target_np_method:
+                    print(f"[INFO] newPayload version mismatch: file has {file_method} but fork {args.fork} requires {target_np_method}; regenerating.")
+                    reuse_preparation = False
+        except Exception:
+            pass
+
+    if reuse_preparation and args.parameter_filter:
+        # When filter is set, replay existing payloads instead of regenerating — but only
+        # if the gas-bump count matches what was requested.
+        existing_bump_count = _count_payload_pairs(gas_bump_file)
+        requested_bump_count = int(args.gas_bump_count) if int(args.gas_bump_count) >= 0 else 0
+        if existing_bump_count != requested_bump_count:
+            print(f"[INFO] Gas-bump count mismatch: file has {existing_bump_count} but requested {requested_bump_count}; regenerating.")
+            reuse_preparation = False
+        else:
+            print(f"[INFO] Replaying {existing_bump_count} existing gas-bump + funding payloads (parameter_filter is set).")
+            finalized_hash = _replay_preparation_payloads(engine_url, jwt_path, gas_bump_file, funding_file, fork=args.fork)
+    elif reuse_preparation:
         print("[INFO] Reusing existing gas-bump and funding payloads.")
         finalized_hash = _latest_block_hash_from_payload_file(funding_file) or ""
         if not finalized_hash or not _block_exists(rpc_url, finalized_hash):
@@ -1431,6 +1678,8 @@ def main():
         "light_logs": True,
         "testing_buildblock_timestamp_hack": args.testing_buildblock_timestamp_hack,
     }
+    if args.fork.lower() in ("amsterdam",):
+        mitm_config["slot_counter_start"] = _PREP_SLOT_COUNTER
     Path("mitm_config.json").write_text(json.dumps(mitm_config), encoding="utf-8")
 
     addon_path = Path("mitm_addon.py")  # external file from above
@@ -1446,16 +1695,18 @@ def main():
 
         tests_rpc = args.rpc_endpoint or "http://127.0.0.1:8549"
         mode_key = (args.eest_mode or "").strip().lower()
-        mode_map = {
-            "repricing": "repricing",
-            "repricings": "repricing",
-            "benchmark": "benchmark",
-            "benchmarks": "benchmark",
-            "stateful": "stateful",
-        }
-        if mode_key not in mode_map:
-            raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
-        eest_mode = mode_map[mode_key]
+        eest_mode = ""
+        if mode_key:
+            mode_map = {
+                "repricing": "repricing",
+                "repricings": "repricing",
+                "benchmark": "benchmark",
+                "benchmarks": "benchmark",
+                "stateful": "stateful",
+            }
+            if mode_key not in mode_map:
+                raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
+            eest_mode = mode_map[mode_key]
         uv_cmd = [
             "uv", "run", "execute", "remote", "-v",
             f"--fork={args.fork}",
@@ -1476,8 +1727,10 @@ def main():
             "--skip-cleanup",
             args.test_path,
             "--",
-            "-m", eest_mode, "-n", "1",
+            "-n", "1",
         ]
+        if eest_mode:
+            uv_cmd.extend(["-m", eest_mode])
         if args.parameter_filter:
             uv_cmd.extend(["-k", args.parameter_filter])
         stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")
@@ -1565,6 +1818,7 @@ def main():
                 testing_dir=Path(payloads_dir / "testing"),
                 opcode_tracing_dir=opcode_tracing_dir,
                 output_path=Path(args.trace_json_output),
+                parameter_filter=args.parameter_filter or "",
             )
         if return_code != 0:
             generated_phase_payloads = _has_phase_payloads(payloads_dir)

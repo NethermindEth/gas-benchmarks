@@ -12,17 +12,26 @@ import yaml
 
 from utils import print_computer_specs
 
+REPO_ROOT = Path(__file__).resolve().parent
 
 GENESIS_FILES: Dict[str, Path] = {
-    "nethermind": Path("scripts/genesisfiles/nethermind/zkevmgenesis.json"),
-    "besu": Path("scripts/genesisfiles/besu/zkevmgenesis.json"),
-    "geth": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
-    "reth": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
-    "erigon": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
-    "nimbus": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
-    "ethrex": Path("scripts/genesisfiles/geth/zkevmgenesis.json"),
+    "nethermind": REPO_ROOT / "scripts" / "genesisfiles" / "nethermind" / "zkevmgenesis.json",
+    "besu": REPO_ROOT / "scripts" / "genesisfiles" / "besu" / "zkevmgenesis.json",
+    "geth": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
+    "reth": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
+    "erigon": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
+    "nimbus": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
+    "ethrex": REPO_ROOT / "scripts" / "genesisfiles" / "geth" / "zkevmgenesis.json",
 }
 DEFAULT_GENESIS = GENESIS_FILES["geth"]
+
+
+def resolve_nethermind_config_network(network: str) -> str:
+    normalized = str(network).strip().lower()
+    if normalized == "mainnet":
+        return "mainnet"
+    return normalized
+
 
 CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
     "nethermind": {
@@ -33,7 +42,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
             {
                 "env": "NETHERMIND_CONFIG_FLAG",
                 "custom": "--config=none",
-                "network": lambda net: f"--config={net}",
+                "network": lambda net: f"--config={resolve_nethermind_config_network(net)}",
             },
             {
                 "env": "NETHERMIND_GENESIS_FLAG",
@@ -70,7 +79,7 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "GETH_NETWORK_FLAG",
-                "custom": "--networkid=1337",
+                "custom": "--override.genesis=/tmp/genesis/genesis.json",
                 "network": lambda net: f"--{net.lower()}",
             },
             {
@@ -106,12 +115,12 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
         "flags": [
             {
                 "env": "ERIGON_CHAIN_FLAG",
-                "custom": "",
+                "custom": "--keep.stored.chain.config",
                 "network": lambda net: f"--chain={net.lower()}",
             },
             {
                 "env": "ERIGON_INIT_COMMAND",
-                "custom": "erigon init --datadir=/var/lib/erigon /tmp/genesis/genesis.json",
+                "custom": "erigon init --datadir=/data /tmp/genesis/genesis.json",
                 "network": "",
             },
         ],
@@ -162,9 +171,16 @@ def sanitize_volume_name(name: str) -> str:
 def run_command(client, run_path):
     command = f"{run_path}/run.sh"
     print(
-        f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'"
+        f"{client} running at url 'http://localhost:8551'(auth), with command: '{command}'",
+        flush=True,
     )
-    subprocess.run(command, shell=True, text=True)
+    completed = subprocess.run(command, shell=True, text=True, check=False, cwd=run_path)
+    if completed.returncode != 0:
+        print(
+            f"ERROR: Client startup script failed with exit code {completed.returncode}",
+            flush=True,
+        )
+        raise SystemExit(completed.returncode)
 
 
 def get_metadata(client: str) -> Dict[str, Any]:
@@ -181,12 +197,13 @@ def evaluate_flag(flag_entry: Dict[str, Any], network: Optional[str], use_custom
     return value or ""
 
 
-INIT_SKIP_ON_OVERLAY: Dict[str, Dict[str, str]] = {
+INIT_SKIP_ON_SNAPSHOT_BACKEND: Dict[str, Dict[str, str]] = {
     "geth": {"GETH_INIT_COMMAND": "true"},
+    "erigon": {"ERIGON_INIT_COMMAND": "true"},
 }
 
 
-def _is_overlay_path(candidate: Optional[str]) -> bool:
+def _is_snapshot_clone_path(candidate: Optional[str]) -> bool:
     if not candidate:
         return False
     try:
@@ -194,7 +211,9 @@ def _is_overlay_path(candidate: Optional[str]) -> bool:
     except Exception:
         return False
     lowercase_parts = [part.lower() for part in resolved.parts]
-    return "merged" in lowercase_parts and any("overlay" in part for part in lowercase_parts)
+    if "merged" in lowercase_parts and any("overlay" in part for part in lowercase_parts):
+        return True
+    return any("gasbench-runtime" in part for part in lowercase_parts)
 
 
 def set_env(
@@ -202,13 +221,18 @@ def set_env(
     el_images: Dict[str, str],
     run_path: str,
     data_dir: Optional[str],
+    data_backend: Optional[str],
     network: Optional[str],
     use_custom_genesis: bool,
     genesis_host_path: Path,
     metadata: Dict[str, Any],
     volume_name: Optional[str],
 ):
-    resolved_data_dir = Path(data_dir or Path(run_path) / "execution-data").resolve()
+    run_path_obj = Path(run_path).resolve()
+    if not run_path_obj.is_dir():
+        raise FileNotFoundError(f"Client run path does not exist: {run_path_obj}")
+
+    resolved_data_dir = Path(data_dir or run_path_obj / "execution-data").resolve()
 
     env_map: Dict[str, str] = {
         "EC_IMAGE_VERSION": el_images[client],
@@ -217,6 +241,7 @@ def set_env(
         metadata["env_key"]: genesis_host_path.as_posix(),
         "USE_CUSTOM_GENESIS": "true" if use_custom_genesis else "false",
         "NETWORK_NAME": network or "",
+        "EC_DATA_BACKEND": (data_backend or "direct"),
     }
 
     sanitized_volume = sanitize_volume_name(volume_name) if volume_name else sanitize_volume_name(
@@ -235,32 +260,34 @@ def set_env(
     for extra_key, extra_value in metadata.get("extra_env", {}).items():
         env_map[extra_key] = extra_value
 
-    if _is_overlay_path(data_dir):
-        overrides = INIT_SKIP_ON_OVERLAY.get(client, {})
+    normalized_backend = (data_backend or "").strip().lower()
+    is_snapshot_clone = normalized_backend in {"overlay", "zfs"} or _is_snapshot_clone_path(data_dir)
+    if is_snapshot_clone:
+        overrides = INIT_SKIP_ON_SNAPSHOT_BACKEND.get(client, {})
         for env_key, override in overrides.items():
             env_map[env_key] = override
 
     env_lines = [f"{key}={value}" for key, value in env_map.items()]
 
-    env_file_path = os.path.join(run_path, ".env")
-    if os.path.exists(env_file_path):
-        os.remove(env_file_path)
+    env_file_path = run_path_obj / ".env"
+    if env_file_path.exists():
+        env_file_path.unlink()
     with open(env_file_path, "w", encoding="utf-8") as file:
         file.write("\n".join(env_lines))
 
 
 def copy_genesis_file(source: Path, target: Path) -> None:
     if not source.is_file():
-        print(f"âťŚ Genesis file not found at: {source}")
+        print(f"[error] Genesis file not found at: {source}")
         exit(1)
 
     target.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         shutil.copy(source, target)
-        print(f"âś… Copied genesis file: {source} â†’ {target}")
+        print(f"[info] Copied genesis file: {source} -> {target}")
     except Exception as exc:
-        print(f"âťŚ Failed to copy genesis file from {source} to {target}: {exc}")
+        print(f"[error] Failed to copy genesis file from {source} to {target}: {exc}")
         exit(1)
 
 
@@ -282,6 +309,13 @@ def main():
         help="Host directory to bind into the client as data dir",
     )
     parser.add_argument(
+        "--dataBackend",
+        type=str,
+        choices=["direct", "overlay", "zfs"],
+        default="direct",
+        help="Data directory backend mode (direct, overlay, zfs)",
+    )
+    parser.add_argument(
         "--volumeName",
         type=str,
         help="Docker volume name override",
@@ -297,13 +331,14 @@ def main():
     genesis_path = args.genesisPath
     network = args.network
     data_dir = args.dataDir
+    data_backend = args.dataBackend
     volume_name = args.volumeName
 
-    with open("images.yaml", "r") as f:
+    with open(REPO_ROOT / "images.yaml", "r", encoding="utf-8") as f:
         el_images = yaml.safe_load(f)["images"]
 
     if client_without_tag not in el_images:
-        print("âťŚ Client not supported:", client_without_tag)
+        print("[error] Client not supported:", client_without_tag)
         return
 
     # Override image from bulk if needed
@@ -316,7 +351,7 @@ def main():
     if image and image != "default":
         el_images[client_without_tag] = image
 
-    run_path = os.path.join(os.getcwd(), "scripts", client_without_tag)
+    run_path = str((REPO_ROOT / "scripts" / client_without_tag).resolve())
 
     metadata = get_metadata(client_without_tag)
     use_custom_genesis = bool(genesis_path)
@@ -338,6 +373,7 @@ def main():
         el_images=el_images,
         run_path=run_path,
         data_dir=data_dir,
+        data_backend=data_backend,
         network=network,
         use_custom_genesis=use_custom_genesis,
         genesis_host_path=genesis_target,

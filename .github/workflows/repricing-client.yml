@@ -1,0 +1,520 @@
+name: Repricing Client (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      client:
+        description: 'Client name (besu, erigon, geth, nethermind, reth)'
+        required: true
+        type: string
+      test:
+        description: "Path(s) to repricing test directories (comma-separated) or 'all'"
+        default: 'all'
+        type: string
+      runs:
+        description: 'Number of runs for the application'
+        default: '1'
+        type: string
+      images:
+        description: 'JSON map of images for the clients'
+        default: '{"nethermind":"default","geth":"default","reth":"default","erigon":"default","besu":"default"}'
+        type: string
+      opcodes_warmup_count:
+        description: 'Number of opcode-warmup iterations (empty = auto: 1 for compute, 0 for stateful)'
+        default: ''
+        type: string
+      filter:
+        description: 'Comma-separated include-only filename patterns'
+        default: ''
+        type: string
+      fork:
+        description: 'Fork name for genesis file selection'
+        default: 'osaka'
+        type: string
+jobs:
+  set-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Set matrix dynamically
+        id: set-matrix
+        run: |
+          runs="${{ inputs.runs }}"
+          if ! [[ "$runs" =~ ^[0-9]+$ ]] || [ "$runs" -lt 1 ]; then
+            runs=1
+          fi
+          tests_input="${{ inputs.test }}"
+          targets=()
+
+          ALL_TARGETS=(
+            "repricings_compute/mainnet|mainnet"
+            "repricings_compute/perf-devnet-3|perf-devnet-3"
+            "repricings_stateful/mainnet|mainnet"
+            "repricings_stateful/perf-devnet-3|perf-devnet-3"
+          )
+
+          if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
+            targets=("${ALL_TARGETS[@]}")
+          else
+            IFS=',' read -ra requested_paths <<< "$tests_input"
+            for raw_path in "${requested_paths[@]}"; do
+              test_path="$(printf '%s' "$raw_path" | xargs)"
+              test_path="${test_path%/}"
+              [ -z "$test_path" ] && continue
+
+              echo "Processing test_path='$test_path'"
+
+              # Check if this is a parent folder (e.g. "repricings_stateful") — expand to all matching network targets
+              matched=false
+              for candidate in "${ALL_TARGETS[@]}"; do
+                candidate_path="${candidate%%|*}"
+                case "$candidate_path" in
+                  "${test_path}"/*)
+                    echo "  Folder expansion: matched '$candidate_path' under '$test_path'"
+                    targets+=("$candidate")
+                    matched=true
+                    ;;
+                esac
+              done
+
+              if [ "$matched" = false ]; then
+                network="$(basename "$test_path")"
+                echo "  No folder expansion; using as-is: path='$test_path' network='$network'"
+                targets+=("${test_path}|${network}")
+              fi
+            done
+          fi
+
+          echo "Final targets (${#targets[@]}):"
+          for t in "${targets[@]}"; do echo "  - $t"; done
+
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No test targets selected"
+            exit 1
+          fi
+
+          matrix_elements=()
+
+          for ((i=1; i<=runs; i++)); do
+            for target in "${targets[@]}"; do
+              test_path="${target%%|*}"
+              network="${target##*|}"
+              element="{'run': '$i', 'test_path': '$test_path', 'network': '$network'}"
+              matrix_elements+=("$element")
+            done
+          done
+
+          matrix="{\"include\": [$(IFS=,; echo "${matrix_elements[*]}")]}"
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: set-matrix
+    runs-on:
+      - self-hosted
+      - repricing
+      - ${{ inputs.client }}
+    timeout-minutes: 10080
+
+    strategy:
+      matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
+      fail-fast: false
+      max-parallel: 1
+
+    env:
+      PIP_BREAK_SYSTEM_PACKAGES: "1"
+      MIN_DOCKER_API_VERSION: "1.44"
+      NUGET_ENHANCED_MAX_NETWORK_TRY_COUNT: "12"
+      NUGET_ENHANCED_NETWORK_RETRY_DELAY_MILLISECONDS: "5000"
+      NUGET_ENHANCED_NETWORK_TIMEOUT_MILLISECONDS: "300000"
+      NUGET_PACKAGES: "/data/nuget/packages"
+
+    steps:
+      - name: Ensure base tools are installed
+        run: |
+          set -euo pipefail
+          missing=()
+          docker_missing=false
+          compose_missing=false
+
+          if ! command -v git-lfs >/dev/null 2>&1; then
+            missing+=("git-lfs")
+          fi
+          if ! command -v zip >/dev/null 2>&1; then
+            missing+=("zip")
+          fi
+          if ! command -v curl >/dev/null 2>&1; then
+            missing+=("curl")
+          fi
+          if ! command -v make >/dev/null 2>&1; then
+            missing+=("make")
+          fi
+
+          if ! command -v docker >/dev/null 2>&1; then
+            docker_missing=true
+            compose_missing=true
+          else
+            if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+              compose_missing=true
+            fi
+          fi
+
+          packages=("${missing[@]}")
+          if [ "$docker_missing" = true ]; then
+            packages+=("docker.io")
+          fi
+          if [ "$compose_missing" = true ]; then
+            if command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-plugin >/dev/null 2>&1; then
+              packages+=("docker-compose-plugin")
+            elif command -v apt-cache >/dev/null 2>&1 && apt-cache show docker-compose-v2 >/dev/null 2>&1; then
+              packages+=("docker-compose-v2")
+            fi
+          fi
+
+          if [ ${#packages[@]} -gt 0 ]; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+            else
+              echo "Missing packages: ${packages[*]}. Install them on the runner or provide apt-get."
+              exit 1
+            fi
+          fi
+
+          if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl start docker >/dev/null 2>&1 || true
+          elif command -v service >/dev/null 2>&1; then
+            sudo service docker start >/dev/null 2>&1 || true
+          fi
+
+          if ! docker compose version >/dev/null 2>&1; then
+            echo "docker compose plugin is still unavailable; installing Compose v2 binary plugin..."
+            arch="$(uname -m)"
+            case "$arch" in
+              x86_64|amd64) arch="x86_64" ;;
+              aarch64|arm64) arch="aarch64" ;;
+              *)
+                echo "Unsupported architecture for Compose v2 bootstrap: $arch"
+                exit 1
+                ;;
+            esac
+            os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+            compose_version="${COMPOSE_VERSION:-v2.29.7}"
+            plugin_dir="$HOME/.docker/cli-plugins"
+            mkdir -p "$plugin_dir"
+            curl -fsSL "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-${os}-${arch}" -o "$plugin_dir/docker-compose"
+            chmod +x "$plugin_dir/docker-compose"
+            mkdir -p "$HOME/.local/bin"
+            ln -sf "$plugin_dir/docker-compose" "$HOME/.local/bin/docker-compose"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+          mkdir -p "$NUGET_PACKAGES"
+
+          echo "PATH=$PATH"
+          command -v docker || true
+          which -a docker || true
+          docker version --format 'CLIENT={{.Client.Version}} API={{.Client.APIVersion}} SERVER_MIN={{.Server.MinAPIVersion}}' || true
+          docker compose version || true
+          if ! docker compose version >/dev/null 2>&1; then
+            if command -v docker-compose >/dev/null 2>&1 && docker-compose version --short 2>/dev/null | grep -q '^v\?2\.'; then
+              echo "Using docker-compose v2 standalone fallback: $(command -v docker-compose)"
+            else
+              echo "ERROR: Docker Compose v2 is not available (plugin missing and no docker-compose v2 fallback)."
+              exit 1
+            fi
+          fi
+
+      - name: Ensure Docker client API compatibility
+        run: |
+          set -euo pipefail
+
+          version_ge() {
+            local lhs="$1"
+            local rhs="$2"
+            [ "$lhs" = "$rhs" ] && return 0
+            [ "$(printf '%s\n%s\n' "$lhs" "$rhs" | sort -V | tail -n 1)" = "$lhs" ]
+          }
+
+          required="${MIN_DOCKER_API_VERSION:-1.44}"
+
+          docker_bin="$(command -v docker || true)"
+          while IFS= read -r candidate; do
+            if [ -n "$candidate" ] && [[ "$candidate" != *"/.native-bin/"* ]] && [ -x "$candidate" ]; then
+              docker_bin="$candidate"
+              break
+            fi
+          done < <(which -a docker 2>/dev/null | awk '!seen[$0]++')
+
+          if [ -z "${docker_bin}" ] || [ ! -x "${docker_bin}" ]; then
+            echo "docker CLI is missing on runner."
+            exit 1
+          fi
+
+          echo "Using docker binary: ${docker_bin}"
+          echo "DOCKER_BIN=${docker_bin}" >> "$GITHUB_ENV"
+
+          if [ -n "${DOCKER_API_VERSION:-}" ]; then
+            echo "Clearing DOCKER_API_VERSION=${DOCKER_API_VERSION} to allow client/daemon negotiation."
+            echo "DOCKER_API_VERSION=" >> "$GITHUB_ENV"
+            unset DOCKER_API_VERSION
+          fi
+
+          client_api="$("${docker_bin}" version --format '{{.Client.APIVersion}}' 2>/dev/null || true)"
+          daemon_min="$("${docker_bin}" version --format '{{.Server.MinAPIVersion}}' 2>/dev/null || true)"
+
+          if [ -n "$daemon_min" ] && version_ge "$daemon_min" "$required"; then
+            required="$daemon_min"
+          fi
+
+          if [ -z "$client_api" ]; then
+            echo "Unable to read Docker client API version. Diagnostic output:"
+            "${docker_bin}" version || true
+            exit 1
+          fi
+
+          echo "Docker client API=${client_api}, required>=${required}"
+          if ! version_ge "$client_api" "$required"; then
+            echo "ERROR: Docker client API ${client_api} is too old for this daemon (requires >= ${required})."
+            echo "ERROR: Upgrade docker CLI on the self-hosted runner."
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Ensure Python is available (self-hosted)
+        run: |
+          if ! command -v python3 >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-pip python3-venv
+            else
+              echo "python3 not found and apt-get is unavailable on this runner."
+              exit 1
+            fi
+          fi
+
+          if ! python3 -m pip --version >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3-pip
+            else
+              echo "python3 is present but pip is unavailable and apt-get is unavailable."
+              exit 1
+            fi
+          fi
+
+          if ! command -v pip >/dev/null 2>&1; then
+            mkdir -p "$HOME/.local/bin"
+            printf '%s\n' '#!/usr/bin/env bash' 'exec python3 -m pip "$@"' > "$HOME/.local/bin/pip"
+            chmod +x "$HOME/.local/bin/pip"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+
+          python3 --version
+          pip --version
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Ensure .NET SDK is available (self-hosted)
+        run: |
+          set -euo pipefail
+          if ! command -v dotnet >/dev/null 2>&1; then
+            echo "dotnet not found after setup-dotnet; installing fallback SDK 10.0"
+            curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+            bash /tmp/dotnet-install.sh --channel 10.0 --quality ga --install-dir "$HOME/.dotnet"
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+            export PATH="$HOME/.dotnet:$PATH"
+          fi
+
+          if ! dotnet --list-sdks | grep -q '^10\.'; then
+            echo "No .NET 10 SDK found; installing fallback SDK 10.0"
+            curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+            bash /tmp/dotnet-install.sh --channel 10.0 --quality ga --install-dir "$HOME/.dotnet"
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+            export PATH="$HOME/.dotnet:$PATH"
+          fi
+
+          dotnet --info
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --user --ignore-installed -r requirements.txt
+
+      - name: Make run.sh executable
+        run: chmod +x ./run.sh
+
+      - name: Run benchmarks for client=${{ inputs.client }}
+        run: |
+          TEST_PATH="${{ matrix.test_path }}"
+          NETWORK="${{ matrix.network }}"
+          CLIENT="${{ inputs.client }}"
+          WARMUP_PATH="${TEST_PATH}_warmup"
+
+          WARMUP_COUNT="${{ inputs.opcodes_warmup_count }}"
+          if [ -z "$WARMUP_COUNT" ]; then
+            case "$TEST_PATH" in
+              repricings_stateful/*) WARMUP_COUNT="0" ;;
+              *) WARMUP_COUNT="1" ;;
+            esac
+            echo "Auto-resolved opcodes_warmup_count=$WARMUP_COUNT for $TEST_PATH"
+          fi
+
+          if [ ! -d "$TEST_PATH" ]; then
+            echo "Test path does not exist: $TEST_PATH"
+            exit 1
+          fi
+
+          WARMUP_ARGS=()
+          if [ -d "$WARMUP_PATH" ]; then
+            WARMUP_ARGS=(-W "$WARMUP_PATH")
+          else
+            echo "Warmup path not found: $WARMUP_PATH; continuing without explicit warmup path"
+          fi
+
+          EFFECTIVE_FILTER="${{ inputs.filter }}"
+          echo "Using filter: '${EFFECTIVE_FILTER}' for test path: $TEST_PATH"
+
+          FORK_NAME="${{ inputs.fork || 'osaka' }}"
+
+          # Per-client snapshot backend selection
+          case "$CLIENT" in
+            erigon|reth)
+              ./run.sh \
+                -t "$TEST_PATH" \
+                -n "$NETWORK" \
+                -S "zfs" \
+                -B "/data-zfs/eth/<<CLIENT>>/<<NETWORK>>" \
+                -c "$CLIENT" \
+                -r 1 \
+                -i '${{ inputs.images }}' \
+                -o "$WARMUP_COUNT" \
+                -f "$EFFECTIVE_FILTER" \
+                -K "$FORK_NAME" \
+                "${WARMUP_ARGS[@]}"
+              ;;
+            *)
+              ./run.sh \
+                -t "$TEST_PATH" \
+                -n "$NETWORK" \
+                -B "/data/snapshots/<<CLIENT>>/<<NETWORK>>" \
+                -O "/data/overlay-workspace" \
+                -c "$CLIENT" \
+                -r 1 \
+                -i '${{ inputs.images }}' \
+                -o "$WARMUP_COUNT" \
+                -f "$EFFECTIVE_FILTER" \
+                -K "$FORK_NAME" \
+                "${WARMUP_ARGS[@]}"
+              ;;
+          esac
+
+      - name: Dump latest Docker logs for ${{ inputs.client }}
+        if: always()
+        run: |
+          # Find the newest docker log file for this client
+          LATEST=$(ls -1t logs/docker_${{ inputs.client }}_*.log | head -n1 || true)
+          LATEST_SYNC=$(ls -1t logs/docker_sync_${{ inputs.client }}_*.log | head -n1 || true)
+          if [[ -n "$LATEST" ]]; then
+            echo "=== Dumping $LATEST ==="
+            cat "$LATEST"
+          else
+            echo "No docker_*.log files found for client=${{ inputs.client }}"
+          fi
+
+          if [[ -n "$LATEST_SYNC" ]]; then
+            echo "=== Dumping $LATEST_SYNC ==="
+            cat "$LATEST_SYNC"
+          else
+            echo "No docker_sync_*.log files found for client=${{ inputs.client }}"
+          fi
+
+      - name: Generate per-client report CSVs
+        run: |
+          TEST_PATH="${{ matrix.test_path }}"
+          CLIENT="${{ inputs.client }}"
+          IMAGES='${{ inputs.images }}'
+          RUNS="${{ inputs.runs }}"
+
+          python3 report_html.py \
+            --resultsPath "results" \
+            --clients "$CLIENT" \
+            --testsPath "$TEST_PATH" \
+            --runs "$RUNS" \
+            --images "$IMAGES"
+
+      - name: Publish results to DB
+        env:
+          PERFNET_DB_HOST: ${{ secrets.PERFNET_0_DB_HOST }}
+          PERFNET_DB_PORT: ${{ secrets.PERFNET_0_DB_PORT || '5432' }}
+          PERFNET_DB_USER: ${{ secrets.PERFNET_0_DB_USER }}
+          PERFNET_DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          TEST_PATH="${{ matrix.test_path }}"
+
+          if [[ "$TEST_PATH" =~ ^repricings_(compute|stateful)/(mainnet|perf-devnet-3)$ ]]; then
+            SUITE="${BASH_REMATCH[1]}"
+            NETWORK="${BASH_REMATCH[2]}"
+            DB_NETWORK="${NETWORK//-/_}"
+            DB_NAME="monitoring"
+          else
+            echo "Skipping DB upload for non-repricing path: $TEST_PATH"
+            exit 0
+          fi
+
+          if [ ! -d "reports" ]; then
+            echo "No reports directory found, skipping DB upload"
+            exit 0
+          fi
+
+          FORK_NAME="${{ inputs.fork || 'osaka' }}"
+          FORK_SUFFIX=$(echo "$FORK_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+          TABLE_NAME="${SUITE}_${DB_NETWORK}_${FORK_SUFFIX}"
+
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          if [[ "$BRANCH_NAME" != "main" ]]; then
+            BRANCH_SUFFIX=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's#[/.-]+#_#g; s#[^a-z0-9_]#_#g; s#_+#_#g; s#^_##; s#_$##')
+            TABLE_NAME="${TABLE_NAME}_${BRANCH_SUFFIX}"
+          fi
+
+          echo "Publishing results to table: $TABLE_NAME"
+
+          python3 fill_postgres_db.py \
+            --db-host "$PERFNET_DB_HOST" \
+            --db-port "$PERFNET_DB_PORT" \
+            --db-user "$PERFNET_DB_USER" \
+            --db-name "$DB_NAME" \
+            --table-name "$TABLE_NAME" \
+            --db-password "$PERFNET_DB_PASSWORD" \
+            --log-level DEBUG \
+            --reports-dir "reports"
+
+      - name: Zip the results folder
+        run: |
+          CLEANED_RUN=$(echo "${{ matrix.run }}" | tr -d '\n')
+          CLEANED_CLIENT=$(echo "${{ inputs.client }}" | tr -d '\n')
+          CLEANED_TEST_PATH=$(echo "${{ matrix.test_path }}" | tr -d '\n' | tr '/ ' '__' | tr -cd '[:alnum:]_.-')
+          echo "CLEANED_RUN=$CLEANED_RUN" >> $GITHUB_ENV
+          echo "CLEANED_CLIENT=$CLEANED_CLIENT" >> $GITHUB_ENV
+          echo "CLEANED_TEST_PATH=$CLEANED_TEST_PATH" >> $GITHUB_ENV
+          zip -r results-${CLEANED_RUN}-${CLEANED_CLIENT}-${CLEANED_TEST_PATH}.zip results
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_TEST_PATH }}
+          path: results-${{ env.CLEANED_RUN }}-${{ env.CLEANED_CLIENT }}-${{ env.CLEANED_TEST_PATH }}.zip
+
+      - name: Docker full prune
+        if: always()
+        run: |
+          docker ps -q | xargs -r docker stop || true
+          docker ps -aq | xargs -r docker rm -f || true
+          docker system prune -af --volumes || true
+

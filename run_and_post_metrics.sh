@@ -10,15 +10,18 @@
 #   --prometheus-username   The Prometheus basic auth username.
 #   --prometheus-password   The Prometheus basic auth password.
 #   --network      Network name forwarded to run.sh (e.g. mainnet)
-#   --snapshot-root Base directory for overlay snapshots (can include placeholders)
+#   --snapshot-root Base directory for snapshot data (can include placeholders)
 #   --snapshot-template Optional template appended to snapshot root (supports <<CLIENT>> / <<NETWORK>>)
-#   --overlay-root  Absolute path for overlay runtime directory (passed to run.sh -O)
+#   --overlay-root  Runtime root path for snapshot backend data (passed to run.sh -O)
+#   --snapshot-backend Snapshot backend: overlay (default) or zfs (passed to run.sh -S)
 #   --clients      Comma-separated client list forwarded to run.sh
 #   --restarts     true/false to control client restarts (-R flag for run.sh)
 #   --debug        Enable debug logging for this script
 #   --debug-file   Enable debug logging and save output to specified file
 #   --max-loops    Optional integer to stop after N iterations (default: unlimited)
 #   --warmup-opcodes-path Path to opcode warmup payloads directory (default: warmup-tests)
+#   --warmup-count Number of opcode warmup repetitions per test (default: 1, forwarded to run.sh -o)
+#   --filter       Comma-separated test case filter patterns forwarded to run.sh (-f)
 #
 # Example usage:
 #   nohup ./run_and_post_metrics.sh --table-name gas_limit_benchmarks --db-user nethermind --db-host perfnet.core.nethermind.dev --db-password "MyPass" --debug &
@@ -32,11 +35,14 @@ NETWORK_LABEL="all"
 SNAPSHOT_ROOT=""
 SNAPSHOT_TEMPLATE=""
 OVERLAY_ROOT=""
+SNAPSHOT_BACKEND=""
 CLIENTS=""
 CLIENTS_LABEL="all"
 RESTART_BEFORE_TESTING=false
 MAX_LOOPS=""
 WARMUP_OPCODES_PATH=""
+WARMUP_COUNT=""
+FILTER=""
 SKIP_CLEANUP=false
 CLEANUP_ARMED=false
 parse_bool() {
@@ -104,7 +110,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 usage() {
-  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --overlay-root <path> --clients <client_list> --restarts <true|false> --max-loops <N>]"
+  echo "Usage: $0 --table-name <table_name> --db-user <db_user> --db-host <db_host> --db-password <db_password> [--warmup-opcodes-path <dir> --prometheus-endpoint <prometheus_endpoint> --prometheus-username <prometheus_username> --prometheus-password <prometheus_password> --test-paths-json <json> --network <network> --snapshot-root <path> --snapshot-template <template> --overlay-root <path> --snapshot-backend <overlay|zfs> --clients <client_list> --restarts <true|false> --max-loops <N>]"
 }
 
 # Debug logging function
@@ -180,6 +186,14 @@ while [[ $# -gt 0 ]]; do
       OVERLAY_ROOT="$2"
       shift 2
       ;;
+    --snapshot-backend)
+      SNAPSHOT_BACKEND=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+      if [ "$SNAPSHOT_BACKEND" != "overlay" ] && [ "$SNAPSHOT_BACKEND" != "zfs" ]; then
+        echo "Invalid value for --snapshot-backend: $2 (expected overlay|zfs)"
+        exit 1
+      fi
+      shift 2
+      ;;
     --snapshot-template)
       SNAPSHOT_TEMPLATE="$2"
       shift 2
@@ -204,6 +218,19 @@ while [[ $# -gt 0 ]]; do
       ;;
     --warmup-opcodes-path)
       WARMUP_OPCODES_PATH="$2"
+      shift 2
+      ;;
+    --warmup-count)
+      if [[ "$2" =~ ^[0-9]+$ ]]; then
+        WARMUP_COUNT="$2"
+      else
+        echo "Invalid value for --warmup-count: $2 (expected non-negative integer)"
+        exit 1
+      fi
+      shift 2
+      ;;
+    --filter)
+      FILTER="$2"
       shift 2
       ;;
     --max-loops)
@@ -294,6 +321,9 @@ while true; do
   if [ -n "$OVERLAY_ROOT" ]; then
     RUN_CMD+=(-O "$OVERLAY_ROOT")
   fi
+  if [ -n "$SNAPSHOT_BACKEND" ]; then
+    RUN_CMD+=(-S "$SNAPSHOT_BACKEND")
+  fi
 
   if [ -n "$CLIENTS" ]; then
     RUN_CMD+=(-c "$CLIENTS")
@@ -304,6 +334,12 @@ while true; do
   fi
   if [ -n "$WARMUP_OPCODES_PATH" ]; then
     RUN_CMD+=(-W "$WARMUP_OPCODES_PATH")
+  fi
+  if [ -n "$WARMUP_COUNT" ]; then
+    RUN_CMD+=(-o "$WARMUP_COUNT")
+  fi
+  if [ -n "$FILTER" ]; then
+    RUN_CMD+=(-f "$FILTER")
   fi
 
   echo "[INFO] Executing benchmark command: ${RUN_CMD[*]}"
