@@ -227,6 +227,7 @@ def set_env(
     genesis_host_path: Path,
     metadata: Dict[str, Any],
     volume_name: Optional[str],
+    extra_flags: Optional[str] = None,
 ):
     run_path_obj = Path(run_path).resolve()
     if not run_path_obj.is_dir():
@@ -259,6 +260,9 @@ def set_env(
 
     for extra_key, extra_value in metadata.get("extra_env", {}).items():
         env_map[extra_key] = extra_value
+
+    if extra_flags:
+        env_map["EXTRA_CLIENT_FLAGS"] = extra_flags
 
     normalized_backend = (data_backend or "").strip().lower()
     is_snapshot_clone = normalized_backend in {"overlay", "zfs"} or _is_snapshot_clone_path(data_dir)
@@ -320,6 +324,12 @@ def main():
         type=str,
         help="Docker volume name override",
     )
+    parser.add_argument(
+        "--extraFlags",
+        type=str,
+        default="",
+        help="Extra CLI flags appended to the client container command",
+    )
 
     args = parser.parse_args()
 
@@ -379,6 +389,7 @@ def main():
         genesis_host_path=genesis_target,
         metadata=metadata,
         volume_name=volume_name,
+        extra_flags=args.extraFlags,
     )
 
     # Start client

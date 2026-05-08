@@ -1,0 +1,70 @@
+name: Run Command on Stateful Generator
+run-name: "Remote exec: ${{ inputs.command }}"
+
+on:
+  push:
+    branches:
+      - stateful-runner-interaction
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Shell command to execute"
+        required: true
+        type: string
+      timeout:
+        description: "Timeout in minutes"
+        required: false
+        type: number
+        default: 30
+
+jobs:
+  exec:
+    runs-on: stateful-generator
+    timeout-minutes: ${{ fromJson(inputs.timeout || '720') }}
+    steps:
+      - name: Fire-and-forget jochemnet download
+        if: ${{ inputs.command == '' }}
+        run: |
+          URL="https://snapshots.ethpandaops.io/jochemnet/nethermind/24402727/snapshot.tar.zst"
+          DEST="/mnt/sda/jochemnet/nethermind"
+          ARCHIVE="/mnt/sda/jochemnet/snapshot.tar.zst"
+          LOG="/tmp/jochemnet-download.log"
+
+          mkdir -p "$DEST"
+
+          cat > /tmp/jochemnet-download.sh << 'SCRIPT'
+          #!/bin/bash
+          URL="https://snapshots.ethpandaops.io/jochemnet/nethermind/24402727/snapshot.tar.zst"
+          DEST="/mnt/sda/jochemnet/nethermind"
+          ARCHIVE="/mnt/sda/jochemnet/snapshot.tar.zst"
+          until curl -fL -C - --retry 10 --retry-delay 30 --retry-max-time 3600 -o "$ARCHIVE" "$URL"; do
+            echo "Download interrupted, retrying in 60s..."
+            sleep 60
+          done
+          echo "Download complete. Extracting..."
+          cd "$DEST"
+          zstd -d --threads=0 "$ARCHIVE" --stdout | tar xf -
+          rm -f "$ARCHIVE"
+          echo "Done."
+          SCRIPT
+          chmod +x /tmp/jochemnet-download.sh
+
+          systemd-run --unit=jochemnet-download --description="Download jochemnet snapshot" \
+            bash -c '/tmp/jochemnet-download.sh > /tmp/jochemnet-download.log 2>&1'
+
+          echo "Launched as systemd transient unit: jochemnet-download"
+          sleep 5
+          echo "Status:"
+          systemctl status jochemnet-download --no-pager || true
+          echo "Initial log:"
+          tail -5 /tmp/jochemnet-download.log || true
+
+      - name: Execute command
+        if: ${{ inputs.command != '' }}
+        run: |
+          echo "::group::Command"
+          echo "${{ inputs.command }}"
+          echo "::endgroup::"
+          echo "::group::Output"
+          eval "${{ inputs.command }}"
+          echo "::endgroup::"

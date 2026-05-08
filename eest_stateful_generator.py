@@ -27,6 +27,8 @@ CHAIN_TO_ID = {
 CLEANUP = {
     "keep": False,
     "container": None,
+    "container_stop_timeout": 180,
+    "diag_dir": None,
     "primary_merged": None,
     "primary_upper": None,
     "primary_work": None,
@@ -612,6 +614,8 @@ def start_nethermind_container(
     genesis_path: Optional[Path] = None,
     trace_json: bool = False,
     extra_flags: Optional[list] = None,
+    diag_mode: str = "none",
+    diag_dir: Optional[Path] = None,
 ) -> str:
     subprocess.run(["docker", "pull", image], check=False)
     resolved_db = db_dir.resolve()
@@ -631,6 +635,17 @@ def start_nethermind_container(
         "-v",
         f"{str(resolved_jwt_parent)}:/jwt:ro",
     ]
+    if diag_mode and diag_mode != "none":
+        if diag_dir is None:
+            raise ValueError("diag_dir is required when diagnostics are enabled")
+        resolved_diag_dir = diag_dir.resolve()
+        resolved_diag_dir.mkdir(parents=True, exist_ok=True)
+        cmd += [
+            "-e",
+            f"DIAG_WITH={diag_mode}",
+            "-v",
+            f"{str(resolved_diag_dir)}:/nethermind/diag",
+        ]
     if trace_json:
         cmd += ["-v", f"{str(Path('opcode-tracing').resolve())}:/test-output"]
     genesis_volume = None
@@ -720,7 +735,71 @@ def _container_exists(name: str) -> bool:
     except Exception:
         return False
 
-def stop_and_remove_container(name: str):
+def _container_is_running(name: str) -> bool:
+    try:
+        cp = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Running}}", name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        return cp.returncode == 0 and cp.stdout.strip().lower() == "true"
+    except Exception:
+        return False
+
+def _append_diag_stop_log(diag_dir: Optional[Path], line: str) -> None:
+    if not diag_dir:
+        return
+    try:
+        diag_dir.mkdir(parents=True, exist_ok=True)
+        with (diag_dir / "diagnostics_stop.log").open("a", encoding="utf-8") as fh:
+            fh.write(line.rstrip() + "\n")
+    except Exception:
+        pass
+
+def stop_and_remove_container(
+    name: str,
+    *,
+    stop_timeout: int = 180,
+    diag_dir: Optional[Path] = None,
+    force: bool = False,
+):
+    if not _container_exists(name):
+        return
+    if force:
+        _append_diag_stop_log(diag_dir, f"[INFO] Force-removing container {name}.")
+        subprocess.run(["docker", "rm", "-f", name], check=False)
+        return
+
+    if _container_is_running(name):
+        _append_diag_stop_log(diag_dir, f"[INFO] Sending SIGINT to container {name}.")
+        subprocess.run(["docker", "kill", "--signal=SIGINT", name], check=False)
+        try:
+            subprocess.run(["docker", "wait", name], check=False, timeout=max(1, stop_timeout))
+            _append_diag_stop_log(diag_dir, f"[INFO] Container {name} exited after SIGINT.")
+        except subprocess.TimeoutExpired:
+            _append_diag_stop_log(
+                diag_dir,
+                f"[WARN] Container {name} did not exit within {stop_timeout}s after SIGINT; force-removing.",
+            )
+            subprocess.run(["docker", "rm", "-f", name], check=False)
+            return
+
+    if diag_dir:
+        try:
+            out = subprocess.run(
+                ["docker", "logs", name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+            )
+            diag_dir.mkdir(parents=True, exist_ok=True)
+            (diag_dir / "nethermind-container.log").write_text(out.stdout, encoding="utf-8")
+        except Exception:
+            pass
+
     subprocess.run(["docker", "rm", "-f", name], check=False)
 
 def print_container_logs(name: str):
@@ -954,7 +1033,11 @@ def _cleanup():
         try:
             if CLEANUP.get("container"):
                 print_container_logs(CLEANUP["container"])
-                stop_and_remove_container(CLEANUP["container"])
+                stop_and_remove_container(
+                    CLEANUP["container"],
+                    stop_timeout=int(CLEANUP.get("container_stop_timeout") or 180),
+                    diag_dir=CLEANUP.get("diag_dir"),
+                )
         except Exception:
             pass
         try:
@@ -1051,6 +1134,23 @@ def main():
         help="Extra CLI flags passed to the Nethermind container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None').",
     )
     parser.add_argument(
+        "--nethermind-diag-mode",
+        choices=("none", "dottrace", "dotmemory", "dotnet-trace"),
+        default="none",
+        help="Run Nethermind through the diagnostic entrypoint from Dockerfile.diag.",
+    )
+    parser.add_argument(
+        "--nethermind-diag-dir",
+        default="stateful-diagnostics",
+        help="Host directory mounted as /nethermind/diag for diagnostic output.",
+    )
+    parser.add_argument(
+        "--nethermind-diag-stop-timeout",
+        type=int,
+        default=180,
+        help="Seconds to wait after sending SIGINT before force-removing Nethermind.",
+    )
+    parser.add_argument(
         "--gas-bump-count",
         type=int,
         default=301,
@@ -1127,9 +1227,25 @@ def main():
     args = parser.parse_args()
 
     CLEANUP["keep"] = args.keep
+    CLEANUP["container_stop_timeout"] = max(1, int(args.nethermind_diag_stop_timeout))
     ensure_pip_pkg("requests")
 
     payloads_dir = _ensure_payloads_dir(Path(args.payload_dir))
+    diag_mode = args.nethermind_diag_mode
+    diag_dir: Optional[Path] = None
+    if diag_mode != "none":
+        diag_dir = Path(args.nethermind_diag_dir).expanduser().resolve()
+        diag_dir.mkdir(parents=True, exist_ok=True)
+        CLEANUP["diag_dir"] = diag_dir
+        metadata = {
+            "diagnostics_mode": diag_mode,
+            "diagnostics_dir": str(diag_dir),
+            "nethermind_image": args.nethermind_image,
+            "container_name": "eest-nethermind",
+            "stop_signal": "SIGINT",
+            "stop_timeout_seconds": max(1, int(args.nethermind_diag_stop_timeout)),
+        }
+        (diag_dir / "diagnostics_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     gas_value_source = args.fixed_opcode_count or args.gas_benchmark_values
     gas_values = [v.strip() for v in gas_value_source.split(",") if v.strip()]
     scenario_order_file = payloads_dir / "scenario_order.json"
@@ -1297,7 +1413,11 @@ def main():
             shutil.rmtree(opcode_tracing_dir, ignore_errors=True)
         opcode_tracing_dir.mkdir(parents=True, exist_ok=True)
 
-    stop_and_remove_container("eest-nethermind")
+    stop_and_remove_container(
+        "eest-nethermind",
+        stop_timeout=max(1, int(args.nethermind_diag_stop_timeout)),
+        diag_dir=diag_dir,
+    )
     if use_overlay_base:
         ensure_overlay_mount(lower=snapshot_dir, upper=primary_upper, work=primary_work, merged=primary_merged)
 
@@ -1310,7 +1430,11 @@ def main():
 
     def restart_node(db_dir: Path, *, show_logs: bool = False) -> None:
         nonlocal active_db_dir
-        stop_and_remove_container(container_name)
+        stop_and_remove_container(
+            container_name,
+            stop_timeout=max(1, int(args.nethermind_diag_stop_timeout)),
+            diag_dir=diag_dir,
+        )
         _ = start_nethermind_container(
             chain=args.chain,
             db_dir=db_dir,
@@ -1322,11 +1446,17 @@ def main():
             genesis_path=genesis_file,
             trace_json=args.trace_json,
             extra_flags=nm_extra_flags,
+            diag_mode=diag_mode,
+            diag_dir=diag_dir,
         )
         if not wait_for_port("127.0.0.1", 8545, timeout=300):
             print("ERROR: 8545 not reachable.")
             print_container_logs(container_name)
-            stop_and_remove_container(container_name)
+            stop_and_remove_container(
+                container_name,
+                stop_timeout=max(1, int(args.nethermind_diag_stop_timeout)),
+                diag_dir=diag_dir,
+            )
             raise RuntimeError("JSON-RPC port not reachable")
         for _ in range(180):
             try:
@@ -1337,7 +1467,11 @@ def main():
         else:
             print("ERROR: JSON-RPC not responding.")
             print_container_logs(container_name)
-            stop_and_remove_container(container_name)
+            stop_and_remove_container(
+                container_name,
+                stop_timeout=max(1, int(args.nethermind_diag_stop_timeout)),
+                diag_dir=diag_dir,
+            )
             raise RuntimeError("JSON-RPC not responding")
         if show_logs:
             print_container_logs(container_name)
@@ -1583,7 +1717,11 @@ def main():
                 print_container_logs(container_name)
             except Exception:
                 pass
-            stop_and_remove_container(container_name)
+            stop_and_remove_container(
+                container_name,
+                stop_timeout=max(1, int(args.nethermind_diag_stop_timeout)),
+                diag_dir=diag_dir,
+            )
             if use_overlay_base:
                 try:
                     unmount_overlay(primary_merged)
