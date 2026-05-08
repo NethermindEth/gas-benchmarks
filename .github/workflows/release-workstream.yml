@@ -20,7 +20,7 @@ on:
       nethermind_image:
         description: "Nethermind Docker image"
         required: true
-        default: "nethermindeth/nethermind:master"
+        default: "nethermindeth/nethermind:testing_build_block_with_opcode_tracing"
       eest_repo:
         description: "execution-specs repository"
         required: true
@@ -44,7 +44,7 @@ on:
       nethermind_extra_flags:
         description: "Extra Nethermind CLI flags"
         required: false
-        default: "--Blocks.ParallelExecution=false"
+        default: ""
       push_to_db:
         description: "Upload traces metadata to PostgreSQL"
         required: false
@@ -94,6 +94,7 @@ jobs:
               DEFAULT_FORK="Amsterdam"
               DEFAULT_CHAINSPEC=""
               FULL_MATRIX='[
+                {"mode":"compute","chain":"jochemnet","chainspec":"generator-amsterdam-jochemnet.json"},
                 {"mode":"compute","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"},
                 {"mode":"stateful","chain":"jochemnet","chainspec":"generator-amsterdam-jochemnet.json"},
                 {"mode":"stateful","chain":"perf-devnet-3","chainspec":"generator-amsterdam-perf-devnet-3.json"}
