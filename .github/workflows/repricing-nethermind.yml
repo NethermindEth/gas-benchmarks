@@ -62,6 +62,10 @@ on:
         description: "Extra Nethermind CLI flags appended to the container command (e.g. '--Pruning.Mode=None --FlatDb.Enabled=true')"
         default: ''
 
+permissions:
+  contents: read
+  actions: read
+
 concurrency:
   group: repricing-nethermind-${{ github.ref }}
   cancel-in-progress: true
