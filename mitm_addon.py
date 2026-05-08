@@ -744,12 +744,12 @@ def _minified_json_line(obj: Any) -> str:
 def _next_lifecycle_timestamp(parent_ts: int) -> int:
     global _LIFECYCLE_TS
     if _LIFECYCLE_TS is None:
-        _LIFECYCLE_TS = parent_ts + 1
+        _LIFECYCLE_TS = parent_ts + 12
     else:
         _LIFECYCLE_TS += 1
     # Safety: always keep timestamp valid vs chosen parent.
     if _LIFECYCLE_TS <= parent_ts:
-        _LIFECYCLE_TS = parent_ts + 1
+        _LIFECYCLE_TS = parent_ts + 12
     return _LIFECYCLE_TS
 
 

@@ -84,6 +84,30 @@ on:
         description: "Extra Nethermind CLI flags passed to the container (e.g. '--FlatDb.Enabled=true --Pruning.Mode=None')"
         required: false
         default: ""
+      trace_json:
+        description: "Enable opcode tracing (--trace-json)"
+        required: false
+        type: boolean
+        default: true
+      diagnostics_mode:
+        description: "Run Nethermind through Dockerfile.diag entrypoint"
+        required: false
+        type: choice
+        options:
+          - none
+          - dottrace
+          - dotmemory
+          - dotnet-trace
+        default: "none"
+      diagnostics_xml:
+        description: "Try converting dotTrace sampling/tracing snapshots to XML on Windows"
+        required: false
+        type: boolean
+        default: false
+      diagnostics_stop_timeout:
+        description: "Seconds to wait after SIGINT for diagnostic snapshot flush"
+        required: false
+        default: "180"
       commit_results:
         description: "Commit generated data to the repo"
         required: false
@@ -160,6 +184,18 @@ on:
       nethermind_extra_flags:
         type: string
         default: ""
+      trace_json:
+        type: string
+        default: "true"
+      diagnostics_mode:
+        type: string
+        default: "none"
+      diagnostics_xml:
+        type: string
+        default: "false"
+      diagnostics_stop_timeout:
+        type: string
+        default: "180"
       commit_results:
         type: string
         default: "false"
@@ -212,7 +248,11 @@ jobs:
       CFG_WARMUP_SNAPSHOT_BACKEND: ${{ inputs.warmup_snapshot_backend || 'overlay' }}
       CFG_CHAINSPEC_FILE: ${{ inputs.chainspec_file || '' }}
       CFG_NETHERMIND_EXTRA_FLAGS: ${{ inputs.nethermind_extra_flags || '' }}
+      CFG_TRACE_JSON: ${{ inputs.trace_json == false && 'false' || inputs.trace_json == 'false' && 'false' || 'true' }}
+      CFG_NETHERMIND_DIAG_MODE: ${{ inputs.diagnostics_mode || 'none' }}
+      CFG_NETHERMIND_DIAG_STOP_TIMEOUT: ${{ inputs.diagnostics_stop_timeout || '180' }}
       ARTIFACT_SUFFIX: ${{ format('{0}-{1}', inputs.mode || 'compute', inputs.chain || 'mainnet') }}
+      NETHERMIND_DIAG_DIR: ${{ format('stateful-diagnostics/{0}-{1}-{2}', inputs.mode || 'compute', inputs.chain || 'mainnet', github.run_id) }}
 
     steps:
       - name: Checkout gas-benchmarks repository from triggering branch
@@ -380,6 +420,7 @@ jobs:
           fi
           rm -rf "$WARMUP_DIR"
           rm -f "$TRACES_JSON"
+          rm -rf stateful-diagnostics dottrace-xml
           rm -rf execution-specs
 
       - name: Restore base release data for partial regeneration
@@ -455,6 +496,15 @@ jobs:
           if [[ -n "$CFG_CHAINSPEC_FILE" ]]; then
             GENESIS_ARGS=(--genesis-path "scripts/genesisfiles/nethermind/$CFG_CHAINSPEC_FILE")
           fi
+          DIAG_ARGS=()
+          if [[ "$CFG_NETHERMIND_DIAG_MODE" != "none" ]]; then
+            mkdir -p "$NETHERMIND_DIAG_DIR"
+            DIAG_ARGS=(
+              --nethermind-diag-mode "$CFG_NETHERMIND_DIAG_MODE"
+              --nethermind-diag-dir "$NETHERMIND_DIAG_DIR"
+              --nethermind-diag-stop-timeout "$CFG_NETHERMIND_DIAG_STOP_TIMEOUT"
+            )
+          fi
           PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 eest_stateful_generator.py \
             --nethermind-image "$CFG_NETHERMIND_IMAGE" \
             --fork "$CFG_FORK" \
@@ -475,9 +525,9 @@ jobs:
             "${GENESIS_ARGS[@]}" \
             --overlay-root "$OVERLAY_ROOT" \
             --allow-execute-remote-failures \
-            --trace-json \
-            --trace-json-output "$TRACES_JSON" \
+            $( [[ "$CFG_TRACE_JSON" == "true" ]] && echo "--trace-json --trace-json-output $TRACES_JSON" ) \
             ${CFG_PARAMETER_FILTER:+--parameter_filter "$CFG_PARAMETER_FILTER"} \
+            "${DIAG_ARGS[@]}" \
             ${CFG_NETHERMIND_EXTRA_FLAGS:+--nethermind-extra-flags="$CFG_NETHERMIND_EXTRA_FLAGS"} \
             2>&1 | tee -a "$STATEFUL_GENERATOR_LOG"
 
@@ -505,6 +555,69 @@ jobs:
           name: stateful-generator-log-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
           path: stateful_generator.log
           if-no-files-found: warn
+
+      - name: Capture container logs
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if docker inspect eest-nethermind >/dev/null 2>&1; then
+            docker logs eest-nethermind > nethermind.log 2>&1 || true
+          fi
+
+      - name: Upload logs
+        if: ${{ always() && inputs.skip_artifacts != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stateful-logs-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
+          path: |
+            mitm.log
+            mitm_full.log
+            nethermind.log
+          if-no-files-found: warn
+
+      - name: Finalize Nethermind diagnostics
+        if: ${{ always() && env.CFG_NETHERMIND_DIAG_MODE != 'none' }}
+        shell: bash
+        run: |
+          set +e
+          mkdir -p "$NETHERMIND_DIAG_DIR"
+          {
+            echo "diagnostics_mode=$CFG_NETHERMIND_DIAG_MODE"
+            echo "diagnostics_dir=$NETHERMIND_DIAG_DIR"
+            echo "stop_signal=SIGINT"
+            echo "stop_timeout_seconds=$CFG_NETHERMIND_DIAG_STOP_TIMEOUT"
+          } >> "$NETHERMIND_DIAG_DIR/diagnostics_stop.log"
+
+          if docker inspect eest-nethermind >/dev/null 2>&1; then
+            running="$(docker inspect --format='{{.State.Running}}' eest-nethermind 2>/dev/null || echo false)"
+            if [[ "$running" == "true" ]]; then
+              echo "Sending SIGINT to eest-nethermind" | tee -a "$NETHERMIND_DIAG_DIR/diagnostics_stop.log"
+              docker kill --signal=SIGINT eest-nethermind >/dev/null 2>&1 || true
+              timeout "${CFG_NETHERMIND_DIAG_STOP_TIMEOUT}s" docker wait eest-nethermind >/dev/null 2>&1 || {
+                echo "SIGINT timeout elapsed; force-removing eest-nethermind" | tee -a "$NETHERMIND_DIAG_DIR/diagnostics_stop.log"
+                docker rm -f eest-nethermind >/dev/null 2>&1 || true
+              }
+            fi
+            docker logs eest-nethermind > "$NETHERMIND_DIAG_DIR/nethermind-container.log" 2>&1 || true
+            docker rm -f eest-nethermind >/dev/null 2>&1 || true
+          elif [ -f nethermind.log ]; then
+            cp nethermind.log "$NETHERMIND_DIAG_DIR/nethermind-container.log"
+          fi
+
+          echo "Diagnostic files:"
+          find "$NETHERMIND_DIAG_DIR" -maxdepth 4 -type f -printf "%p %s bytes\n" | sort || true
+
+      - name: Upload Nethermind diagnostic artifacts
+        if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_NETHERMIND_DIAG_MODE != 'none' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stateful-nethermind-diagnostics-${{ env.CFG_NETHERMIND_DIAG_MODE }}-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
+          path: |
+            ${{ env.NETHERMIND_DIAG_DIR }}
+            nethermind.log
+          if-no-files-found: warn
+          compression-level: 0
 
       - name: Generate warmup tests
         if: ${{ env.CFG_GENERATION_MODE != 'stateful_only' }}
@@ -547,7 +660,7 @@ jobs:
           fi
 
       - name: Upload traces metadata to DB
-        if: ${{ inputs.push_to_db == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ inputs.push_to_db == 'true' && env.CFG_TRACE_JSON == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         env:
           DB_PASSWORD: ${{ secrets.PERFNET_0_DB_PASSWORD }}
@@ -567,7 +680,7 @@ jobs:
             --table-name "$DB_TABLE"
 
       - name: Prepare opcodes tracing artifact
-        if: ${{ always() && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ always() && env.CFG_TRACE_JSON == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -587,7 +700,7 @@ jobs:
           rm -f base_opcodes_tracing.json
 
       - name: Upload opcodes tracing artifact
-        if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
+        if: ${{ always() && inputs.skip_artifacts != 'true' && env.CFG_TRACE_JSON == 'true' && env.CFG_GENERATION_MODE != 'warmup_only' }}
         uses: actions/upload-artifact@v4
         with:
           name: opcodes-tracing-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
@@ -758,9 +871,13 @@ jobs:
               'nethermind_image_digest': sys.argv[3],
               'execution_specs_commit': sys.argv[4],
               'execution_specs_repo': sys.argv[5],
-              'execution_specs_branch': sys.argv[6]
+              'execution_specs_branch': sys.argv[6],
+              'nethermind_diagnostics_mode': sys.argv[7],
+              'nethermind_diagnostics_dir': sys.argv[8],
+              'nethermind_diagnostics_stop_signal': 'SIGINT',
+              'nethermind_diagnostics_stop_timeout_seconds': sys.argv[9]
           }, open('run_metadata.json', 'w'), indent=2)
-          " "$GB_COMMIT" "$NM_IMAGE" "$NM_DIGEST" "$EEST_COMMIT" "$CFG_EEST_REPO" "$CFG_EEST_BRANCH"
+          " "$GB_COMMIT" "$NM_IMAGE" "$NM_DIGEST" "$EEST_COMMIT" "$CFG_EEST_REPO" "$CFG_EEST_BRANCH" "$CFG_NETHERMIND_DIAG_MODE" "$NETHERMIND_DIAG_DIR" "$CFG_NETHERMIND_DIAG_STOP_TIMEOUT"
 
       - name: Upload run metadata artifact
         if: ${{ always() && inputs.skip_artifacts != 'true' }}
@@ -917,3 +1034,77 @@ jobs:
             "$OVERLAY_ROOT/scenario-upper" \
             "$OVERLAY_ROOT/scenario-work" \
             "$OVERLAY_ROOT/scenario-merged" || true
+
+  dottrace-xml:
+    needs: generate
+    if: ${{ always() && !(inputs.skip_artifacts == true || inputs.skip_artifacts == 'true') && (inputs.diagnostics_xml == true || inputs.diagnostics_xml == 'true') && (inputs.diagnostics_mode || 'none') == 'dottrace' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    env:
+      ARTIFACT_SUFFIX: ${{ format('{0}-{1}', inputs.mode || 'compute', inputs.chain || 'mainnet') }}
+      DIAG_ARTIFACT_NAME: ${{ format('stateful-nethermind-diagnostics-dottrace-{0}-{1}-{2}', inputs.mode || 'compute', inputs.chain || 'mainnet', github.run_id) }}
+
+    steps:
+      - name: Download dotTrace diagnostic artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.DIAG_ARTIFACT_NAME }}
+          path: downloaded-diagnostics
+
+      - name: Convert dotTrace snapshot to XML
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+          New-Item -ItemType Directory -Force -Path dottrace-xml | Out-Null
+          $log = "dottrace-xml/dottrace-xml-conversion.log"
+          "Installing JetBrains dotTrace command line tools" | Tee-Object -FilePath $log
+
+          $toolsDir = Join-Path $env:RUNNER_TEMP "dottrace-tools"
+          nuget install JetBrains.dotTrace.CommandLineTools.windows-x64 -Version 2026.1.0.1 -OutputDirectory $toolsDir -NonInteractive *>&1 |
+            Tee-Object -FilePath $log -Append
+
+          $reporter = Get-ChildItem $toolsDir -Recurse -Filter Reporter.exe | Select-Object -First 1
+          if (-not $reporter) {
+            "Reporter.exe was not found in JetBrains.dotTrace.CommandLineTools.windows-x64." | Tee-Object -FilePath $log -Append
+            exit 0
+          }
+
+          $pattern = "dottrace-xml/dottrace-patterns.xml"
+          @"
+          <Patterns>
+            <Pattern PrintCallstacks="MethodNameOnly">Nethermind\..*</Pattern>
+          </Patterns>
+          "@ | Set-Content -Path $pattern -Encoding UTF8
+
+          $snapshots = Get-ChildItem downloaded-diagnostics -Recurse -File |
+            Where-Object { $_.Extension -in ".dtp", ".dtc" -or $_.Name -eq "dottrace" }
+
+          if (-not $snapshots) {
+            "No dotTrace sampling/tracing snapshot candidates were found. Timeline snapshots usually use .dtt and cannot be converted by Reporter.exe." |
+              Tee-Object -FilePath $log -Append
+            exit 0
+          }
+
+          $index = 0
+          foreach ($snapshot in $snapshots) {
+            $index += 1
+            $out = "dottrace-xml/dottrace-report-$index.xml"
+            "Converting $($snapshot.FullName) to $out" | Tee-Object -FilePath $log -Append
+            & $reporter.FullName report $snapshot.FullName --pattern=$pattern --save-to=$out --save-signature *>&1 |
+              Tee-Object -FilePath $log -Append
+            if (Test-Path $out) {
+              "Created $out" | Tee-Object -FilePath $log -Append
+            } else {
+              "Reporter.exe did not create $out. This is expected for Timeline snapshots." |
+                Tee-Object -FilePath $log -Append
+            }
+          }
+
+      - name: Upload dotTrace XML artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stateful-nethermind-dottrace-xml-${{ env.ARTIFACT_SUFFIX }}-${{ github.run_id }}
+          path: dottrace-xml
+          if-no-files-found: warn
