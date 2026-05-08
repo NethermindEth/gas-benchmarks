@@ -1,6 +1,11 @@
 #!/bin/bash
 set -eo pipefail
 
+if [ -n "${EXTRA_CLIENT_FLAGS:-}" ]; then
+    # shellcheck disable=SC2086
+    set -- "$@" $EXTRA_CLIENT_FLAGS
+fi
+
 resolve_tool() {
   local name="$1"
   if command -v "$name" >/dev/null 2>&1; then echo "$name"; return; fi

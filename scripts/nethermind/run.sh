@@ -13,21 +13,54 @@ source "$REPO_ROOT/scripts/common/docker_compose.sh"
 
 rm -f "$SCRIPT_DIR/docker-compose.override.yml"
 
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    EXTRA_CLIENT_FLAGS="$(grep -oP '^EXTRA_CLIENT_FLAGS=\K.*' "$SCRIPT_DIR/.env" || true)"
+fi
+
+NEED_OVERRIDE=false
+OVERRIDE_ENV_LINES=""
+OVERRIDE_ENTRYPOINT=""
+OVERRIDE_VOLUMES=""
+
 if [ -n "${DIAG_WITH:-}" ]; then
+    NEED_OVERRIDE=true
     DIAG_SCRIPT="$SCRIPT_DIR/diag-entrypoint.sh"
     chmod +x "$DIAG_SCRIPT"
     ABS_DIAG_SCRIPT="$(cd "$(dirname "$DIAG_SCRIPT")" && pwd)/$(basename "$DIAG_SCRIPT")"
 
-    cat > "$SCRIPT_DIR/docker-compose.override.yml" <<OVERRIDE
-services:
-  execution:
-    environment:
-      - DIAG_WITH=${DIAG_WITH}
-    entrypoint: ["./diag-entrypoint.sh"]
-    volumes:
-      - ${ABS_DIAG_SCRIPT}:/nethermind/diag-entrypoint.sh:ro
-OVERRIDE
+    OVERRIDE_ENV_LINES="      - DIAG_WITH=${DIAG_WITH}"
+    OVERRIDE_ENTRYPOINT='    entrypoint: ["./diag-entrypoint.sh"]'
+    OVERRIDE_VOLUMES="    volumes:
+      - ${ABS_DIAG_SCRIPT}:/nethermind/diag-entrypoint.sh:ro"
     echo "[diag] Override: mount diag-entrypoint.sh + set DIAG_WITH=$DIAG_WITH"
+elif [ -n "${EXTRA_CLIENT_FLAGS:-}" ]; then
+    NEED_OVERRIDE=true
+    OVERRIDE_ENTRYPOINT='    entrypoint: ["/bin/sh", "-c", "exec ./nethermind \"$@\" ${EXTRA_CLIENT_FLAGS}", "--"]'
+fi
+
+if [ -n "${EXTRA_CLIENT_FLAGS:-}" ]; then
+    NEED_OVERRIDE=true
+    if [ -n "$OVERRIDE_ENV_LINES" ]; then
+        OVERRIDE_ENV_LINES="${OVERRIDE_ENV_LINES}
+      - EXTRA_CLIENT_FLAGS=${EXTRA_CLIENT_FLAGS}"
+    else
+        OVERRIDE_ENV_LINES="      - EXTRA_CLIENT_FLAGS=${EXTRA_CLIENT_FLAGS}"
+    fi
+    echo "[extra-flags] Extra Nethermind flags: ${EXTRA_CLIENT_FLAGS}"
+fi
+
+if [ "$NEED_OVERRIDE" = true ]; then
+    {
+        echo "services:"
+        echo "  execution:"
+        if [ -n "$OVERRIDE_ENV_LINES" ]; then
+            echo "    environment:"
+            echo "$OVERRIDE_ENV_LINES"
+        fi
+        [ -n "$OVERRIDE_ENTRYPOINT" ] && echo "$OVERRIDE_ENTRYPOINT"
+        [ -n "$OVERRIDE_VOLUMES" ] && echo "$OVERRIDE_VOLUMES"
+    } > "$SCRIPT_DIR/docker-compose.override.yml"
+    echo "[override] Generated docker-compose.override.yml:"
     cat "$SCRIPT_DIR/docker-compose.override.yml"
 fi
 

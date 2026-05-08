@@ -58,6 +58,9 @@ on:
       overlay_root:
         description: 'Override overlay workspace path. Default = /mnt/sda/overlay-workspace'
         default: ''
+      nethermind_extra_flags:
+        description: "Extra Nethermind CLI flags appended to the container command (e.g. '--Pruning.Mode=None --FlatDb.Enabled=true')"
+        default: ''
 
 concurrency:
   group: repricing-nethermind-${{ github.ref }}
@@ -152,6 +155,7 @@ jobs:
       CFG_DIAGNOSTICS_MODE: ${{ inputs.diagnostics_mode || 'none' }}
       CFG_DIAGNOSTICS_STOP_TIMEOUT: ${{ inputs.diagnostics_stop_timeout || '180' }}
       NETHERMIND_DIAG_DIR: ${{ format('repricing-diagnostics/nethermind-{0}', github.run_id) }}
+      CFG_NETHERMIND_EXTRA_FLAGS: ${{ inputs.nethermind_extra_flags || '' }}
 
     steps:
       - name: Ensure base tools are installed
@@ -407,6 +411,12 @@ jobs:
             GENESIS_ARGS=(-g "$GENESIS_FILE")
           fi
 
+          EXTRA_FLAGS_ARGS=()
+          if [[ -n "$CFG_NETHERMIND_EXTRA_FLAGS" ]]; then
+            echo "Extra Nethermind flags: $CFG_NETHERMIND_EXTRA_FLAGS"
+            EXTRA_FLAGS_ARGS=(-E "$CFG_NETHERMIND_EXTRA_FLAGS")
+          fi
+
           # Snapshot path: /mnt/sda/<network>/nethermind on stateful-generator.
           # When -n is passed, run.sh appends network to -B, so give it
           # the parent without network.  When genesis is set we skip -n
@@ -423,7 +433,8 @@ jobs:
               -f "$EFFECTIVE_FILTER" \
               -K "$FORK_NAME" \
               "${GENESIS_ARGS[@]}" \
-              "${WARMUP_ARGS[@]}"
+              "${WARMUP_ARGS[@]}" \
+              "${EXTRA_FLAGS_ARGS[@]}"
           else
             ./run.sh \
               -t "$TEST_PATH" \
@@ -436,7 +447,8 @@ jobs:
               -o "$WARMUP_COUNT" \
               -f "$EFFECTIVE_FILTER" \
               -K "$FORK_NAME" \
-              "${WARMUP_ARGS[@]}"
+              "${WARMUP_ARGS[@]}" \
+              "${EXTRA_FLAGS_ARGS[@]}"
           fi
 
       - name: Dump latest Docker logs
