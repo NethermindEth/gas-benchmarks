@@ -1009,7 +1009,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:c:r:i:o:f:n:B:O:S:R:FW:K:E:" opt; do
+while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RFW:K:E:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
