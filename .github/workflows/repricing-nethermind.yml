@@ -58,6 +58,10 @@ on:
       overlay_root:
         description: 'Override overlay workspace path. Default = /mnt/sda/overlay-workspace'
         default: ''
+      restart_before_testing:
+        description: 'Restart the execution client container before each measured test'
+        type: boolean
+        default: false
       nethermind_extra_flags:
         description: "Extra Nethermind CLI flags appended to the container command (e.g. '--Pruning.Mode=None --FlatDb.Enabled=true')"
         default: ''
@@ -421,6 +425,12 @@ jobs:
             EXTRA_FLAGS_ARGS=(-E "$CFG_NETHERMIND_EXTRA_FLAGS")
           fi
 
+          RUN_ARGS=()
+          if [[ "${{ inputs.restart_before_testing }}" == "true" ]]; then
+            echo "Restarting execution client before each measured test"
+            RUN_ARGS+=(-R)
+          fi
+
           # Snapshot path: /mnt/sda/<network>/nethermind on stateful-generator.
           # When -n is passed, run.sh appends network to -B, so give it
           # the parent without network.  When genesis is set we skip -n
@@ -438,6 +448,7 @@ jobs:
               -K "$FORK_NAME" \
               "${GENESIS_ARGS[@]}" \
               "${WARMUP_ARGS[@]}" \
+              "${RUN_ARGS[@]}" \
               "${EXTRA_FLAGS_ARGS[@]}"
           else
             ./run.sh \
@@ -452,6 +463,7 @@ jobs:
               -f "$EFFECTIVE_FILTER" \
               -K "$FORK_NAME" \
               "${WARMUP_ARGS[@]}" \
+              "${RUN_ARGS[@]}" \
               "${EXTRA_FLAGS_ARGS[@]}"
           fi
 
