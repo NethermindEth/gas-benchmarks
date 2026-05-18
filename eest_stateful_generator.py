@@ -430,6 +430,7 @@ def _generate_preparation_payloads(
             save_path=funding_file,
             timestamp_hack=args.testing_buildblock_timestamp_hack,
             fork=args.fork,
+            include_sender_withdrawals=True,
         )
     except Exception as exc:
         print(f"[WARN] Funding prep failed: {exc}")
@@ -915,6 +916,7 @@ def preparation_getpayload(
     *,
     timestamp_hack: bool = False,
     fork: str = "Prague",
+    include_sender_withdrawals: bool = False,
 ):
     """
     Build a payload on the engine via testing_buildBlockV1, POST engine_newPayload,
@@ -946,24 +948,25 @@ def preparation_getpayload(
             "amount": hex((1 << 64) - 1),
         }]
 
-    sender_addresses_path = Path("sender_addresses.txt")
-    if sender_addresses_path.exists():
-        sender_lines = [
-            ln.strip()
-            for ln in sender_addresses_path.read_text(encoding="utf-8").splitlines()
-            if ln.strip()
-        ]
-        next_index = len(withdrawals) + 2
-        next_validator = len(withdrawals) + 1
-        for addr in sender_lines:
-            withdrawals.append({
-                "index": hex(next_index),
-                "validatorIndex": hex(next_validator),
-                "address": addr,
-                "amount": hex((1 << 64) - 1),
-            })
-            next_index += 1
-            next_validator += 1
+    if include_sender_withdrawals:
+        sender_addresses_path = Path("sender_addresses.txt")
+        if sender_addresses_path.exists():
+            sender_lines = [
+                ln.strip()
+                for ln in sender_addresses_path.read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            ]
+            next_index = len(withdrawals) + 2
+            next_validator = len(withdrawals) + 1
+            for addr in sender_lines:
+                withdrawals.append({
+                    "index": hex(next_index),
+                    "validatorIndex": hex(next_validator),
+                    "address": addr,
+                    "amount": hex((1 << 64) - 1),
+                })
+                next_index += 1
+                next_validator += 1
 
     payload_attributes = {
         "timestamp": hex(new_ts),
