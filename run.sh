@@ -238,6 +238,64 @@ prepare_client_checkpointing() {
   docker_cmd update --restart=no "$container" >/dev/null 2>&1 || true
 }
 
+collect_criu_logs() {
+  local container="$1"
+  local checkpoint="$2"
+  local phase="$3"
+  local log_dir="logs/criu/${checkpoint}-${phase}"
+  local container_id=""
+  local find_cmd=(find)
+
+  mkdir -p "$log_dir"
+
+  if command -v sudo >/dev/null 2>&1; then
+    find_cmd=(sudo find)
+  fi
+
+  container_id="$(docker_cmd inspect -f '{{.Id}}' "$container" 2>/dev/null || true)"
+
+  {
+    echo "container=$container"
+    echo "container_id=$container_id"
+    echo "checkpoint=$checkpoint"
+    echo "phase=$phase"
+    echo "checkpoint_dir=$CHECKPOINT_DIR"
+    date -Is
+  } > "$log_dir/context.txt"
+
+  if [ -n "$container_id" ]; then
+    for runtime_dir in \
+      "/run/containerd/io.containerd.runtime.v2.task/moby/$container_id" \
+      "/run/docker/runtime-runc/moby/$container_id" \
+      "/var/run/docker/runtime-runc/moby/$container_id"; do
+      if [ -d "$runtime_dir" ]; then
+        "${find_cmd[@]}" "$runtime_dir" -maxdepth 2 -type f \( -name 'criu*.log' -o -name '*dump*.log' -o -name '*restore*.log' \) \
+          -exec cp -f {} "$log_dir/" \; 2>/dev/null || true
+      fi
+    done
+  fi
+
+  if [ -d "$CHECKPOINT_DIR" ]; then
+    "${find_cmd[@]}" "$CHECKPOINT_DIR" -maxdepth 4 -type f \( -name 'criu*.log' -o -name '*dump*.log' -o -name '*restore*.log' \) \
+      -exec cp -f {} "$log_dir/" \; 2>/dev/null || true
+  fi
+
+  chmod -R a+r "$log_dir" 2>/dev/null || true
+  if command -v sudo >/dev/null 2>&1; then
+    sudo chmod -R a+r "$log_dir" 2>/dev/null || true
+  fi
+
+  if ls "$log_dir"/*.log >/dev/null 2>&1; then
+    echo "[INFO] CRIU logs copied to $log_dir"
+    for log_file in "$log_dir"/*.log; do
+      echo "[INFO] Last lines from $log_file"
+      tail -n 80 "$log_file" || true
+    done
+  else
+    echo "[WARN] No CRIU logs found for $container checkpoint $checkpoint ($phase)" >&2
+  fi
+}
+
 restore_client_from_memory_checkpoint() {
   local client_base="$1"
   local checkpoint="$2"
@@ -248,12 +306,14 @@ restore_client_from_memory_checkpoint() {
 
   if ! docker_cmd checkpoint create --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint"; then
     echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
+    collect_criu_logs "$container" "$checkpoint" "dump"
     return 1
   fi
 
   echo "[INFO] Restoring $client_base from memory checkpoint $checkpoint"
   if ! docker_cmd start --checkpoint-dir "$CHECKPOINT_DIR" --checkpoint "$checkpoint" "$container"; then
     echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
+    collect_criu_logs "$container" "$checkpoint" "restore"
     return 1
   fi
 
