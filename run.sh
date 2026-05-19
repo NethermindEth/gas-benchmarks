@@ -77,9 +77,8 @@ declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
 declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
-declare -A ACTIVE_OVERLAY_READY_LOWERS
-declare -A ACTIVE_OVERLAY_TEST_UPPERS
-declare -A ACTIVE_OVERLAY_TEST_WORKS
+declare -A ACTIVE_OVERLAY_LOWERS
+declare -A ACTIVE_OVERLAY_READY_UPPERS
 declare -A ACTIVE_ZFS_DATASETS
 declare -A ACTIVE_ZFS_SNAPSHOTS
 declare -A ACTIVE_ZFS_MOUNTS
@@ -463,8 +462,8 @@ ensure_client_ready_checkpoint() {
 
   sync || true
 
-  if ! prepare_overlay_ready_state_for_checkpoint "$client_base"; then
-    echo "[ERROR] Failed to prepare ready overlay rollback for $client_base" >&2
+  if ! snapshot_overlay_upper_for_checkpoint "$client_base"; then
+    echo "[ERROR] Failed to snapshot overlay upper for $client_base" >&2
     return 1
   fi
 
@@ -837,6 +836,7 @@ prepare_overlay_for_client() {
   ACTIVE_OVERLAY_UPPERS["$client"]="$upper"
   ACTIVE_OVERLAY_WORKS["$client"]="$work"
   ACTIVE_OVERLAY_ROOTS["$client"]="$overlay_root"
+  ACTIVE_OVERLAY_LOWERS["$client"]="$abs_lower"
   ACTIVE_OVERLAY_CLIENTS["$client"]=1
 
   echo "$merged"
@@ -892,48 +892,32 @@ move_mount() {
   return 1
 }
 
-prepare_overlay_ready_state_for_checkpoint() {
+snapshot_overlay_upper_for_checkpoint() {
   local client="$1"
 
   if [ "$SNAPSHOT_BACKEND" != "overlay" ]; then
     return 0
   fi
 
-  local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
+  local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
   local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
 
-  if [ -z "$merged" ] || [ -z "$root" ]; then
-    echo "[ERROR] Overlay checkpoint rollback requested but overlay paths are missing for $client" >&2
+  if [ -z "$upper" ] || [ -z "$root" ]; then
+    echo "[ERROR] Overlay paths missing for $client checkpoint snapshot" >&2
     return 1
   fi
 
-  local ready_lower="$root-ready-lower"
-  local test_upper="$root-test-upper"
-  local test_work="$root-test-work"
+  local ready_upper="$root/ready-upper-snapshot"
+  rm -rf "$ready_upper"
 
-  rm -rf "$ready_lower" "$test_upper" "$test_work"
-  mkdir -p "$ready_lower" "$test_upper" "$test_work"
-
-  if ! is_mounted "$merged"; then
-    echo "[ERROR] Overlay data directory is not mounted at $merged" >&2
-    return 1
+  echo "[INFO] Snapshotting overlay upper for $client: $upper -> $ready_upper"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$upper/" "$ready_upper/"
+  else
+    cp -a "$upper" "$ready_upper"
   fi
 
-  echo "[INFO] Moving prepared overlay for $client to ready lower layer: $ready_lower"
-  if ! move_mount "$merged" "$ready_lower"; then
-    echo "[ERROR] Failed to move prepared overlay mount from $merged to $ready_lower" >&2
-    return 1
-  fi
-
-  mkdir -p "$merged"
-  if ! overlay_mount_with_fallback "$client-checkpoint" "$(abspath "$ready_lower")" "$(abspath "$test_upper")" "$(abspath "$test_work")" "$merged"; then
-    echo "[ERROR] Failed to mount checkpoint test overlay for $client" >&2
-    return 1
-  fi
-
-  ACTIVE_OVERLAY_READY_LOWERS["$client"]="$ready_lower"
-  ACTIVE_OVERLAY_TEST_UPPERS["$client"]="$test_upper"
-  ACTIVE_OVERLAY_TEST_WORKS["$client"]="$test_work"
+  ACTIVE_OVERLAY_READY_UPPERS["$client"]="$ready_upper"
 }
 
 rollback_overlay_to_ready_state() {
@@ -944,12 +928,13 @@ rollback_overlay_to_ready_state() {
   fi
 
   local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
-  local ready_lower="${ACTIVE_OVERLAY_READY_LOWERS[$client]}"
-  local test_upper="${ACTIVE_OVERLAY_TEST_UPPERS[$client]}"
-  local test_work="${ACTIVE_OVERLAY_TEST_WORKS[$client]}"
+  local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
+  local work="${ACTIVE_OVERLAY_WORKS[$client]}"
+  local abs_lower="${ACTIVE_OVERLAY_LOWERS[$client]}"
+  local ready_upper="${ACTIVE_OVERLAY_READY_UPPERS[$client]}"
 
-  if [ -z "$merged" ] || [ -z "$ready_lower" ] || [ -z "$test_upper" ] || [ -z "$test_work" ]; then
-    echo "[ERROR] Checkpoint overlay rollback paths are missing for $client" >&2
+  if [ -z "$merged" ] || [ -z "$upper" ] || [ -z "$work" ] || [ -z "$abs_lower" ] || [ -z "$ready_upper" ]; then
+    echo "[ERROR] Checkpoint overlay rollback paths missing for $client" >&2
     return 1
   fi
 
@@ -963,7 +948,6 @@ rollback_overlay_to_ready_state() {
       fi
     fi
   fi
-
   if is_mounted "$merged"; then
     if ! umount -l "$merged" 2>/dev/null; then
       if command -v sudo >/dev/null 2>&1; then
@@ -971,17 +955,27 @@ rollback_overlay_to_ready_state() {
       fi
     fi
   fi
-
   if is_mounted "$merged"; then
-    echo "[ERROR] Could not unmount checkpoint test overlay at $merged" >&2
+    echo "[ERROR] Could not unmount overlay at $merged for rollback" >&2
     return 1
   fi
 
-  rm -rf "$test_upper" "$test_work"
-  mkdir -p "$test_upper" "$test_work" "$merged"
+  echo "[INFO] Restoring overlay upper from snapshot for $client"
+  rm -rf "$upper" "$work"
+  mkdir -p "$work"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$ready_upper/" "$upper/"
+  else
+    cp -a "$ready_upper" "$upper"
+  fi
+  mkdir -p "$merged"
 
-  echo "[INFO] Remounting clean checkpoint test overlay for $client"
-  overlay_mount_with_fallback "$client-checkpoint" "$(abspath "$ready_lower")" "$(abspath "$test_upper")" "$(abspath "$test_work")" "$merged"
+  local abs_upper abs_work
+  abs_upper="$(abspath "$upper")"
+  abs_work="$(abspath "$work")"
+
+  echo "[INFO] Remounting overlay for $client"
+  overlay_mount_with_fallback "$client" "$abs_lower" "$abs_upper" "$abs_work" "$merged"
 }
 
 cleanup_overlay_for_client() {
@@ -990,9 +984,7 @@ cleanup_overlay_for_client() {
   local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
   local work="${ACTIVE_OVERLAY_WORKS[$client]}"
   local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
-  local ready_lower="${ACTIVE_OVERLAY_READY_LOWERS[$client]}"
-  local test_upper="${ACTIVE_OVERLAY_TEST_UPPERS[$client]}"
-  local test_work="${ACTIVE_OVERLAY_TEST_WORKS[$client]}"
+  local ready_upper="${ACTIVE_OVERLAY_READY_UPPERS[$client]}"
   local base_dir
 
   local unmounted=true
@@ -1036,24 +1028,10 @@ cleanup_overlay_for_client() {
   fi
 
   if [ "$unmounted" = true ]; then
-    if [ -n "$ready_lower" ] && is_mounted "$ready_lower"; then
-      umount "$ready_lower" 2>/dev/null || true
-      if is_mounted "$ready_lower" && command -v sudo >/dev/null 2>&1; then
-        sudo -n umount "$ready_lower" >/dev/null 2>&1 || true
-      fi
-      if is_mounted "$ready_lower"; then
-        umount -l "$ready_lower" 2>/dev/null || true
-        if is_mounted "$ready_lower" && command -v sudo >/dev/null 2>&1; then
-          sudo -n umount -l "$ready_lower" >/dev/null 2>&1 || true
-        fi
-      fi
-    fi
     [ -n "$merged" ] && rm -rf "$merged"
     [ -n "$upper" ] && rm -rf "$upper"
     [ -n "$work" ] && rm -rf "$work"
-    [ -n "$ready_lower" ] && rm -rf "$ready_lower"
-    [ -n "$test_upper" ] && rm -rf "$test_upper"
-    [ -n "$test_work" ] && rm -rf "$test_work"
+    [ -n "$ready_upper" ] && rm -rf "$ready_upper"
     [ -n "$root" ] && rm -rf "$root"
   fi
 
@@ -1074,9 +1052,8 @@ cleanup_overlay_for_client() {
   unset ACTIVE_OVERLAY_WORKS["$client"]
   unset ACTIVE_OVERLAY_ROOTS["$client"]
   unset ACTIVE_OVERLAY_CLIENTS["$client"]
-  unset ACTIVE_OVERLAY_READY_LOWERS["$client"]
-  unset ACTIVE_OVERLAY_TEST_UPPERS["$client"]
-  unset ACTIVE_OVERLAY_TEST_WORKS["$client"]
+  unset ACTIVE_OVERLAY_LOWERS["$client"]
+  unset ACTIVE_OVERLAY_READY_UPPERS["$client"]
 }
 
 cleanup_all_overlays() {
@@ -1822,7 +1799,7 @@ for run in $(seq 1 $RUNS); do
 
     TOTAL_TESTS=${#TEST_FILES[@]}
     TEST_NUM=0
-    checkpoint_current_scenario_restored=false
+
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
       normalized_path="${test_file//\\/\/}"
@@ -1890,21 +1867,6 @@ for run in $(seq 1 $RUNS); do
       PROGRESS="[${TEST_NUM}/${TOTAL_TESTS}]"
 
       if [ "$measured" = false ]; then
-        if [ "$CHECKPOINT_BEFORE_TESTING" = true ] && [[ "$normalized_path" == */setup/* ]]; then
-          if ! ensure_client_ready_checkpoint "$client_base" "$run"; then
-            echo "[WARN] Skipping $filename for $client - ready checkpoint setup failed" >&2
-            continue
-          fi
-
-          checkpoint_name="gasbench_${client_base}_${run}_ready_restore_${TEST_NUM}"
-          if ! restore_client_from_memory_checkpoint "$client_base" "$checkpoint_name"; then
-            echo "[WARN] Skipping $filename for $client - checkpoint restore failed" >&2
-            checkpoint_current_scenario_restored=false
-            continue
-          fi
-          checkpoint_current_scenario_restored=true
-        fi
-
         echo "[INFO] ${PROGRESS} [SETUP] $filename"
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT
         echo ""
@@ -1924,13 +1886,10 @@ for run in $(seq 1 $RUNS); do
           continue
         fi
 
-        if [ "$checkpoint_current_scenario_restored" != true ]; then
-          checkpoint_name="gasbench_${client_base}_${run}_ready_restore_${TEST_NUM}"
-          if ! restore_client_from_memory_checkpoint "$client_base" "$checkpoint_name"; then
-            echo "[WARN] Skipping $filename for $client - checkpoint restore failed" >&2
-            checkpoint_current_scenario_restored=false
-            continue
-          fi
+        checkpoint_name="gasbench_${client_base}_${run}_ready_restore_${TEST_NUM}"
+        if ! restore_client_from_memory_checkpoint "$client_base" "$checkpoint_name"; then
+          echo "[WARN] Skipping $filename for $client - checkpoint restore failed" >&2
+          continue
         fi
       fi
 
@@ -2026,7 +1985,6 @@ for run in $(seq 1 $RUNS); do
       drop_host_caches || true
       echo "[INFO] ${PROGRESS} [TESTING] $filename"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
-      checkpoint_current_scenario_restored=false
 
       # Capture debug_traceBlockByNumber for the testing payload (unigramTracer) when enabled
       if [ "${TRACE_BLOCKS:-false}" = true ]; then
