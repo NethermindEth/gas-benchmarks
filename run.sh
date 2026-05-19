@@ -20,6 +20,8 @@ ZFS_RUNTIME_DATASET_ROOT="gasbench-runtime"
 ZFS_SNAPSHOT_PREFIX="gasbench_tmp"
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
+CHECKPOINT_BEFORE_TESTING=false
+CHECKPOINT_DIR="${CHECKPOINT_DIR:-/tmp/gasbench-checkpoints}"
 SKIP_FORKCHOICE=false
 FORK_NAME="osaka"
 SKIP_EMPTY=true
@@ -213,6 +215,55 @@ restart_client_containers() {
   else
     sleep 5
   fi
+}
+
+prepare_client_checkpointing() {
+  local client_base="$1"
+  local container="gas-execution-client"
+
+  if ! docker_cmd checkpoint --help >/dev/null 2>&1; then
+    echo "[ERROR] Docker checkpoint support is not available. Enable Docker experimental checkpoint/restore support and install CRIU." >&2
+    return 1
+  fi
+
+  if ! docker_cmd inspect "$container" >/dev/null 2>&1; then
+    echo "[ERROR] Container $container not found for $client_base checkpointing" >&2
+    return 1
+  fi
+
+  mkdir -p "$CHECKPOINT_DIR"
+
+  # Checkpoint/restore owns the container lifecycle. Disable restart policy so
+  # Docker does not race the explicit restore when checkpoint creation stops it.
+  docker_cmd update --restart=no "$container" >/dev/null 2>&1 || true
+}
+
+restore_client_from_memory_checkpoint() {
+  local client_base="$1"
+  local checkpoint="$2"
+  local container="gas-execution-client"
+
+  echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
+  docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
+
+  if ! docker_cmd checkpoint create --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint"; then
+    echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
+    return 1
+  fi
+
+  echo "[INFO] Restoring $client_base from memory checkpoint $checkpoint"
+  if ! docker_cmd start --checkpoint-dir "$CHECKPOINT_DIR" --checkpoint "$checkpoint" "$container"; then
+    echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
+    return 1
+  fi
+
+  if declare -f wait_for_rpc >/dev/null 2>&1; then
+    wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
+  else
+    sleep 5
+  fi
+
+  docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
 }
 
 is_measured_file() {
@@ -980,6 +1031,10 @@ cleanup_on_exit() {
     fi
   fi
 
+  if [ "$CHECKPOINT_BEFORE_TESTING" = true ] && [ -n "$CHECKPOINT_DIR" ]; then
+    rm -rf "$CHECKPOINT_DIR" 2>/dev/null || true
+  fi
+
   exit $exit_status
 }
 
@@ -1009,7 +1064,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RFW:K:E:" opt; do
+while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RCFW:K:E:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -1024,14 +1079,20 @@ while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RFW:K:E:" opt; do
     O) OVERLAY_TMP_ROOT="$OPTARG"; USE_SNAPSHOT_BACKEND=true ;;
     S) SNAPSHOT_BACKEND="${OPTARG,,}"; USE_SNAPSHOT_BACKEND=true ;;
     R) RESTART_BEFORE_TESTING=true;;
+    C) CHECKPOINT_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
     W) WARMUP_OPCODES_PATH="$OPTARG" ;;
     K) FORK_NAME="${OPTARG,,}" ;;
     E) EXTRA_CLIENT_FLAGS="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-F skipForkchoice] [-W warmup_opcodes_path] [-K fork] [-E extra_client_flags]" >&2
+    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-R restartBeforeTesting] [-C checkpointBeforeTesting] [-F skipForkchoice] [-W warmup_opcodes_path] [-K fork] [-E extra_client_flags]" >&2
        exit 1 ;;
   esac
 done
+
+if [ "$RESTART_BEFORE_TESTING" = true ] && [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+  echo "[ERROR] -R and -C are mutually exclusive. Choose either restart or checkpoint before testing." >&2
+  exit 1
+fi
 
 if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
   case "$SNAPSHOT_BACKEND" in
@@ -1298,6 +1359,13 @@ for run in $(seq 1 $RUNS); do
       sleep 5
     fi
 
+    if [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+      prepare_client_checkpointing "$client_base" || {
+        echo "[ERROR] Skipping $client - checkpoint setup failed" >&2
+        continue
+      }
+    fi
+
     # Reth mainnet snapshot is 2 blocks behind; bootstrap via FCU + p2p
     if [ "$client_base" = "reth" ] && [ "$NETWORK" = "mainnet" ]; then
       bootstrap_fcu "0x6aadde478df4f485c2cf91cd48038f918ef6ff97b19eec9cdd0cd1ca45476eb4" 60 30
@@ -1386,6 +1454,14 @@ for run in $(seq 1 $RUNS); do
       if [ "$RESTART_BEFORE_TESTING" = true ]; then
         if ! restart_client_containers "$client_base"; then
           echo "[WARN] Skipping $filename for $client - restart failed" >&2
+          continue
+        fi
+      fi
+
+      if [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+        checkpoint_name="gasbench_${client_base}_${run}_${TEST_NUM}"
+        if ! restore_client_from_memory_checkpoint "$client_base" "$checkpoint_name"; then
+          echo "[WARN] Skipping $filename for $client - checkpoint restore failed" >&2
           continue
         fi
       fi

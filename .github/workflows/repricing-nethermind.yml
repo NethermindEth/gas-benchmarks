@@ -62,6 +62,10 @@ on:
         description: 'Restart the execution client container before each measured test'
         type: boolean
         default: false
+      checkpoint_before_testing:
+        description: 'Use Docker/CRIU checkpoint-restore before each measured test (Linux only)'
+        type: boolean
+        default: false
       nethermind_extra_flags:
         description: "Extra Nethermind CLI flags appended to the container command (e.g. '--Pruning.Mode=None --FlatDb.Enabled=true')"
         default: ''
@@ -177,6 +181,7 @@ jobs:
           if ! command -v zip >/dev/null 2>&1; then missing+=("zip"); fi
           if ! command -v curl >/dev/null 2>&1; then missing+=("curl"); fi
           if ! command -v make >/dev/null 2>&1; then missing+=("make"); fi
+          if [ "${{ inputs.checkpoint_before_testing }}" = "true" ] && ! command -v criu >/dev/null 2>&1; then missing+=("criu"); fi
 
           if ! command -v docker >/dev/null 2>&1; then
             docker_missing=true
@@ -199,6 +204,13 @@ jobs:
 
           if [ ${#packages[@]} -gt 0 ]; then
             if command -v apt-get >/dev/null 2>&1; then
+              if [ "${{ inputs.checkpoint_before_testing }}" = "true" ]; then
+                if command -v add-apt-repository >/dev/null 2>&1; then
+                  sudo add-apt-repository -y universe
+                else
+                  sudo sed -i -E 's/^# deb (.*) universe/deb \1 universe/' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+                fi
+              fi
               sudo apt-get update
               sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
             else
@@ -211,6 +223,16 @@ jobs:
             sudo systemctl start docker >/dev/null 2>&1 || true
           elif command -v service >/dev/null 2>&1; then
             sudo service docker start >/dev/null 2>&1 || true
+          fi
+
+          if [ "${{ inputs.checkpoint_before_testing }}" = "true" ]; then
+            sudo mkdir -p /etc/docker
+            echo '{"experimental": true}' | sudo tee /etc/docker/daemon.json >/dev/null
+            if command -v systemctl >/dev/null 2>&1; then
+              sudo systemctl restart docker >/dev/null 2>&1 || true
+            elif command -v service >/dev/null 2>&1; then
+              sudo service docker restart >/dev/null 2>&1 || true
+            fi
           fi
 
           if ! docker compose version >/dev/null 2>&1; then
@@ -426,9 +448,17 @@ jobs:
           fi
 
           RUN_ARGS=()
+          if [[ "${{ inputs.restart_before_testing }}" == "true" && "${{ inputs.checkpoint_before_testing }}" == "true" ]]; then
+            echo "restart_before_testing and checkpoint_before_testing are mutually exclusive"
+            exit 1
+          fi
           if [[ "${{ inputs.restart_before_testing }}" == "true" ]]; then
             echo "Restarting execution client before each measured test"
             RUN_ARGS+=(-R)
+          fi
+          if [[ "${{ inputs.checkpoint_before_testing }}" == "true" ]]; then
+            echo "Using Docker/CRIU checkpoint-restore before each measured test"
+            RUN_ARGS+=(-C)
           fi
 
           # Snapshot path: /mnt/sda/<network>/nethermind on stateful-generator.
