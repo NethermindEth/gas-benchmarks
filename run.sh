@@ -839,12 +839,14 @@ prepare_overlay_for_client() {
   ACTIVE_OVERLAY_LOWERS["$client"]="$abs_lower"
   ACTIVE_OVERLAY_CLIENTS["$client"]=1
 
-  echo "$merged"
+  echo "${merged}|${abs_lower}"
 }
 
 register_overlay_for_client() {
   local client="$1"
-  local merged="$2"
+  local output="$2"
+  local merged="${output%%|*}"
+  local lower="${output#*|}"
   local root
 
   root=$(dirname "$merged")
@@ -853,6 +855,7 @@ register_overlay_for_client() {
   ACTIVE_OVERLAY_UPPERS["$client"]="$root/upper"
   ACTIVE_OVERLAY_WORKS["$client"]="$root/work"
   ACTIVE_OVERLAY_ROOTS["$client"]="$root"
+  ACTIVE_OVERLAY_LOWERS["$client"]="$lower"
   ACTIVE_OVERLAY_CLIENTS["$client"]=1
 }
 
@@ -1722,6 +1725,7 @@ for run in $(seq 1 $RUNS); do
           continue
         }
         register_overlay_for_client "$client_base" "$data_dir"
+        data_dir="${data_dir%%|*}"
       fi
     else
       data_dir=$(abspath "scripts/$client_base/execution-data")
