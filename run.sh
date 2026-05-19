@@ -402,7 +402,6 @@ create_client_memory_checkpoint() {
   fi
 
   CHECKPOINT_EXPORTS["$client_base"]="$checkpoint_export"
-  CHECKPOINT_READY["$client_base"]=1
 }
 
 restore_client_from_memory_checkpoint() {
@@ -468,6 +467,8 @@ ensure_client_ready_checkpoint() {
     echo "[ERROR] Failed to prepare ready overlay rollback for $client_base" >&2
     return 1
   fi
+
+  CHECKPOINT_READY["$client_base"]=1
 }
 
 cleanup_checkpoint_for_client() {
@@ -858,15 +859,36 @@ register_overlay_for_client() {
 move_mount() {
   local from="$1"
   local to="$2"
+  local error_log
 
-  if mount --move "$from" "$to" 2>/dev/null; then
+  error_log=$(mktemp)
+
+  if mount --move "$from" "$to" 2>"$error_log"; then
+    rm -f "$error_log"
     return 0
   fi
 
-  if command -v sudo >/dev/null 2>&1 && sudo mount --move "$from" "$to" >/dev/null 2>&1; then
+  echo "[WARN] mount --move $from $to failed:" >&2
+  sed 's/^/[WARN]   /' "$error_log" >&2 || true
+
+  if command -v findmnt >/dev/null 2>&1; then
+    echo "[INFO] Source mount details:" >&2
+    findmnt -T "$from" >&2 || true
+    echo "[INFO] Target path mount details:" >&2
+    findmnt -T "$to" >&2 || true
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo mount --move "$from" "$to" >"$error_log" 2>&1; then
+    rm -f "$error_log"
     return 0
   fi
 
+  if command -v sudo >/dev/null 2>&1; then
+    echo "[WARN] sudo mount --move $from $to failed:" >&2
+    sed 's/^/[WARN]   /' "$error_log" >&2 || true
+  fi
+
+  rm -f "$error_log"
   return 1
 }
 
@@ -885,9 +907,9 @@ prepare_overlay_ready_state_for_checkpoint() {
     return 1
   fi
 
-  local ready_lower="$root/ready-lower"
-  local test_upper="$root/test-upper"
-  local test_work="$root/test-work"
+  local ready_lower="$root-ready-lower"
+  local test_upper="$root-test-upper"
+  local test_work="$root-test-work"
 
   rm -rf "$ready_lower" "$test_upper" "$test_work"
   mkdir -p "$ready_lower" "$test_upper" "$test_work"
@@ -969,6 +991,8 @@ cleanup_overlay_for_client() {
   local work="${ACTIVE_OVERLAY_WORKS[$client]}"
   local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
   local ready_lower="${ACTIVE_OVERLAY_READY_LOWERS[$client]}"
+  local test_upper="${ACTIVE_OVERLAY_TEST_UPPERS[$client]}"
+  local test_work="${ACTIVE_OVERLAY_TEST_WORKS[$client]}"
   local base_dir
 
   local unmounted=true
@@ -1027,6 +1051,9 @@ cleanup_overlay_for_client() {
     [ -n "$merged" ] && rm -rf "$merged"
     [ -n "$upper" ] && rm -rf "$upper"
     [ -n "$work" ] && rm -rf "$work"
+    [ -n "$ready_lower" ] && rm -rf "$ready_lower"
+    [ -n "$test_upper" ] && rm -rf "$test_upper"
+    [ -n "$test_work" ] && rm -rf "$test_work"
     [ -n "$root" ] && rm -rf "$root"
   fi
 
