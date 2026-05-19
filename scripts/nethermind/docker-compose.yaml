@@ -4,6 +4,7 @@ services:
     environment:
       - TERM=xterm-256color
       - COLORTERM=truecolor
+      - DOTNET_USE_POLLING_FILE_WATCHER=${DOTNET_USE_POLLING_FILE_WATCHER:-false}
     stop_signal: SIGINT 
     stop_grace_period: 30s
     container_name: gas-execution-client

@@ -1154,6 +1154,10 @@ if [ "$RESTART_BEFORE_TESTING" = true ] && [ "$CHECKPOINT_BEFORE_TESTING" = true
   exit 1
 fi
 
+if [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+  export DOTNET_USE_POLLING_FILE_WATCHER=true
+fi
+
 if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
   case "$SNAPSHOT_BACKEND" in
     overlay|zfs) ;;
