@@ -53,10 +53,12 @@ if [ "${GASBENCH_CHECKPOINT_BEFORE_TESTING:-false}" = "true" ]; then
     PATCHED_NLOG_CONFIG="$SCRIPT_DIR/NLog.config.checkpoint"
     TMP_NLOG_CONFIG="${PATCHED_NLOG_CONFIG}.tmp"
     TMP_NLOG_CONTAINER="gasbench-nlog-$$"
+    NLOG_IMAGE_VERSION="$(grep -oP '^EC_IMAGE_VERSION=\K.*' "$SCRIPT_DIR/.env" || true)"
 
     rm -f "$PATCHED_NLOG_CONFIG" "$TMP_NLOG_CONFIG"
 
-    if docker create --name "$TMP_NLOG_CONTAINER" "$EC_IMAGE_VERSION" >/dev/null &&
+    if [ -n "$NLOG_IMAGE_VERSION" ] &&
+        docker create --name "$TMP_NLOG_CONTAINER" "$NLOG_IMAGE_VERSION" >/dev/null &&
         docker cp "$TMP_NLOG_CONTAINER:/nethermind/NLog.config" "$TMP_NLOG_CONFIG"; then
         sed 's/autoReload="true"/autoReload="false"/' "$TMP_NLOG_CONFIG" > "$PATCHED_NLOG_CONFIG"
         append_override_volume "      - ${PATCHED_NLOG_CONFIG}:/nethermind/NLog.config:ro"
