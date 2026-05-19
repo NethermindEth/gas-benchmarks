@@ -182,6 +182,7 @@ jobs:
           if ! command -v curl >/dev/null 2>&1; then missing+=("curl"); fi
           if ! command -v make >/dev/null 2>&1; then missing+=("make"); fi
           if [ "${{ inputs.checkpoint_before_testing }}" = "true" ] && ! command -v criu >/dev/null 2>&1; then missing+=("criu"); fi
+          if [ "${{ inputs.checkpoint_before_testing }}" = "true" ] && ! command -v ss >/dev/null 2>&1; then missing+=("iproute2"); fi
 
           if ! command -v docker >/dev/null 2>&1; then
             docker_missing=true

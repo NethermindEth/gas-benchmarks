@@ -296,6 +296,33 @@ collect_criu_logs() {
   fi
 }
 
+drop_client_connections_for_checkpoint() {
+  local container="$1"
+  local pid=""
+  local nsenter_cmd=(nsenter)
+  local wait_seconds="${CHECKPOINT_TCP_DRAIN_SECONDS:-2}"
+
+  pid="$(docker_cmd inspect -f '{{.State.Pid}}' "$container" 2>/dev/null || true)"
+  if [ -z "$pid" ] || [ "$pid" = "0" ]; then
+    echo "[WARN] Could not resolve PID for $container; skipping connection drain before checkpoint" >&2
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    nsenter_cmd=(sudo nsenter)
+  fi
+
+  if ! command -v nsenter >/dev/null 2>&1 || ! command -v ss >/dev/null 2>&1; then
+    echo "[WARN] nsenter or ss not available; skipping connection drain before checkpoint" >&2
+    return 0
+  fi
+
+  echo "[INFO] Draining non-listening TCP/UDP sockets in $container before checkpoint"
+  "${nsenter_cmd[@]}" -t "$pid" -n ss -K state all exclude listening >/dev/null 2>&1 || true
+  "${nsenter_cmd[@]}" -t "$pid" -n ss -K -u state all >/dev/null 2>&1 || true
+  sleep "$wait_seconds"
+}
+
 restore_client_from_memory_checkpoint() {
   local client_base="$1"
   local checkpoint="$2"
@@ -303,6 +330,8 @@ restore_client_from_memory_checkpoint() {
 
   echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
   docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
+
+  drop_client_connections_for_checkpoint "$container"
 
   if ! docker_cmd checkpoint create --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint"; then
     echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
