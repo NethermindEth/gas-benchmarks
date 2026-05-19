@@ -404,7 +404,6 @@ restore_client_from_memory_checkpoint() {
   if [ "$CONTAINER_RUNTIME" = "podman" ]; then
     local restore_args=(
       --import "$checkpoint_export"
-      --name "$container"
       --tcp-established
       --ignore-volumes
       --file-locks
