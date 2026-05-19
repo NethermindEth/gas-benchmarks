@@ -1336,7 +1336,31 @@ for run in $(seq 1 $RUNS); do
           for pat in "${FILTERS[@]}"; do
             pat_lc="${pat,,}"
 
-            if [[ "$scenario_key" == *"$pat_lc"* ]]; then
+            if [[ "$pat_lc" == *" and "* ]]; then
+              _and_match=1
+              _remaining="$pat_lc"
+              while [[ "$_remaining" == *" and "* ]]; do
+                _part="${_remaining%% and *}"
+                _remaining="${_remaining#* and }"
+                _part="${_part#"${_part%%[![:space:]]*}"}"
+                _part="${_part%"${_part##*[![:space:]]}"}"
+                if [ -n "$_part" ] && [[ "$scenario_key" != *"$_part"* ]]; then
+                  _and_match=0
+                  break
+                fi
+              done
+              if [ "$_and_match" -eq 1 ]; then
+                _remaining="${_remaining#"${_remaining%%[![:space:]]*}"}"
+                _remaining="${_remaining%"${_remaining##*[![:space:]]}"}"
+                if [ -n "$_remaining" ] && [[ "$scenario_key" != *"$_remaining"* ]]; then
+                  _and_match=0
+                fi
+              fi
+              if [ "$_and_match" -eq 1 ]; then
+                match=1
+                break
+              fi
+            elif [[ "$scenario_key" == *"$pat_lc"* ]]; then
               match=1
               break
             fi
