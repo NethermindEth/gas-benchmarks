@@ -22,6 +22,7 @@ PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 CHECKPOINT_BEFORE_TESTING=false
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-/tmp/gasbench-checkpoints}"
+CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
 SKIP_FORKCHOICE=false
 FORK_NAME="osaka"
 SKIP_EMPTY=true
@@ -54,6 +55,22 @@ fi
 if ! declare -f compose_detect >/dev/null 2>&1; then
   compose_detect() { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; }
 fi
+
+podman_cmd() {
+  if [ "${PODMAN_ROOTFUL:-true}" = "true" ] && command -v sudo >/dev/null 2>&1; then
+    sudo podman "$@"
+  else
+    podman "$@"
+  fi
+}
+
+runtime_cmd() {
+  case "$CONTAINER_RUNTIME" in
+    docker) docker_cmd "$@" ;;
+    podman) podman_cmd "$@" ;;
+    *) echo "[ERROR] Invalid container runtime '$CONTAINER_RUNTIME'. Expected docker or podman." >&2; return 1 ;;
+  esac
+}
 
 declare -A ACTIVE_OVERLAY_MOUNTS
 declare -A ACTIVE_OVERLAY_UPPERS
@@ -221,21 +238,49 @@ prepare_client_checkpointing() {
   local client_base="$1"
   local container="gas-execution-client"
 
-  if ! docker_cmd checkpoint --help >/dev/null 2>&1; then
-    echo "[ERROR] Docker checkpoint support is not available. Enable Docker experimental checkpoint/restore support and install CRIU." >&2
-    return 1
-  fi
+  case "$CONTAINER_RUNTIME" in
+    docker)
+      echo "[ERROR] Docker checkpoint/restore is not supported for Nethermind checkpoint mode because Docker cannot pass the CRIU --tcp-established and --file-locks options. Use -M podman." >&2
+      return 1
+      ;;
+    podman)
+      if ! command -v podman >/dev/null 2>&1; then
+        echo "[ERROR] Podman is not available. Install Podman or disable checkpoint_before_testing." >&2
+        return 1
+      fi
+      if ! podman_cmd container checkpoint --help >/dev/null 2>&1; then
+        echo "[ERROR] Podman checkpoint support is not available. Install CRIU and use rootful Podman." >&2
+        return 1
+      fi
+      if ! podman_cmd container checkpoint --help | grep -q -- '--file-locks' ||
+         ! podman_cmd container checkpoint --help | grep -q -- '--tcp-established'; then
+        echo "[ERROR] Podman checkpoint command does not expose --file-locks and --tcp-established. Upgrade Podman." >&2
+        return 1
+      fi
+      if ! podman_cmd container restore --help | grep -q -- '--file-locks' ||
+         ! podman_cmd container restore --help | grep -q -- '--tcp-established'; then
+        echo "[ERROR] Podman restore command does not expose --file-locks and --tcp-established. Upgrade Podman." >&2
+        return 1
+      fi
+      ;;
+    *)
+      echo "[ERROR] Invalid container runtime '$CONTAINER_RUNTIME'. Expected docker or podman." >&2
+      return 1
+      ;;
+  esac
 
-  if ! docker_cmd inspect "$container" >/dev/null 2>&1; then
+  if ! runtime_cmd inspect "$container" >/dev/null 2>&1; then
     echo "[ERROR] Container $container not found for $client_base checkpointing" >&2
     return 1
   fi
 
   mkdir -p "$CHECKPOINT_DIR"
 
-  # Checkpoint/restore owns the container lifecycle. Disable restart policy so
-  # Docker does not race the explicit restore when checkpoint creation stops it.
-  docker_cmd update --restart=no "$container" >/dev/null 2>&1 || true
+  if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+    # Checkpoint/restore owns the container lifecycle. Disable restart policy so
+    # Docker does not race the explicit restore when checkpoint creation stops it.
+    docker_cmd update --restart=no "$container" >/dev/null 2>&1 || true
+  fi
 }
 
 collect_criu_logs() {
@@ -252,7 +297,7 @@ collect_criu_logs() {
     find_cmd=(sudo find)
   fi
 
-  container_id="$(docker_cmd inspect -f '{{.Id}}' "$container" 2>/dev/null || true)"
+  container_id="$(runtime_cmd inspect -f '{{.Id}}' "$container" 2>/dev/null || true)"
 
   {
     echo "container=$container"
@@ -267,7 +312,8 @@ collect_criu_logs() {
     for runtime_dir in \
       "/run/containerd/io.containerd.runtime.v2.task/moby/$container_id" \
       "/run/docker/runtime-runc/moby/$container_id" \
-      "/var/run/docker/runtime-runc/moby/$container_id"; do
+      "/var/run/docker/runtime-runc/moby/$container_id" \
+      "/var/lib/containers/storage/overlay-containers/$container_id/userdata"; do
       if [ -d "$runtime_dir" ]; then
         "${find_cmd[@]}" "$runtime_dir" -maxdepth 2 -type f \( -name 'criu*.log' -o -name '*dump*.log' -o -name '*restore*.log' \) \
           -exec cp -f {} "$log_dir/" \; 2>/dev/null || true
@@ -302,7 +348,7 @@ drop_client_connections_for_checkpoint() {
   local nsenter_cmd=(nsenter)
   local wait_seconds="${CHECKPOINT_TCP_DRAIN_SECONDS:-2}"
 
-  pid="$(docker_cmd inspect -f '{{.State.Pid}}' "$container" 2>/dev/null || true)"
+  pid="$(runtime_cmd inspect -f '{{.State.Pid}}' "$container" 2>/dev/null || true)"
   if [ -z "$pid" ] || [ "$pid" = "0" ]; then
     echo "[WARN] Could not resolve PID for $container; skipping connection drain before checkpoint" >&2
     return 0
@@ -327,20 +373,52 @@ restore_client_from_memory_checkpoint() {
   local client_base="$1"
   local checkpoint="$2"
   local container="gas-execution-client"
+  local checkpoint_export="$CHECKPOINT_DIR/${checkpoint}.tar"
 
   echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
-  docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
+  rm -f "$checkpoint_export"
+  if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+    docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
+  fi
 
   drop_client_connections_for_checkpoint "$container"
 
-  if ! docker_cmd checkpoint create --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint"; then
+  if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    if ! podman_cmd container checkpoint \
+      --export "$checkpoint_export" \
+      --tcp-established \
+      --file-locks \
+      "$container"; then
+      echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
+      collect_criu_logs "$container" "$checkpoint" "dump"
+      return 1
+    fi
+    podman_cmd rm -f "$container" >/dev/null 2>&1 || true
+  elif ! docker_cmd checkpoint create --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint"; then
     echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
     collect_criu_logs "$container" "$checkpoint" "dump"
     return 1
   fi
 
   echo "[INFO] Restoring $client_base from memory checkpoint $checkpoint"
-  if ! docker_cmd start --checkpoint-dir "$CHECKPOINT_DIR" --checkpoint "$checkpoint" "$container"; then
+  if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    local restore_args=(
+      --import "$checkpoint_export"
+      --name "$container"
+      --tcp-established
+      --ignore-volumes
+      --file-locks
+    )
+    if podman_cmd container restore --help | grep -q -- '--tcp-close'; then
+      restore_args+=(--tcp-close)
+    fi
+    if ! podman_cmd container restore \
+      "${restore_args[@]}"; then
+      echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
+      collect_criu_logs "$container" "$checkpoint" "restore"
+      return 1
+    fi
+  elif ! docker_cmd start --checkpoint-dir "$CHECKPOINT_DIR" --checkpoint "$checkpoint" "$container"; then
     echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
     collect_criu_logs "$container" "$checkpoint" "restore"
     return 1
@@ -352,7 +430,11 @@ restore_client_from_memory_checkpoint() {
     sleep 5
   fi
 
-  docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
+  if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+    docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
+  else
+    rm -f "$checkpoint_export"
+  fi
 }
 
 is_measured_file() {
@@ -1048,6 +1130,12 @@ docker_compose_down_for_client() {
   local client_base="$1"
   local compose_dir="scripts/$client_base"
 
+  if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    podman_cmd rm -f gas-execution-client gas-execution-client-sync >/dev/null 2>&1 || true
+    podman_cmd network rm gas-network >/dev/null 2>&1 || true
+    return
+  fi
+
   if ! compose_detect >/dev/null 2>&1; then
     return
   fi
@@ -1064,21 +1152,24 @@ docker_compose_down_for_client() {
 
 docker_container_exists() {
   local name="$1"
-  docker_cmd ps -a --format '{{.Names}}' | grep -Fxq "$name"
+  runtime_cmd ps -a --format '{{.Names}}' | grep -Fxq "$name"
 }
 
 dump_client_logs() {
   local client_base="$1"
-  if [ -z "$(resolve_docker_bin)" ]; then
+  if [ "$CONTAINER_RUNTIME" = "docker" ] && [ -z "$(resolve_docker_bin)" ]; then
+    return
+  fi
+  if [ "$CONTAINER_RUNTIME" = "podman" ] && ! command -v podman >/dev/null 2>&1; then
     return
   fi
   mkdir -p logs
   local ts=$(date +%s)
   if docker_container_exists "gas-execution-client"; then
-    docker_cmd logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
+    runtime_cmd logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
   fi
   if docker_container_exists "gas-execution-client-sync"; then
-    docker_cmd logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
+    runtime_cmd logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
   fi
 }
 
@@ -1086,7 +1177,8 @@ cleanup_on_exit() {
   local exit_status=$?
   trap - EXIT INT TERM
 
-  if [ -n "$(resolve_docker_bin)" ]; then
+  if { [ "$CONTAINER_RUNTIME" = "docker" ] && [ -n "$(resolve_docker_bin)" ]; } ||
+     { [ "$CONTAINER_RUNTIME" = "podman" ] && command -v podman >/dev/null 2>&1; }; then
     local client_base client_spec
     if [ "${#RUNNING_CLIENTS[@]}" -gt 0 ]; then
       for client_base in "${!RUNNING_CLIENTS[@]}"; do
@@ -1153,7 +1245,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RCFW:K:E:" opt; do
+while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RCFM:W:K:E:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -1170,13 +1262,23 @@ while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RCFW:K:E:" opt; do
     R) RESTART_BEFORE_TESTING=true;;
     C) CHECKPOINT_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
+    M) CONTAINER_RUNTIME="${OPTARG,,}" ;;
     W) WARMUP_OPCODES_PATH="$OPTARG" ;;
     K) FORK_NAME="${OPTARG,,}" ;;
     E) EXTRA_CLIENT_FLAGS="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-R restartBeforeTesting] [-C checkpointBeforeTesting] [-F skipForkchoice] [-W warmup_opcodes_path] [-K fork] [-E extra_client_flags]" >&2
+    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-R restartBeforeTesting] [-C checkpointBeforeTesting] [-M container_runtime(docker|podman)] [-F skipForkchoice] [-W warmup_opcodes_path] [-K fork] [-E extra_client_flags]" >&2
        exit 1 ;;
   esac
 done
+
+case "$CONTAINER_RUNTIME" in
+  docker|podman) ;;
+  *)
+    echo "[ERROR] Invalid container runtime '$CONTAINER_RUNTIME'. Expected docker or podman." >&2
+    exit 1
+    ;;
+esac
+export CONTAINER_RUNTIME
 
 if [ "$RESTART_BEFORE_TESTING" = true ] && [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
   echo "[ERROR] -R and -C are mutually exclusive. Choose either restart or checkpoint before testing." >&2
@@ -1184,6 +1286,10 @@ if [ "$RESTART_BEFORE_TESTING" = true ] && [ "$CHECKPOINT_BEFORE_TESTING" = true
 fi
 
 if [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+  if [ "$CONTAINER_RUNTIME" != "podman" ]; then
+    echo "[ERROR] checkpoint_before_testing requires -M podman. Docker checkpoint/restore cannot pass the CRIU options Nethermind needs." >&2
+    exit 1
+  fi
   export GASBENCH_CHECKPOINT_BEFORE_TESTING=true
   export DOTNET_USE_POLLING_FILE_WATCHER=true
 fi
