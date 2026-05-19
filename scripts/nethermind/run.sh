@@ -22,6 +22,17 @@ OVERRIDE_ENV_LINES=""
 OVERRIDE_ENTRYPOINT=""
 OVERRIDE_VOLUMES=""
 
+append_override_volume() {
+    local volume="$1"
+
+    if [ -n "$OVERRIDE_VOLUMES" ]; then
+        OVERRIDE_VOLUMES="${OVERRIDE_VOLUMES}
+${volume}"
+    else
+        OVERRIDE_VOLUMES="${volume}"
+    fi
+}
+
 if [ -n "${DIAG_WITH:-}" ]; then
     NEED_OVERRIDE=true
     DIAG_SCRIPT="$SCRIPT_DIR/diag-entrypoint.sh"
@@ -30,12 +41,32 @@ if [ -n "${DIAG_WITH:-}" ]; then
 
     OVERRIDE_ENV_LINES="      - DIAG_WITH=${DIAG_WITH}"
     OVERRIDE_ENTRYPOINT='    entrypoint: ["./diag-entrypoint.sh"]'
-    OVERRIDE_VOLUMES="    volumes:
-      - ${ABS_DIAG_SCRIPT}:/nethermind/diag-entrypoint.sh:ro"
+    append_override_volume "      - ${ABS_DIAG_SCRIPT}:/nethermind/diag-entrypoint.sh:ro"
     echo "[diag] Override: mount diag-entrypoint.sh + set DIAG_WITH=$DIAG_WITH"
 elif [ -n "${EXTRA_CLIENT_FLAGS:-}" ]; then
     NEED_OVERRIDE=true
     OVERRIDE_ENTRYPOINT='    entrypoint: ["/bin/sh", "-c", "exec ./nethermind \"$@\" ${EXTRA_CLIENT_FLAGS}", "--"]'
+fi
+
+if [ "${GASBENCH_CHECKPOINT_BEFORE_TESTING:-false}" = "true" ]; then
+    NEED_OVERRIDE=true
+    PATCHED_NLOG_CONFIG="$SCRIPT_DIR/NLog.config.checkpoint"
+    TMP_NLOG_CONFIG="${PATCHED_NLOG_CONFIG}.tmp"
+    TMP_NLOG_CONTAINER="gasbench-nlog-$$"
+
+    rm -f "$PATCHED_NLOG_CONFIG" "$TMP_NLOG_CONFIG"
+
+    if docker create --name "$TMP_NLOG_CONTAINER" "$EC_IMAGE_VERSION" >/dev/null &&
+        docker cp "$TMP_NLOG_CONTAINER:/nethermind/NLog.config" "$TMP_NLOG_CONFIG"; then
+        sed 's/autoReload="true"/autoReload="false"/' "$TMP_NLOG_CONFIG" > "$PATCHED_NLOG_CONFIG"
+        append_override_volume "      - ${PATCHED_NLOG_CONFIG}:/nethermind/NLog.config:ro"
+        echo "[checkpoint] Override: mount patched NLog.config with autoReload=false"
+    else
+        echo "[checkpoint] WARNING: failed to patch NLog.config; CRIU may fail on NLog FileSystemWatcher" >&2
+    fi
+
+    docker rm -f "$TMP_NLOG_CONTAINER" >/dev/null 2>&1 || true
+    rm -f "$TMP_NLOG_CONFIG"
 fi
 
 if [ -n "${EXTRA_CLIENT_FLAGS:-}" ]; then
@@ -58,7 +89,10 @@ if [ "$NEED_OVERRIDE" = true ]; then
             echo "$OVERRIDE_ENV_LINES"
         fi
         [ -n "$OVERRIDE_ENTRYPOINT" ] && echo "$OVERRIDE_ENTRYPOINT"
-        [ -n "$OVERRIDE_VOLUMES" ] && echo "$OVERRIDE_VOLUMES"
+        if [ -n "$OVERRIDE_VOLUMES" ]; then
+            echo "    volumes:"
+            echo "$OVERRIDE_VOLUMES"
+        fi
     } > "$SCRIPT_DIR/docker-compose.override.yml"
     echo "[override] Generated docker-compose.override.yml:"
     cat "$SCRIPT_DIR/docker-compose.override.yml"
