@@ -77,11 +77,16 @@ declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
 declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
+declare -A ACTIVE_OVERLAY_READY_LOWERS
+declare -A ACTIVE_OVERLAY_TEST_UPPERS
+declare -A ACTIVE_OVERLAY_TEST_WORKS
 declare -A ACTIVE_ZFS_DATASETS
 declare -A ACTIVE_ZFS_SNAPSHOTS
 declare -A ACTIVE_ZFS_MOUNTS
 declare -A ACTIVE_ZFS_CLIENTS
 declare -A RUNNING_CLIENTS
+declare -A CHECKPOINT_EXPORTS
+declare -A CHECKPOINT_READY
 
 abspath() {
   python3 - <<'PY' "$1"
@@ -369,7 +374,7 @@ drop_client_connections_for_checkpoint() {
   sleep "$wait_seconds"
 }
 
-restore_client_from_memory_checkpoint() {
+create_client_memory_checkpoint() {
   local client_base="$1"
   local checkpoint="$2"
   local container="gas-execution-client"
@@ -377,9 +382,6 @@ restore_client_from_memory_checkpoint() {
 
   echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
   rm -f "$checkpoint_export"
-  if [ "$CONTAINER_RUNTIME" = "docker" ]; then
-    docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
-  fi
 
   drop_client_connections_for_checkpoint "$container"
 
@@ -394,30 +396,110 @@ restore_client_from_memory_checkpoint() {
       return 1
     fi
     podman_cmd rm -f "$container" >/dev/null 2>&1 || true
-  elif ! docker_cmd checkpoint create --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint"; then
+  else
+    echo "[ERROR] Unsupported checkpoint runtime: $CONTAINER_RUNTIME" >&2
+    return 1
+  fi
+
+  CHECKPOINT_EXPORTS["$client_base"]="$checkpoint_export"
+  CHECKPOINT_READY["$client_base"]=1
+}
+
+restore_client_from_memory_checkpoint() {
+  local client_base="$1"
+  local checkpoint="$2"
+  local container="gas-execution-client"
+  local checkpoint_export="${CHECKPOINT_EXPORTS[$client_base]:-}"
+
+  if [ -z "$checkpoint_export" ] || [ ! -f "$checkpoint_export" ]; then
+    echo "[ERROR] Missing ready memory checkpoint export for $client_base" >&2
+    return 1
+  fi
+
+  echo "[INFO] Restoring $client_base from memory checkpoint $checkpoint"
+
+  podman_cmd rm -f "$container" >/dev/null 2>&1 || true
+
+  if ! rollback_overlay_to_ready_state "$client_base"; then
+    echo "[ERROR] Failed to roll back overlay data directory for $client_base" >&2
+    return 1
+  fi
+
+  local restore_args=(
+    --import "$checkpoint_export"
+    --tcp-established
+    --ignore-volumes
+    --file-locks
+  )
+  if podman_cmd container restore --help | grep -q -- '--tcp-close'; then
+    restore_args+=(--tcp-close)
+  fi
+  if ! podman_cmd container restore \
+    "${restore_args[@]}"; then
+    echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
+    collect_criu_logs "$container" "$checkpoint" "restore"
+    return 1
+  fi
+
+  if declare -f wait_for_rpc >/dev/null 2>&1; then
+    wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
+  else
+    sleep 5
+  fi
+}
+
+ensure_client_ready_checkpoint() {
+  local client_base="$1"
+  local run="$2"
+  local checkpoint="gasbench_${client_base}_${run}_ready"
+
+  if [ "${CHECKPOINT_READY[$client_base]:-0}" = "1" ]; then
+    return 0
+  fi
+
+  if ! create_client_memory_checkpoint "$client_base" "$checkpoint"; then
+    echo "[ERROR] Failed to create ready checkpoint for $client_base" >&2
+    return 1
+  fi
+
+  sync || true
+
+  if ! prepare_overlay_ready_state_for_checkpoint "$client_base"; then
+    echo "[ERROR] Failed to prepare ready overlay rollback for $client_base" >&2
+    return 1
+  fi
+}
+
+cleanup_checkpoint_for_client() {
+  local client_base="$1"
+  local checkpoint_export="${CHECKPOINT_EXPORTS[$client_base]:-}"
+
+  if [ -n "$checkpoint_export" ]; then
+    rm -f "$checkpoint_export" >/dev/null 2>&1 || true
+  fi
+
+  unset CHECKPOINT_EXPORTS["$client_base"]
+  unset CHECKPOINT_READY["$client_base"]
+}
+
+create_legacy_docker_checkpoint_restore() {
+  local client_base="$1"
+  local checkpoint="$2"
+  local container="gas-execution-client"
+
+  echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
+  docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
+
+  drop_client_connections_for_checkpoint "$container"
+
+  if ! docker_cmd checkpoint create --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint"; then
     echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
     collect_criu_logs "$container" "$checkpoint" "dump"
     return 1
   fi
 
   echo "[INFO] Restoring $client_base from memory checkpoint $checkpoint"
-  if [ "$CONTAINER_RUNTIME" = "podman" ]; then
-    local restore_args=(
-      --import "$checkpoint_export"
-      --tcp-established
-      --ignore-volumes
-      --file-locks
-    )
-    if podman_cmd container restore --help | grep -q -- '--tcp-close'; then
-      restore_args+=(--tcp-close)
-    fi
-    if ! podman_cmd container restore \
-      "${restore_args[@]}"; then
-      echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
-      collect_criu_logs "$container" "$checkpoint" "restore"
-      return 1
-    fi
-  elif ! docker_cmd start --checkpoint-dir "$CHECKPOINT_DIR" --checkpoint "$checkpoint" "$container"; then
+  if ! docker_cmd start --checkpoint-dir "$CHECKPOINT_DIR" --checkpoint "$checkpoint" "$container"; then
     echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
     collect_criu_logs "$container" "$checkpoint" "restore"
     return 1
@@ -429,11 +511,7 @@ restore_client_from_memory_checkpoint() {
     sleep 5
   fi
 
-  if [ "$CONTAINER_RUNTIME" = "docker" ]; then
-    docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
-  else
-    rm -f "$checkpoint_export"
-  fi
+  docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
 }
 
 is_measured_file() {
@@ -763,12 +841,120 @@ prepare_overlay_for_client() {
   echo "$merged"
 }
 
+move_mount() {
+  local from="$1"
+  local to="$2"
+
+  if mount --move "$from" "$to" 2>/dev/null; then
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo mount --move "$from" "$to" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
+prepare_overlay_ready_state_for_checkpoint() {
+  local client="$1"
+
+  if [ "$SNAPSHOT_BACKEND" != "overlay" ]; then
+    return 0
+  fi
+
+  local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
+  local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
+
+  if [ -z "$merged" ] || [ -z "$root" ]; then
+    echo "[ERROR] Overlay checkpoint rollback requested but overlay paths are missing for $client" >&2
+    return 1
+  fi
+
+  local ready_lower="$root/ready-lower"
+  local test_upper="$root/test-upper"
+  local test_work="$root/test-work"
+
+  rm -rf "$ready_lower" "$test_upper" "$test_work"
+  mkdir -p "$ready_lower" "$test_upper" "$test_work"
+
+  if ! is_mounted "$merged"; then
+    echo "[ERROR] Overlay data directory is not mounted at $merged" >&2
+    return 1
+  fi
+
+  echo "[INFO] Moving prepared overlay for $client to ready lower layer: $ready_lower"
+  if ! move_mount "$merged" "$ready_lower"; then
+    echo "[ERROR] Failed to move prepared overlay mount from $merged to $ready_lower" >&2
+    return 1
+  fi
+
+  mkdir -p "$merged"
+  if ! overlay_mount_with_fallback "$client-checkpoint" "$(abspath "$ready_lower")" "$(abspath "$test_upper")" "$(abspath "$test_work")" "$merged"; then
+    echo "[ERROR] Failed to mount checkpoint test overlay for $client" >&2
+    return 1
+  fi
+
+  ACTIVE_OVERLAY_READY_LOWERS["$client"]="$ready_lower"
+  ACTIVE_OVERLAY_TEST_UPPERS["$client"]="$test_upper"
+  ACTIVE_OVERLAY_TEST_WORKS["$client"]="$test_work"
+}
+
+rollback_overlay_to_ready_state() {
+  local client="$1"
+
+  if [ "$SNAPSHOT_BACKEND" != "overlay" ]; then
+    return 0
+  fi
+
+  local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
+  local ready_lower="${ACTIVE_OVERLAY_READY_LOWERS[$client]}"
+  local test_upper="${ACTIVE_OVERLAY_TEST_UPPERS[$client]}"
+  local test_work="${ACTIVE_OVERLAY_TEST_WORKS[$client]}"
+
+  if [ -z "$merged" ] || [ -z "$ready_lower" ] || [ -z "$test_upper" ] || [ -z "$test_work" ]; then
+    echo "[ERROR] Checkpoint overlay rollback paths are missing for $client" >&2
+    return 1
+  fi
+
+  sync || true
+  drop_host_caches || true
+
+  if is_mounted "$merged"; then
+    if ! umount "$merged" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo umount "$merged" >/dev/null 2>&1 || sudo umount "$merged"
+      fi
+    fi
+  fi
+
+  if is_mounted "$merged"; then
+    if ! umount -l "$merged" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo umount -l "$merged" >/dev/null 2>&1 || sudo umount -l "$merged"
+      fi
+    fi
+  fi
+
+  if is_mounted "$merged"; then
+    echo "[ERROR] Could not unmount checkpoint test overlay at $merged" >&2
+    return 1
+  fi
+
+  rm -rf "$test_upper" "$test_work"
+  mkdir -p "$test_upper" "$test_work" "$merged"
+
+  echo "[INFO] Remounting clean checkpoint test overlay for $client"
+  overlay_mount_with_fallback "$client-checkpoint" "$(abspath "$ready_lower")" "$(abspath "$test_upper")" "$(abspath "$test_work")" "$merged"
+}
+
 cleanup_overlay_for_client() {
   local client="$1"
   local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
   local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
   local work="${ACTIVE_OVERLAY_WORKS[$client]}"
   local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
+  local ready_lower="${ACTIVE_OVERLAY_READY_LOWERS[$client]}"
   local base_dir
 
   local unmounted=true
@@ -812,6 +998,18 @@ cleanup_overlay_for_client() {
   fi
 
   if [ "$unmounted" = true ]; then
+    if [ -n "$ready_lower" ] && is_mounted "$ready_lower"; then
+      umount "$ready_lower" 2>/dev/null || true
+      if is_mounted "$ready_lower" && command -v sudo >/dev/null 2>&1; then
+        sudo -n umount "$ready_lower" >/dev/null 2>&1 || true
+      fi
+      if is_mounted "$ready_lower"; then
+        umount -l "$ready_lower" 2>/dev/null || true
+        if is_mounted "$ready_lower" && command -v sudo >/dev/null 2>&1; then
+          sudo -n umount -l "$ready_lower" >/dev/null 2>&1 || true
+        fi
+      fi
+    fi
     [ -n "$merged" ] && rm -rf "$merged"
     [ -n "$upper" ] && rm -rf "$upper"
     [ -n "$work" ] && rm -rf "$work"
@@ -835,6 +1033,9 @@ cleanup_overlay_for_client() {
   unset ACTIVE_OVERLAY_WORKS["$client"]
   unset ACTIVE_OVERLAY_ROOTS["$client"]
   unset ACTIVE_OVERLAY_CLIENTS["$client"]
+  unset ACTIVE_OVERLAY_READY_LOWERS["$client"]
+  unset ACTIVE_OVERLAY_TEST_UPPERS["$client"]
+  unset ACTIVE_OVERLAY_TEST_WORKS["$client"]
 }
 
 cleanup_all_overlays() {
@@ -1183,12 +1384,14 @@ cleanup_on_exit() {
       for client_base in "${!RUNNING_CLIENTS[@]}"; do
         dump_client_logs "$client_base"
         docker_compose_down_for_client "$client_base"
+        cleanup_checkpoint_for_client "$client_base"
       done
     elif [ "${#CLIENT_ARRAY[@]}" -gt 0 ]; then
       for client_spec in "${CLIENT_ARRAY[@]}"; do
         client_base=$(echo "$client_spec" | cut -d '_' -f 1)
         dump_client_logs "$client_base"
         docker_compose_down_for_client "$client_base"
+        cleanup_checkpoint_for_client "$client_base"
       done
     fi
   fi
@@ -1577,6 +1780,7 @@ for run in $(seq 1 $RUNS); do
 
     TOTAL_TESTS=${#TEST_FILES[@]}
     TEST_NUM=0
+    checkpoint_current_scenario_restored=false
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
       normalized_path="${test_file//\\/\/}"
@@ -1644,6 +1848,21 @@ for run in $(seq 1 $RUNS); do
       PROGRESS="[${TEST_NUM}/${TOTAL_TESTS}]"
 
       if [ "$measured" = false ]; then
+        if [ "$CHECKPOINT_BEFORE_TESTING" = true ] && [[ "$normalized_path" == */setup/* ]]; then
+          if ! ensure_client_ready_checkpoint "$client_base" "$run"; then
+            echo "[WARN] Skipping $filename for $client - ready checkpoint setup failed" >&2
+            continue
+          fi
+
+          checkpoint_name="gasbench_${client_base}_${run}_ready_restore_${TEST_NUM}"
+          if ! restore_client_from_memory_checkpoint "$client_base" "$checkpoint_name"; then
+            echo "[WARN] Skipping $filename for $client - checkpoint restore failed" >&2
+            checkpoint_current_scenario_restored=false
+            continue
+          fi
+          checkpoint_current_scenario_restored=true
+        fi
+
         echo "[INFO] ${PROGRESS} [SETUP] $filename"
         python3 run_kute.py --output "$PREPARATION_RESULTS_DIR" --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --rerunSyncing --run $run$SKIP_FORKCHOICE_OPT
         echo ""
@@ -1658,10 +1877,18 @@ for run in $(seq 1 $RUNS); do
       fi
 
       if [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
-        checkpoint_name="gasbench_${client_base}_${run}_${TEST_NUM}"
-        if ! restore_client_from_memory_checkpoint "$client_base" "$checkpoint_name"; then
-          echo "[WARN] Skipping $filename for $client - checkpoint restore failed" >&2
+        if ! ensure_client_ready_checkpoint "$client_base" "$run"; then
+          echo "[WARN] Skipping $filename for $client - ready checkpoint setup failed" >&2
           continue
+        fi
+
+        if [ "$checkpoint_current_scenario_restored" != true ]; then
+          checkpoint_name="gasbench_${client_base}_${run}_ready_restore_${TEST_NUM}"
+          if ! restore_client_from_memory_checkpoint "$client_base" "$checkpoint_name"; then
+            echo "[WARN] Skipping $filename for $client - checkpoint restore failed" >&2
+            checkpoint_current_scenario_restored=false
+            continue
+          fi
         fi
       fi
 
@@ -1757,6 +1984,7 @@ for run in $(seq 1 $RUNS); do
       drop_host_caches || true
       echo "[INFO] ${PROGRESS} [TESTING] $filename"
       python3 run_kute.py --output results --testsPath "$test_file" --jwtPath /tmp/jwtsecret --client $client --run $run$SKIP_FORKCHOICE_OPT
+      checkpoint_current_scenario_restored=false
 
       # Capture debug_traceBlockByNumber for the testing payload (unigramTracer) when enabled
       if [ "${TRACE_BLOCKS:-false}" = true ]; then
@@ -1823,6 +2051,7 @@ EOF
     ts=$(date +%s)
     dump_client_logs "$client_base"
     docker_compose_down_for_client "$client_base"
+    cleanup_checkpoint_for_client "$client_base"
 
     rm -rf "scripts/$client_base/execution-data"
 
