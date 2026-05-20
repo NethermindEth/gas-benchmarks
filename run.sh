@@ -22,6 +22,8 @@ PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
 CHECKPOINT_BEFORE_TESTING=false
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-/tmp/gasbench-checkpoints}"
+CHECKPOINT_TMPFS="${CHECKPOINT_TMPFS:-true}"
+CHECKPOINT_TMPFS_SIZE="${CHECKPOINT_TMPFS_SIZE:-4G}"
 CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
 SKIP_FORKCHOICE=false
 FORK_NAME="osaka"
@@ -373,10 +375,47 @@ drop_client_connections_for_checkpoint() {
   sleep "$wait_seconds"
 }
 
+setup_checkpoint_tmpfs() {
+  if [ "$CHECKPOINT_TMPFS" != "true" ]; then
+    mkdir -p "$CHECKPOINT_DIR"
+    return 0
+  fi
+
+  if is_mounted "$CHECKPOINT_DIR"; then
+    echo "[INFO] Checkpoint tmpfs already mounted at $CHECKPOINT_DIR"
+    return 0
+  fi
+
+  mkdir -p "$CHECKPOINT_DIR"
+  echo "[INFO] Mounting tmpfs ($CHECKPOINT_TMPFS_SIZE) at $CHECKPOINT_DIR for checkpoint storage"
+  if command -v sudo >/dev/null 2>&1; then
+    sudo mount -t tmpfs -o size="$CHECKPOINT_TMPFS_SIZE" tmpfs "$CHECKPOINT_DIR"
+  else
+    mount -t tmpfs -o size="$CHECKPOINT_TMPFS_SIZE" tmpfs "$CHECKPOINT_DIR"
+  fi
+}
+
+teardown_checkpoint_tmpfs() {
+  if [ "$CHECKPOINT_TMPFS" != "true" ]; then
+    return 0
+  fi
+  if is_mounted "$CHECKPOINT_DIR"; then
+    echo "[INFO] Unmounting checkpoint tmpfs at $CHECKPOINT_DIR"
+    if command -v sudo >/dev/null 2>&1; then
+      sudo umount "$CHECKPOINT_DIR" 2>/dev/null || sudo umount -l "$CHECKPOINT_DIR" 2>/dev/null || true
+    else
+      umount "$CHECKPOINT_DIR" 2>/dev/null || umount -l "$CHECKPOINT_DIR" 2>/dev/null || true
+    fi
+  fi
+}
+
 create_client_memory_checkpoint() {
   local client_base="$1"
   local checkpoint="$2"
   local container="gas-execution-client"
+
+  setup_checkpoint_tmpfs
+
   local checkpoint_export="$CHECKPOINT_DIR/${checkpoint}.tar"
 
   echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
@@ -385,16 +424,30 @@ create_client_memory_checkpoint() {
   drop_client_connections_for_checkpoint "$container"
 
   if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    local checkpoint_args=(
+      --export "$checkpoint_export"
+      --tcp-established
+      --file-locks
+      --keep
+      --print-stats
+    )
     if ! podman_cmd container checkpoint \
-      --export "$checkpoint_export" \
-      --tcp-established \
-      --file-locks \
+      "${checkpoint_args[@]}" \
       "$container"; then
       echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
       collect_criu_logs "$container" "$checkpoint" "dump"
       return 1
     fi
     podman_cmd rm -f "$container" >/dev/null 2>&1 || true
+
+    if [ -f "$checkpoint_export" ]; then
+      local tar_size
+      tar_size=$(stat -c%s "$checkpoint_export" 2>/dev/null || stat -f%z "$checkpoint_export" 2>/dev/null || echo "unknown")
+      echo "[INFO] Checkpoint export size: $tar_size bytes ($(echo "$tar_size" | awk '{printf "%.1f MB", $1/1048576}'))"
+      if [ "$CHECKPOINT_TMPFS" = "true" ]; then
+        echo "[INFO] Checkpoint stored on tmpfs (RAM-backed)"
+      fi
+    fi
   else
     echo "[ERROR] Unsupported checkpoint runtime: $CONTAINER_RUNTIME" >&2
     return 1
@@ -428,6 +481,7 @@ restore_client_from_memory_checkpoint() {
     --tcp-established
     --ignore-volumes
     --file-locks
+    --print-stats
   )
   if podman_cmd container restore --help | grep -q -- '--tcp-close'; then
     restore_args+=(--tcp-close)
@@ -437,12 +491,6 @@ restore_client_from_memory_checkpoint() {
     echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
     collect_criu_logs "$container" "$checkpoint" "restore"
     return 1
-  fi
-
-  if declare -f wait_for_rpc >/dev/null 2>&1; then
-    wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
-  else
-    sleep 5
   fi
 }
 
@@ -480,6 +528,8 @@ cleanup_checkpoint_for_client() {
 
   unset CHECKPOINT_EXPORTS["$client_base"]
   unset CHECKPOINT_READY["$client_base"]
+
+  teardown_checkpoint_tmpfs
 }
 
 create_legacy_docker_checkpoint_restore() {
