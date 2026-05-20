@@ -23,7 +23,7 @@ RESTART_BEFORE_TESTING=false
 CHECKPOINT_BEFORE_TESTING=false
 CHECKPOINT_DIR="${CHECKPOINT_DIR:-/tmp/gasbench-checkpoints}"
 CHECKPOINT_TMPFS="${CHECKPOINT_TMPFS:-true}"
-CHECKPOINT_TMPFS_SIZE="${CHECKPOINT_TMPFS_SIZE:-4G}"
+CHECKPOINT_TMPFS_SIZE="${CHECKPOINT_TMPFS_SIZE:-16G}"
 CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
 SKIP_FORKCHOICE=false
 FORK_NAME="osaka"
@@ -421,8 +421,6 @@ create_client_memory_checkpoint() {
   echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
   rm -f "$checkpoint_export"
 
-  drop_client_connections_for_checkpoint "$container"
-
   if [ "$CONTAINER_RUNTIME" = "podman" ]; then
     local checkpoint_args=(
       --export "$checkpoint_export"
@@ -438,8 +436,6 @@ create_client_memory_checkpoint() {
       collect_criu_logs "$container" "$checkpoint" "dump"
       return 1
     fi
-    podman_cmd rm -f "$container" >/dev/null 2>&1 || true
-
     if [ -f "$checkpoint_export" ]; then
       local tar_size
       tar_size=$(stat -c%s "$checkpoint_export" 2>/dev/null || stat -f%z "$checkpoint_export" 2>/dev/null || echo "unknown")
