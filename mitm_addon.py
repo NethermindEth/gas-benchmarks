@@ -936,10 +936,11 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
 
         next_stage = _STAGE.get(grp, 0) + 1
         phase_lc = (phase or "").lower()
-        is_first_setup_for_scenario = (
-            phase_lc == "setup"
-            and next_stage == 1
+        is_first_block_for_scenario = (
+            next_stage == 1
+            and phase_lc in ("setup", "testing")
             and file_base not in {"global-setup", "global-nophase"}
+            and scenario not in _SEEN_SCENARIOS
         )
 
         latest_block = _rpc("eth_getBlockByNumber", ["latest", False])
@@ -949,11 +950,11 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
 
         parent_block: Dict[str, Any] = latest_block
         parent_source = "latest"
-        use_preinserted_separator = is_first_setup_for_scenario and _SEPARATOR_READY_FOR_NEXT_SETUP
+        use_preinserted_separator = is_first_block_for_scenario and _SEPARATOR_READY_FOR_NEXT_SETUP
         if use_preinserted_separator:
             globals()["_SEPARATOR_READY_FOR_NEXT_SETUP"] = False
             _log(f"using pre-inserted separator parent for scenario={scenario}")
-        elif is_first_setup_for_scenario:
+        elif is_first_block_for_scenario:
             hook_block_hash = _read_hook_block_for_first_setup()
             if hook_block_hash:
                 hook_block = _rpc("eth_getBlockByHash", [hook_block_hash, False])
@@ -979,7 +980,7 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
             parent_ts = int(time.time())
 
         inline_separator_pair: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None
-        if is_first_setup_for_scenario and parent_source == "hook":
+        if is_first_block_for_scenario and parent_source == "hook":
             separator_ts = _next_lifecycle_timestamp(parent_ts)
             separator_attrs = {
                 "timestamp": hex(separator_ts),
@@ -1167,17 +1168,17 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
                     except Exception as e:
                         _log(f"early migrate testing→setup failed: {e}")
 
-        if ph == "setup" and idx == 1:
+        if idx == 1 and ph in ("setup", "testing"):
             pending_separator_pair = globals().get("_PENDING_SEPARATOR_PAIR")
             if isinstance(pending_separator_pair, tuple) and len(pending_separator_pair) == 2:
                 sep_np_body, sep_fcu_body = pending_separator_pair
-                _dump_pair_to_phase("setup", scenario, sep_np_body, sep_fcu_body)
+                _dump_pair_to_phase(ph, scenario, sep_np_body, sep_fcu_body)
                 globals()["_PENDING_SEPARATOR_PAIR"] = None
-                _log(f"setup prepended pre-inserted hook separator for scenario={scenario}")
+                _log(f"{ph} prepended pre-inserted hook separator for scenario={scenario}")
             elif inline_separator_pair is not None:
                 sep_np_body, sep_fcu_body = inline_separator_pair
-                _dump_pair_to_phase("setup", scenario, sep_np_body, sep_fcu_body)
-                _log(f"setup prepended inline hook separator for scenario={scenario}")
+                _dump_pair_to_phase(ph, scenario, sep_np_body, sep_fcu_body)
+                _log(f"{ph} prepended inline hook separator for scenario={scenario}")
 
         _dump_pair_to_phase(ph, scenario, np_body, fcu_body)
         _log(f"produced block group={grp} stage={idx}")
