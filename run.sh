@@ -20,6 +20,11 @@ ZFS_RUNTIME_DATASET_ROOT="gasbench-runtime"
 ZFS_SNAPSHOT_PREFIX="gasbench_tmp"
 PREPARATION_RESULTS_DIR="prepresults"
 RESTART_BEFORE_TESTING=false
+CHECKPOINT_BEFORE_TESTING=false
+CHECKPOINT_DIR="${CHECKPOINT_DIR:-/tmp/gasbench-checkpoints}"
+CHECKPOINT_TMPFS="${CHECKPOINT_TMPFS:-true}"
+CHECKPOINT_TMPFS_SIZE="${CHECKPOINT_TMPFS_SIZE:-16G}"
+CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
 SKIP_FORKCHOICE=false
 FORK_NAME="osaka"
 SKIP_EMPTY=true
@@ -53,16 +58,36 @@ if ! declare -f compose_detect >/dev/null 2>&1; then
   compose_detect() { command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; }
 fi
 
+podman_cmd() {
+  if [ "${PODMAN_ROOTFUL:-true}" = "true" ] && command -v sudo >/dev/null 2>&1; then
+    sudo podman "$@"
+  else
+    podman "$@"
+  fi
+}
+
+runtime_cmd() {
+  case "$CONTAINER_RUNTIME" in
+    docker) docker_cmd "$@" ;;
+    podman) podman_cmd "$@" ;;
+    *) echo "[ERROR] Invalid container runtime '$CONTAINER_RUNTIME'. Expected docker or podman." >&2; return 1 ;;
+  esac
+}
+
 declare -A ACTIVE_OVERLAY_MOUNTS
 declare -A ACTIVE_OVERLAY_UPPERS
 declare -A ACTIVE_OVERLAY_WORKS
 declare -A ACTIVE_OVERLAY_ROOTS
 declare -A ACTIVE_OVERLAY_CLIENTS
+declare -A ACTIVE_OVERLAY_LOWERS
+declare -A ACTIVE_OVERLAY_READY_UPPERS
 declare -A ACTIVE_ZFS_DATASETS
 declare -A ACTIVE_ZFS_SNAPSHOTS
 declare -A ACTIVE_ZFS_MOUNTS
 declare -A ACTIVE_ZFS_CLIENTS
 declare -A RUNNING_CLIENTS
+declare -A CHECKPOINT_EXPORTS
+declare -A CHECKPOINT_READY
 
 abspath() {
   python3 - <<'PY' "$1"
@@ -213,6 +238,326 @@ restart_client_containers() {
   else
     sleep 5
   fi
+}
+
+prepare_client_checkpointing() {
+  local client_base="$1"
+  local container="gas-execution-client"
+
+  case "$CONTAINER_RUNTIME" in
+    docker)
+      echo "[ERROR] Docker checkpoint/restore is not supported for Nethermind checkpoint mode because Docker cannot pass the CRIU --tcp-established and --file-locks options. Use -M podman." >&2
+      return 1
+      ;;
+    podman)
+      if ! command -v podman >/dev/null 2>&1; then
+        echo "[ERROR] Podman is not available. Install Podman or disable checkpoint_before_testing." >&2
+        return 1
+      fi
+      if ! podman_cmd container checkpoint --help >/dev/null 2>&1; then
+        echo "[ERROR] Podman checkpoint support is not available. Install CRIU and use rootful Podman." >&2
+        return 1
+      fi
+      if ! podman_cmd container checkpoint --help | grep -q -- '--file-locks' ||
+         ! podman_cmd container checkpoint --help | grep -q -- '--tcp-established'; then
+        echo "[ERROR] Podman checkpoint command does not expose --file-locks and --tcp-established. Upgrade Podman." >&2
+        return 1
+      fi
+      if ! podman_cmd container restore --help | grep -q -- '--file-locks' ||
+         ! podman_cmd container restore --help | grep -q -- '--tcp-established'; then
+        echo "[ERROR] Podman restore command does not expose --file-locks and --tcp-established. Upgrade Podman." >&2
+        return 1
+      fi
+      ;;
+    *)
+      echo "[ERROR] Invalid container runtime '$CONTAINER_RUNTIME'. Expected docker or podman." >&2
+      return 1
+      ;;
+  esac
+
+  if ! runtime_cmd inspect "$container" >/dev/null 2>&1; then
+    echo "[ERROR] Container $container not found for $client_base checkpointing" >&2
+    return 1
+  fi
+
+  mkdir -p "$CHECKPOINT_DIR"
+
+  if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+    # Checkpoint/restore owns the container lifecycle. Disable restart policy so
+    # Docker does not race the explicit restore when checkpoint creation stops it.
+    docker_cmd update --restart=no "$container" >/dev/null 2>&1 || true
+  fi
+}
+
+collect_criu_logs() {
+  local container="$1"
+  local checkpoint="$2"
+  local phase="$3"
+  local log_dir="logs/criu/${checkpoint}-${phase}"
+  local container_id=""
+  local find_cmd=(find)
+
+  mkdir -p "$log_dir"
+
+  if command -v sudo >/dev/null 2>&1; then
+    find_cmd=(sudo find)
+  fi
+
+  container_id="$(runtime_cmd inspect -f '{{.Id}}' "$container" 2>/dev/null || true)"
+
+  {
+    echo "container=$container"
+    echo "container_id=$container_id"
+    echo "checkpoint=$checkpoint"
+    echo "phase=$phase"
+    echo "checkpoint_dir=$CHECKPOINT_DIR"
+    date -Is
+  } > "$log_dir/context.txt"
+
+  if [ -n "$container_id" ]; then
+    for runtime_dir in \
+      "/run/containerd/io.containerd.runtime.v2.task/moby/$container_id" \
+      "/run/docker/runtime-runc/moby/$container_id" \
+      "/var/run/docker/runtime-runc/moby/$container_id" \
+      "/var/lib/containers/storage/overlay-containers/$container_id/userdata"; do
+      if [ -d "$runtime_dir" ]; then
+        "${find_cmd[@]}" "$runtime_dir" -maxdepth 2 -type f \( -name 'criu*.log' -o -name '*dump*.log' -o -name '*restore*.log' \) \
+          -exec cp -f {} "$log_dir/" \; 2>/dev/null || true
+      fi
+    done
+  fi
+
+  if [ -d "$CHECKPOINT_DIR" ]; then
+    "${find_cmd[@]}" "$CHECKPOINT_DIR" -maxdepth 4 -type f \( -name 'criu*.log' -o -name '*dump*.log' -o -name '*restore*.log' \) \
+      -exec cp -f {} "$log_dir/" \; 2>/dev/null || true
+  fi
+
+  chmod -R a+r "$log_dir" 2>/dev/null || true
+  if command -v sudo >/dev/null 2>&1; then
+    sudo chmod -R a+r "$log_dir" 2>/dev/null || true
+  fi
+
+  if ls "$log_dir"/*.log >/dev/null 2>&1; then
+    echo "[INFO] CRIU logs copied to $log_dir"
+    for log_file in "$log_dir"/*.log; do
+      echo "[INFO] Last lines from $log_file"
+      tail -n 80 "$log_file" || true
+    done
+  else
+    echo "[WARN] No CRIU logs found for $container checkpoint $checkpoint ($phase)" >&2
+  fi
+}
+
+drop_client_connections_for_checkpoint() {
+  local container="$1"
+  local pid=""
+  local nsenter_cmd=(nsenter)
+  local wait_seconds="${CHECKPOINT_TCP_DRAIN_SECONDS:-2}"
+
+  pid="$(runtime_cmd inspect -f '{{.State.Pid}}' "$container" 2>/dev/null || true)"
+  if [ -z "$pid" ] || [ "$pid" = "0" ]; then
+    echo "[WARN] Could not resolve PID for $container; skipping connection drain before checkpoint" >&2
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    nsenter_cmd=(sudo nsenter)
+  fi
+
+  if ! command -v nsenter >/dev/null 2>&1 || ! command -v ss >/dev/null 2>&1; then
+    echo "[WARN] nsenter or ss not available; skipping connection drain before checkpoint" >&2
+    return 0
+  fi
+
+  echo "[INFO] Draining non-listening TCP/UDP sockets in $container before checkpoint"
+  "${nsenter_cmd[@]}" -t "$pid" -n ss -K state all exclude listening >/dev/null 2>&1 || true
+  "${nsenter_cmd[@]}" -t "$pid" -n ss -K -u state all >/dev/null 2>&1 || true
+  sleep "$wait_seconds"
+}
+
+setup_checkpoint_tmpfs() {
+  if [ "$CHECKPOINT_TMPFS" != "true" ]; then
+    mkdir -p "$CHECKPOINT_DIR"
+    return 0
+  fi
+
+  if is_mounted "$CHECKPOINT_DIR"; then
+    echo "[INFO] Checkpoint tmpfs already mounted at $CHECKPOINT_DIR"
+    return 0
+  fi
+
+  mkdir -p "$CHECKPOINT_DIR"
+  echo "[INFO] Mounting tmpfs ($CHECKPOINT_TMPFS_SIZE) at $CHECKPOINT_DIR for checkpoint storage"
+  if command -v sudo >/dev/null 2>&1; then
+    sudo mount -t tmpfs -o size="$CHECKPOINT_TMPFS_SIZE" tmpfs "$CHECKPOINT_DIR"
+  else
+    mount -t tmpfs -o size="$CHECKPOINT_TMPFS_SIZE" tmpfs "$CHECKPOINT_DIR"
+  fi
+}
+
+teardown_checkpoint_tmpfs() {
+  if [ "$CHECKPOINT_TMPFS" != "true" ]; then
+    return 0
+  fi
+  if is_mounted "$CHECKPOINT_DIR"; then
+    echo "[INFO] Unmounting checkpoint tmpfs at $CHECKPOINT_DIR"
+    if command -v sudo >/dev/null 2>&1; then
+      sudo umount "$CHECKPOINT_DIR" 2>/dev/null || sudo umount -l "$CHECKPOINT_DIR" 2>/dev/null || true
+    else
+      umount "$CHECKPOINT_DIR" 2>/dev/null || umount -l "$CHECKPOINT_DIR" 2>/dev/null || true
+    fi
+  fi
+}
+
+create_client_memory_checkpoint() {
+  local client_base="$1"
+  local checkpoint="$2"
+  local container="gas-execution-client"
+
+  setup_checkpoint_tmpfs
+
+  local checkpoint_export="$CHECKPOINT_DIR/${checkpoint}.tar"
+
+  echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
+  rm -f "$checkpoint_export"
+
+  if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    local checkpoint_args=(
+      --export "$checkpoint_export"
+      --tcp-established
+      --file-locks
+      --keep
+      --print-stats
+    )
+    if ! podman_cmd container checkpoint \
+      "${checkpoint_args[@]}" \
+      "$container"; then
+      echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
+      collect_criu_logs "$container" "$checkpoint" "dump"
+      return 1
+    fi
+    if [ -f "$checkpoint_export" ]; then
+      local tar_size
+      tar_size=$(stat -c%s "$checkpoint_export" 2>/dev/null || stat -f%z "$checkpoint_export" 2>/dev/null || echo "unknown")
+      echo "[INFO] Checkpoint export size: $tar_size bytes ($(echo "$tar_size" | awk '{printf "%.1f MB", $1/1048576}'))"
+      if [ "$CHECKPOINT_TMPFS" = "true" ]; then
+        echo "[INFO] Checkpoint stored on tmpfs (RAM-backed)"
+      fi
+    fi
+  else
+    echo "[ERROR] Unsupported checkpoint runtime: $CONTAINER_RUNTIME" >&2
+    return 1
+  fi
+
+  CHECKPOINT_EXPORTS["$client_base"]="$checkpoint_export"
+}
+
+restore_client_from_memory_checkpoint() {
+  local client_base="$1"
+  local checkpoint="$2"
+  local container="gas-execution-client"
+  local checkpoint_export="${CHECKPOINT_EXPORTS[$client_base]:-}"
+
+  if [ -z "$checkpoint_export" ] || [ ! -f "$checkpoint_export" ]; then
+    echo "[ERROR] Missing ready memory checkpoint export for $client_base" >&2
+    return 1
+  fi
+
+  echo "[INFO] Restoring $client_base from memory checkpoint $checkpoint"
+
+  podman_cmd rm -f "$container" >/dev/null 2>&1 || true
+
+  if ! rollback_overlay_to_ready_state "$client_base"; then
+    echo "[ERROR] Failed to roll back overlay data directory for $client_base" >&2
+    return 1
+  fi
+
+  local restore_args=(
+    --import "$checkpoint_export"
+    --tcp-established
+    --ignore-volumes
+    --file-locks
+    --print-stats
+  )
+  if podman_cmd container restore --help | grep -q -- '--tcp-close'; then
+    restore_args+=(--tcp-close)
+  fi
+  if ! podman_cmd container restore \
+    "${restore_args[@]}"; then
+    echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
+    collect_criu_logs "$container" "$checkpoint" "restore"
+    return 1
+  fi
+}
+
+ensure_client_ready_checkpoint() {
+  local client_base="$1"
+  local run="$2"
+  local checkpoint="gasbench_${client_base}_${run}_ready"
+
+  if [ "${CHECKPOINT_READY[$client_base]:-0}" = "1" ]; then
+    return 0
+  fi
+
+  if ! create_client_memory_checkpoint "$client_base" "$checkpoint"; then
+    echo "[ERROR] Failed to create ready checkpoint for $client_base" >&2
+    return 1
+  fi
+
+  sync || true
+
+  if ! snapshot_overlay_upper_for_checkpoint "$client_base"; then
+    echo "[ERROR] Failed to snapshot overlay upper for $client_base" >&2
+    return 1
+  fi
+
+  CHECKPOINT_READY["$client_base"]=1
+}
+
+cleanup_checkpoint_for_client() {
+  local client_base="$1"
+  local checkpoint_export="${CHECKPOINT_EXPORTS[$client_base]:-}"
+
+  if [ -n "$checkpoint_export" ]; then
+    rm -f "$checkpoint_export" >/dev/null 2>&1 || true
+  fi
+
+  unset CHECKPOINT_EXPORTS["$client_base"]
+  unset CHECKPOINT_READY["$client_base"]
+
+  teardown_checkpoint_tmpfs
+}
+
+create_legacy_docker_checkpoint_restore() {
+  local client_base="$1"
+  local checkpoint="$2"
+  local container="gas-execution-client"
+
+  echo "[INFO] Creating memory checkpoint $checkpoint for $client_base"
+  docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
+
+  drop_client_connections_for_checkpoint "$container"
+
+  if ! docker_cmd checkpoint create --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint"; then
+    echo "[ERROR] Failed to create checkpoint $checkpoint for $container" >&2
+    collect_criu_logs "$container" "$checkpoint" "dump"
+    return 1
+  fi
+
+  echo "[INFO] Restoring $client_base from memory checkpoint $checkpoint"
+  if ! docker_cmd start --checkpoint-dir "$CHECKPOINT_DIR" --checkpoint "$checkpoint" "$container"; then
+    echo "[ERROR] Failed to restore $container from checkpoint $checkpoint" >&2
+    collect_criu_logs "$container" "$checkpoint" "restore"
+    return 1
+  fi
+
+  if declare -f wait_for_rpc >/dev/null 2>&1; then
+    wait_for_rpc "http://127.0.0.1:8545" "$RPC_READINESS_MAX_ATTEMPTS"
+  else
+    sleep 5
+  fi
+
+  docker_cmd checkpoint rm --checkpoint-dir "$CHECKPOINT_DIR" "$container" "$checkpoint" >/dev/null 2>&1 || true
 }
 
 is_measured_file() {
@@ -537,9 +882,149 @@ prepare_overlay_for_client() {
   ACTIVE_OVERLAY_UPPERS["$client"]="$upper"
   ACTIVE_OVERLAY_WORKS["$client"]="$work"
   ACTIVE_OVERLAY_ROOTS["$client"]="$overlay_root"
+  ACTIVE_OVERLAY_LOWERS["$client"]="$abs_lower"
   ACTIVE_OVERLAY_CLIENTS["$client"]=1
 
-  echo "$merged"
+  echo "${merged}|${abs_lower}"
+}
+
+register_overlay_for_client() {
+  local client="$1"
+  local output="$2"
+  local merged="${output%%|*}"
+  local lower="${output#*|}"
+  local root
+
+  root=$(dirname "$merged")
+
+  ACTIVE_OVERLAY_MOUNTS["$client"]="$merged"
+  ACTIVE_OVERLAY_UPPERS["$client"]="$root/upper"
+  ACTIVE_OVERLAY_WORKS["$client"]="$root/work"
+  ACTIVE_OVERLAY_ROOTS["$client"]="$root"
+  ACTIVE_OVERLAY_LOWERS["$client"]="$lower"
+  ACTIVE_OVERLAY_CLIENTS["$client"]=1
+}
+
+move_mount() {
+  local from="$1"
+  local to="$2"
+  local error_log
+
+  error_log=$(mktemp)
+
+  if mount --move "$from" "$to" 2>"$error_log"; then
+    rm -f "$error_log"
+    return 0
+  fi
+
+  echo "[WARN] mount --move $from $to failed:" >&2
+  sed 's/^/[WARN]   /' "$error_log" >&2 || true
+
+  if command -v findmnt >/dev/null 2>&1; then
+    echo "[INFO] Source mount details:" >&2
+    findmnt -T "$from" >&2 || true
+    echo "[INFO] Target path mount details:" >&2
+    findmnt -T "$to" >&2 || true
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo mount --move "$from" "$to" >"$error_log" 2>&1; then
+    rm -f "$error_log"
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    echo "[WARN] sudo mount --move $from $to failed:" >&2
+    sed 's/^/[WARN]   /' "$error_log" >&2 || true
+  fi
+
+  rm -f "$error_log"
+  return 1
+}
+
+snapshot_overlay_upper_for_checkpoint() {
+  local client="$1"
+
+  if [ "$SNAPSHOT_BACKEND" != "overlay" ]; then
+    return 0
+  fi
+
+  local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
+  local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
+
+  if [ -z "$upper" ] || [ -z "$root" ]; then
+    echo "[ERROR] Overlay paths missing for $client checkpoint snapshot" >&2
+    return 1
+  fi
+
+  local ready_upper="$root/ready-upper-snapshot"
+  rm -rf "$ready_upper"
+
+  echo "[INFO] Snapshotting overlay upper for $client: $upper -> $ready_upper"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$upper/" "$ready_upper/"
+  else
+    cp -a "$upper" "$ready_upper"
+  fi
+
+  ACTIVE_OVERLAY_READY_UPPERS["$client"]="$ready_upper"
+}
+
+rollback_overlay_to_ready_state() {
+  local client="$1"
+
+  if [ "$SNAPSHOT_BACKEND" != "overlay" ]; then
+    return 0
+  fi
+
+  local merged="${ACTIVE_OVERLAY_MOUNTS[$client]}"
+  local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
+  local work="${ACTIVE_OVERLAY_WORKS[$client]}"
+  local abs_lower="${ACTIVE_OVERLAY_LOWERS[$client]}"
+  local ready_upper="${ACTIVE_OVERLAY_READY_UPPERS[$client]}"
+
+  if [ -z "$merged" ] || [ -z "$upper" ] || [ -z "$work" ] || [ -z "$abs_lower" ] || [ -z "$ready_upper" ]; then
+    echo "[ERROR] Checkpoint overlay rollback paths missing for $client" >&2
+    return 1
+  fi
+
+  sync || true
+  drop_host_caches || true
+
+  if is_mounted "$merged"; then
+    if ! umount "$merged" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo umount "$merged" >/dev/null 2>&1 || sudo umount "$merged"
+      fi
+    fi
+  fi
+  if is_mounted "$merged"; then
+    if ! umount -l "$merged" 2>/dev/null; then
+      if command -v sudo >/dev/null 2>&1; then
+        sudo umount -l "$merged" >/dev/null 2>&1 || sudo umount -l "$merged"
+      fi
+    fi
+  fi
+  if is_mounted "$merged"; then
+    echo "[ERROR] Could not unmount overlay at $merged for rollback" >&2
+    return 1
+  fi
+
+  echo "[INFO] Restoring overlay upper from snapshot for $client"
+  rm -rf "$upper" "$work"
+  mkdir -p "$work"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "$ready_upper/" "$upper/"
+  else
+    cp -a "$ready_upper" "$upper"
+  fi
+  mkdir -p "$merged"
+
+  local abs_upper abs_work
+  abs_upper="$(abspath "$upper")"
+  abs_work="$(abspath "$work")"
+
+  echo "[INFO] Remounting overlay for $client"
+  overlay_mount_with_fallback "$client" "$abs_lower" "$abs_upper" "$abs_work" "$merged"
 }
 
 cleanup_overlay_for_client() {
@@ -548,6 +1033,7 @@ cleanup_overlay_for_client() {
   local upper="${ACTIVE_OVERLAY_UPPERS[$client]}"
   local work="${ACTIVE_OVERLAY_WORKS[$client]}"
   local root="${ACTIVE_OVERLAY_ROOTS[$client]}"
+  local ready_upper="${ACTIVE_OVERLAY_READY_UPPERS[$client]}"
   local base_dir
 
   local unmounted=true
@@ -594,6 +1080,7 @@ cleanup_overlay_for_client() {
     [ -n "$merged" ] && rm -rf "$merged"
     [ -n "$upper" ] && rm -rf "$upper"
     [ -n "$work" ] && rm -rf "$work"
+    [ -n "$ready_upper" ] && rm -rf "$ready_upper"
     [ -n "$root" ] && rm -rf "$root"
   fi
 
@@ -614,6 +1101,8 @@ cleanup_overlay_for_client() {
   unset ACTIVE_OVERLAY_WORKS["$client"]
   unset ACTIVE_OVERLAY_ROOTS["$client"]
   unset ACTIVE_OVERLAY_CLIENTS["$client"]
+  unset ACTIVE_OVERLAY_LOWERS["$client"]
+  unset ACTIVE_OVERLAY_READY_UPPERS["$client"]
 }
 
 cleanup_all_overlays() {
@@ -908,6 +1397,12 @@ docker_compose_down_for_client() {
   local client_base="$1"
   local compose_dir="scripts/$client_base"
 
+  if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    podman_cmd rm -f gas-execution-client gas-execution-client-sync >/dev/null 2>&1 || true
+    podman_cmd network rm gas-network >/dev/null 2>&1 || true
+    return
+  fi
+
   if ! compose_detect >/dev/null 2>&1; then
     return
   fi
@@ -924,21 +1419,24 @@ docker_compose_down_for_client() {
 
 docker_container_exists() {
   local name="$1"
-  docker_cmd ps -a --format '{{.Names}}' | grep -Fxq "$name"
+  runtime_cmd ps -a --format '{{.Names}}' | grep -Fxq "$name"
 }
 
 dump_client_logs() {
   local client_base="$1"
-  if [ -z "$(resolve_docker_bin)" ]; then
+  if [ "$CONTAINER_RUNTIME" = "docker" ] && [ -z "$(resolve_docker_bin)" ]; then
+    return
+  fi
+  if [ "$CONTAINER_RUNTIME" = "podman" ] && ! command -v podman >/dev/null 2>&1; then
     return
   fi
   mkdir -p logs
   local ts=$(date +%s)
   if docker_container_exists "gas-execution-client"; then
-    docker_cmd logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
+    runtime_cmd logs gas-execution-client &> "logs/docker_${client_base}_${ts}.log" || true
   fi
   if docker_container_exists "gas-execution-client-sync"; then
-    docker_cmd logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
+    runtime_cmd logs gas-execution-client-sync &> "logs/docker_sync_${client_base}_${ts}.log" || true
   fi
 }
 
@@ -946,18 +1444,21 @@ cleanup_on_exit() {
   local exit_status=$?
   trap - EXIT INT TERM
 
-  if [ -n "$(resolve_docker_bin)" ]; then
+  if { [ "$CONTAINER_RUNTIME" = "docker" ] && [ -n "$(resolve_docker_bin)" ]; } ||
+     { [ "$CONTAINER_RUNTIME" = "podman" ] && command -v podman >/dev/null 2>&1; }; then
     local client_base client_spec
     if [ "${#RUNNING_CLIENTS[@]}" -gt 0 ]; then
       for client_base in "${!RUNNING_CLIENTS[@]}"; do
         dump_client_logs "$client_base"
         docker_compose_down_for_client "$client_base"
+        cleanup_checkpoint_for_client "$client_base"
       done
     elif [ "${#CLIENT_ARRAY[@]}" -gt 0 ]; then
       for client_spec in "${CLIENT_ARRAY[@]}"; do
         client_base=$(echo "$client_spec" | cut -d '_' -f 1)
         dump_client_logs "$client_base"
         docker_compose_down_for_client "$client_base"
+        cleanup_checkpoint_for_client "$client_base"
       done
     fi
   fi
@@ -978,6 +1479,10 @@ cleanup_on_exit() {
         cleanup_all_stale_overlay_mounts
       fi
     fi
+  fi
+
+  if [ "$CHECKPOINT_BEFORE_TESTING" = true ] && [ -n "$CHECKPOINT_DIR" ]; then
+    rm -rf "$CHECKPOINT_DIR" 2>/dev/null || true
   fi
 
   exit $exit_status
@@ -1009,7 +1514,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RFW:K:E:" opt; do
+while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RCFM:W:K:E:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -1024,14 +1529,39 @@ while getopts "T:t:g:c:r:i:o:f:n:B:O:S:RFW:K:E:" opt; do
     O) OVERLAY_TMP_ROOT="$OPTARG"; USE_SNAPSHOT_BACKEND=true ;;
     S) SNAPSHOT_BACKEND="${OPTARG,,}"; USE_SNAPSHOT_BACKEND=true ;;
     R) RESTART_BEFORE_TESTING=true;;
+    C) CHECKPOINT_BEFORE_TESTING=true;;
     F) SKIP_FORKCHOICE=true;;
+    M) CONTAINER_RUNTIME="${OPTARG,,}" ;;
     W) WARMUP_OPCODES_PATH="$OPTARG" ;;
     K) FORK_NAME="${OPTARG,,}" ;;
     E) EXTRA_CLIENT_FLAGS="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-F skipForkchoice] [-W warmup_opcodes_path] [-K fork] [-E extra_client_flags]" >&2
+    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-R restartBeforeTesting] [-C checkpointBeforeTesting] [-M container_runtime(docker|podman)] [-F skipForkchoice] [-W warmup_opcodes_path] [-K fork] [-E extra_client_flags]" >&2
        exit 1 ;;
   esac
 done
+
+case "$CONTAINER_RUNTIME" in
+  docker|podman) ;;
+  *)
+    echo "[ERROR] Invalid container runtime '$CONTAINER_RUNTIME'. Expected docker or podman." >&2
+    exit 1
+    ;;
+esac
+export CONTAINER_RUNTIME
+
+if [ "$RESTART_BEFORE_TESTING" = true ] && [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+  echo "[ERROR] -R and -C are mutually exclusive. Choose either restart or checkpoint before testing." >&2
+  exit 1
+fi
+
+if [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+  if [ "$CONTAINER_RUNTIME" != "podman" ]; then
+    echo "[ERROR] checkpoint_before_testing requires -M podman. Docker checkpoint/restore cannot pass the CRIU options Nethermind needs." >&2
+    exit 1
+  fi
+  export GASBENCH_CHECKPOINT_BEFORE_TESTING=true
+  export DOTNET_USE_POLLING_FILE_WATCHER=true
+fi
 
 if [ "$USE_SNAPSHOT_BACKEND" = true ]; then
   case "$SNAPSHOT_BACKEND" in
@@ -1240,6 +1770,8 @@ for run in $(seq 1 $RUNS); do
           cleanup_overlay_for_client "$client_base"
           continue
         }
+        register_overlay_for_client "$client_base" "$data_dir"
+        data_dir="${data_dir%%|*}"
       fi
     else
       data_dir=$(abspath "scripts/$client_base/execution-data")
@@ -1298,6 +1830,13 @@ for run in $(seq 1 $RUNS); do
       sleep 5
     fi
 
+    if [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+      prepare_client_checkpointing "$client_base" || {
+        echo "[ERROR] Skipping $client - checkpoint setup failed" >&2
+        continue
+      }
+    fi
+
     # Reth mainnet snapshot is 2 blocks behind; bootstrap via FCU + p2p
     if [ "$client_base" = "reth" ] && [ "$NETWORK" = "mainnet" ]; then
       bootstrap_fcu "0x6aadde478df4f485c2cf91cd48038f918ef6ff97b19eec9cdd0cd1ca45476eb4" 60 30
@@ -1310,6 +1849,7 @@ for run in $(seq 1 $RUNS); do
 
     TOTAL_TESTS=${#TEST_FILES[@]}
     TEST_NUM=0
+
     for i in "${!TEST_FILES[@]}"; do
       test_file="${TEST_FILES[$i]}"
       normalized_path="${test_file//\\/\/}"
@@ -1386,6 +1926,19 @@ for run in $(seq 1 $RUNS); do
       if [ "$RESTART_BEFORE_TESTING" = true ]; then
         if ! restart_client_containers "$client_base"; then
           echo "[WARN] Skipping $filename for $client - restart failed" >&2
+          continue
+        fi
+      fi
+
+      if [ "$CHECKPOINT_BEFORE_TESTING" = true ]; then
+        if ! ensure_client_ready_checkpoint "$client_base" "$run"; then
+          echo "[WARN] Skipping $filename for $client - ready checkpoint setup failed" >&2
+          continue
+        fi
+
+        checkpoint_name="gasbench_${client_base}_${run}_ready_restore_${TEST_NUM}"
+        if ! restore_client_from_memory_checkpoint "$client_base" "$checkpoint_name"; then
+          echo "[WARN] Skipping $filename for $client - checkpoint restore failed" >&2
           continue
         fi
       fi
@@ -1548,6 +2101,7 @@ EOF
     ts=$(date +%s)
     dump_client_logs "$client_base"
     docker_compose_down_for_client "$client_base"
+    cleanup_checkpoint_for_client "$client_base"
 
     rm -rf "scripts/$client_base/execution-data"
 
