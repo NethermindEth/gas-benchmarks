@@ -89,8 +89,10 @@ jobs:
           ALL_TARGETS=(
             "repricings_compute/mainnet|mainnet"
             "repricings_compute/perf-devnet-3|perf-devnet-3"
+            "repricings_compute/jochemnet|jochemnet"
             "repricings_stateful/mainnet|mainnet"
             "repricings_stateful/perf-devnet-3|perf-devnet-3"
+            "repricings_stateful/jochemnet|jochemnet"
           )
 
           if [ -z "$tests_input" ] || [ "$tests_input" = "all" ]; then
@@ -409,9 +411,19 @@ jobs:
           CUSTOM_OVERLAY="${{ inputs.overlay_root }}"
           GENESIS_FILE="${{ inputs.genesis_file }}"
 
+          # Auto-resolve genesis from fork+network when caller didn't override.
+          # Convention: scripts/genesisfiles/nethermind/generator-<fork>-<network>.json
+          if [[ -z "$GENESIS_FILE" ]]; then
+            CANDIDATE="generator-${FORK_NAME}-${NETWORK}.json"
+            if [[ -f "scripts/genesisfiles/nethermind/$CANDIDATE" ]]; then
+              GENESIS_FILE="$CANDIDATE"
+              echo "Auto-resolved genesis from fork+network: $GENESIS_FILE"
+            fi
+          fi
+
           GENESIS_ARGS=()
           if [[ -n "$GENESIS_FILE" ]]; then
-            echo "Using custom genesis: $GENESIS_FILE"
+            echo "Using genesis: $GENESIS_FILE"
             GENESIS_ARGS=(-g "$GENESIS_FILE")
           fi
 
