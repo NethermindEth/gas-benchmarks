@@ -49,6 +49,12 @@ on:
         description: 'Convert dotTrace sampling/tracing snapshots to XML on Windows'
         type: boolean
         default: false
+      diagnostics_dotmemory_timer:
+        description: 'dotMemory snapshot interval (e.g. 00:00:30 = every 30s). Empty = timeline only, no snapshots.'
+        default: ''
+      diagnostics_dotmemory_max_snapshots:
+        description: 'Max number of dotMemory snapshots to keep. Empty = no limit.'
+        default: ''
       runner:
         description: 'Runner labels as JSON array. Default = ["stateful-generator"].'
         default: ''
@@ -160,6 +166,8 @@ jobs:
       DIAG_WITH: ${{ inputs.diagnostics_mode != 'none' && inputs.diagnostics_mode || '' }}
       CFG_DIAGNOSTICS_MODE: ${{ inputs.diagnostics_mode || 'none' }}
       CFG_DIAGNOSTICS_STOP_TIMEOUT: ${{ inputs.diagnostics_stop_timeout || '180' }}
+      DIAG_DOTMEMORY_TIMER: ${{ inputs.diagnostics_dotmemory_timer || '' }}
+      DIAG_DOTMEMORY_MAX_SNAPSHOTS: ${{ inputs.diagnostics_dotmemory_max_snapshots || '' }}
       NETHERMIND_DIAG_DIR: ${{ format('repricing-diagnostics/nethermind-{0}', github.run_id) }}
       CFG_NETHERMIND_EXTRA_FLAGS: ${{ inputs.nethermind_extra_flags || '' }}
 
