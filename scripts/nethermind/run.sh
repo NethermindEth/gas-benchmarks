@@ -29,6 +29,15 @@ if [ -n "${DIAG_WITH:-}" ]; then
     ABS_DIAG_SCRIPT="$(cd "$(dirname "$DIAG_SCRIPT")" && pwd)/$(basename "$DIAG_SCRIPT")"
 
     OVERRIDE_ENV_LINES="      - DIAG_WITH=${DIAG_WITH}"
+    # Forward optional dotMemory snapshot-trigger env vars (consumed by diag-entrypoint.sh)
+    if [ -n "${DIAG_DOTMEMORY_TIMER:-}" ]; then
+        OVERRIDE_ENV_LINES="${OVERRIDE_ENV_LINES}
+      - DIAG_DOTMEMORY_TIMER=${DIAG_DOTMEMORY_TIMER}"
+    fi
+    if [ -n "${DIAG_DOTMEMORY_MAX_SNAPSHOTS:-}" ]; then
+        OVERRIDE_ENV_LINES="${OVERRIDE_ENV_LINES}
+      - DIAG_DOTMEMORY_MAX_SNAPSHOTS=${DIAG_DOTMEMORY_MAX_SNAPSHOTS}"
+    fi
     OVERRIDE_ENTRYPOINT='    entrypoint: ["./diag-entrypoint.sh"]'
     OVERRIDE_VOLUMES="    volumes:
       - ${ABS_DIAG_SCRIPT}:/nethermind/diag-entrypoint.sh:ro"
