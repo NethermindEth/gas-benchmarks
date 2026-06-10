@@ -61,6 +61,9 @@ on:
       nethermind_extra_flags:
         description: "Extra Nethermind CLI flags appended to the container command (e.g. '--Pruning.Mode=None --FlatDb.Enabled=true')"
         default: ''
+      chain:
+        description: "Embedded client config to run (e.g. 'mainnet'): starts Nethermind with --config <chain> and skips genesis selection entirely"
+        default: ''
 
 permissions:
   contents: read
@@ -427,6 +430,16 @@ jobs:
             GENESIS_ARGS=(-g "$GENESIS_FILE")
           fi
 
+          # Embedded config mode: --config <chain> on the client, no genesis at all.
+          CHAIN_INPUT="${{ inputs.chain }}"
+          CHAIN_ARGS=()
+          if [[ -n "$CHAIN_INPUT" ]]; then
+            echo "Using embedded client config: $CHAIN_INPUT (genesis selection skipped)"
+            GENESIS_FILE=""
+            GENESIS_ARGS=()
+            CHAIN_ARGS=(-H "$CHAIN_INPUT")
+          fi
+
           EXTRA_FLAGS_ARGS=()
           if [[ -n "$CFG_NETHERMIND_EXTRA_FLAGS" ]]; then
             echo "Extra Nethermind flags: $CFG_NETHERMIND_EXTRA_FLAGS"
@@ -449,6 +462,7 @@ jobs:
               -f "$EFFECTIVE_FILTER" \
               -K "$FORK_NAME" \
               "${GENESIS_ARGS[@]}" \
+              "${CHAIN_ARGS[@]}" \
               "${WARMUP_ARGS[@]}" \
               "${EXTRA_FLAGS_ARGS[@]}"
           else
@@ -463,6 +477,7 @@ jobs:
               -o "$WARMUP_COUNT" \
               -f "$EFFECTIVE_FILTER" \
               -K "$FORK_NAME" \
+              "${CHAIN_ARGS[@]}" \
               "${WARMUP_ARGS[@]}" \
               "${EXTRA_FLAGS_ARGS[@]}"
           fi
