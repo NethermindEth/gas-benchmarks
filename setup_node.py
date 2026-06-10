@@ -43,11 +43,13 @@ CLIENT_METADATA: Dict[str, Dict[str, Any]] = {
                 "env": "NETHERMIND_CONFIG_FLAG",
                 "custom": "--config=none",
                 "network": lambda net: f"--config={resolve_nethermind_config_network(net)}",
+                "chain": lambda chain: f"--config={chain}",
             },
             {
                 "env": "NETHERMIND_GENESIS_FLAG",
                 "custom": "--Init.ChainSpecPath=/tmp/chainspec/chainspec.json",
                 "network": "",
+                "chain": "",
             },
         ],
         "extra_env": {},
@@ -187,7 +189,18 @@ def get_metadata(client: str) -> Dict[str, Any]:
     return CLIENT_METADATA.get(client, DEFAULT_CLIENT_METADATA)
 
 
-def evaluate_flag(flag_entry: Dict[str, Any], network: Optional[str], use_custom_genesis: bool) -> str:
+def evaluate_flag(
+    flag_entry: Dict[str, Any],
+    network: Optional[str],
+    use_custom_genesis: bool,
+    chain: Optional[str] = None,
+) -> str:
+    if chain:
+        value = flag_entry.get("chain", "")
+        if callable(value):
+            return value(chain)
+        return value or ""
+
     key = "custom" if use_custom_genesis else "network"
     value = flag_entry.get(key, "")
     if callable(value):
@@ -228,6 +241,7 @@ def set_env(
     metadata: Dict[str, Any],
     volume_name: Optional[str],
     extra_flags: Optional[str] = None,
+    chain: Optional[str] = None,
 ):
     run_path_obj = Path(run_path).resolve()
     if not run_path_obj.is_dir():
@@ -254,7 +268,7 @@ def set_env(
         env_key = flag_entry.get("env")
         if not env_key:
             continue
-        evaluated = evaluate_flag(flag_entry, network, use_custom_genesis)
+        evaluated = evaluate_flag(flag_entry, network, use_custom_genesis, chain)
         if evaluated:
             env_map[env_key] = evaluated
 
@@ -307,6 +321,11 @@ def main():
     )
     parser.add_argument("--genesisPath", type=str, help="Custom genesis file path")
     parser.add_argument("--network", type=str, help="Named network to resolve default genesis")
+    parser.add_argument(
+        "--chain",
+        type=str,
+        help="Embedded client config to run (e.g. mainnet); skips genesis selection entirely",
+    )
     parser.add_argument(
         "--dataDir",
         type=str,
@@ -364,9 +383,14 @@ def main():
     run_path = str((REPO_ROOT / "scripts" / client_without_tag).resolve())
 
     metadata = get_metadata(client_without_tag)
-    use_custom_genesis = bool(genesis_path)
+    chain = args.chain
+    use_custom_genesis = bool(genesis_path) and not chain
 
-    if network and use_custom_genesis:
+    if chain:
+        print(f"[info] Using embedded client config: {chain} (genesis selection skipped)")
+        if genesis_path:
+            print("[warn] --genesisPath ignored because --chain was provided")
+    elif network and use_custom_genesis:
         print(f"[info] Using custom genesis with network context: {network}")
 
     genesis_target: Path = metadata["target"]
@@ -390,6 +414,7 @@ def main():
         metadata=metadata,
         volume_name=volume_name,
         extra_flags=args.extraFlags,
+        chain=chain,
     )
 
     # Start client

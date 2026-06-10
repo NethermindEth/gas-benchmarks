@@ -27,6 +27,7 @@ RPC_READINESS_MAX_ATTEMPTS="${RPC_READINESS_MAX_ATTEMPTS:-50}"
 OVERLAY_MOUNT_EXTRA_OPTS="${OVERLAY_MOUNT_EXTRA_OPTS:-}"
 OVERLAY_USE_VOLATILE="${OVERLAY_USE_VOLATILE:-false}"
 EXTRA_CLIENT_FLAGS=""
+CHAIN=""
 
 # Prevent inherited low API pin from older docker clients/wrappers.
 unset DOCKER_API_VERSION
@@ -1009,7 +1010,7 @@ update_execution_time() {
   echo "Updated execution time for $client: $timestamp"
 }
 
-while getopts "T:t:g:c:r:i:o:f:n:B:O:S:R:FW:K:E:" opt; do
+while getopts "T:t:g:c:r:i:o:f:n:B:O:S:R:FW:K:E:H:" opt; do
   case $opt in
     T) TEST_PATHS_JSON="$OPTARG" ;;
     t) LEGACY_TEST_PATH="$OPTARG" ;;
@@ -1028,7 +1029,8 @@ while getopts "T:t:g:c:r:i:o:f:n:B:O:S:R:FW:K:E:" opt; do
     W) WARMUP_OPCODES_PATH="$OPTARG" ;;
     K) FORK_NAME="${OPTARG,,}" ;;
     E) EXTRA_CLIENT_FLAGS="$OPTARG" ;;
-    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-F skipForkchoice] [-W warmup_opcodes_path] [-K fork] [-E extra_client_flags]" >&2
+    H) CHAIN="$OPTARG" ;;
+    *) echo "Usage: $0 [-t test_path] [-c clients] [-r runs] [-i images] [-o opcodesWarmupCount] [-f filter] [-n network] [-B snapshot_root] [-O runtime_root] [-S snapshot_backend(overlay|zfs)] [-F skipForkchoice] [-W warmup_opcodes_path] [-K fork] [-E extra_client_flags] [-H chain]" >&2
        exit 1 ;;
   esac
 done
@@ -1283,6 +1285,9 @@ for run in $(seq 1 $RUNS); do
       setup_cmd+=(--genesisPath "$genesis_path")
     fi
     setup_cmd+=(--volumeName "$volume_name")
+    if [ -n "$CHAIN" ]; then
+      setup_cmd+=(--chain "$CHAIN")
+    fi
     if [ -n "$EXTRA_CLIENT_FLAGS" ]; then
       setup_cmd+=(--extraFlags "$EXTRA_CLIENT_FLAGS")
     fi
