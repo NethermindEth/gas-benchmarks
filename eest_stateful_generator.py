@@ -1611,6 +1611,11 @@ def main():
             if mode_key not in mode_map:
                 raise SystemExit(f"Unsupported --eest-mode value: {args.eest_mode!r}")
             eest_mode = mode_map[mode_key]
+        eoa_start = "103835740027347086785932208981225044632444623980288738833340492242305523519088"
+        # Global-setup test that deploys the CREATE2 receiver contracts.
+        # It runs in a dedicated execute remote invocation before the
+        # benchmarks and is excluded from the main run.
+        deployment_test_filter = "test_deploy_existing_contracts"
         uv_cmd = [
             "uv", "run", "execute", "remote", "-v",
             f"--fork={args.fork}",
@@ -1627,7 +1632,7 @@ def main():
             uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
         uv_cmd += [
             "--tx-wait-timeout", "5",
-            "--eoa-start", "103835740027347086785932208981225044632444623980288738833340492242305523519088",
+            "--eoa-start", eoa_start,
             "--skip-cleanup",
             args.test_path,
             "--",
@@ -1636,7 +1641,9 @@ def main():
         if eest_mode:
             uv_cmd.extend(["-m", eest_mode])
         if args.parameter_filter:
-            uv_cmd.extend(["-k", args.parameter_filter])
+            uv_cmd.extend(["-k", f"({args.parameter_filter}) and not {deployment_test_filter}"])
+        else:
+            uv_cmd.extend(["-k", f"not {deployment_test_filter}"])
         stubs_source = args.stubs_file or os.environ.get("EEST_ADDRESS_STUBS")
         if stubs_source:
             stubs_path = Path(stubs_source).expanduser()
@@ -1653,6 +1660,60 @@ def main():
         else:
             run_env["PYTHONPATH"] = src_path
         run_env["EEST_POLL_INTERVAL"] = "0.01"
+
+        if reuse_globals:
+            print("[INFO] Reusing existing global setup payloads; skipping contract deployment run.")
+        else:
+            deploy_cmd = [
+                "uv", "run", "execute", "remote", "-v",
+                f"--fork={args.fork}",
+                f"--rpc-seed-key={args.rpc_seed_key}",
+                f"--rpc-chain-id={chain_id}",
+                f"--rpc-endpoint={tests_rpc}",
+                "--gas-benchmark-values=1",
+                "--tx-wait-timeout", "5",
+                # Offset the EOA pool so deployment senders never collide
+                # with the senders the benchmark run derives.
+                "--eoa-start", str(int(eoa_start) + 10_000_000),
+                "--skip-cleanup",
+                args.test_path,
+                "--",
+                "-n", "1",
+                "-k", deployment_test_filter,
+            ]
+            print("[INFO] Deploying CREATE2 receiver contracts (global setup).")
+            print("\n[RUN] " + " ".join(deploy_cmd))
+            deploy_proc = subprocess.Popen(deploy_cmd, cwd=str(repo_dir), env=run_env)
+            deploy_tokens: set[str] = set()
+            try:
+                while True:
+                    payload = _read_json_file(pause_file) if pause_file.exists() else None
+                    if payload:
+                        token = str(payload.get("token") or "")
+                        if token and token not in deploy_tokens:
+                            scenario_name = payload.get("scenario") or "unknown"
+                            try:
+                                resume_file.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            _write_resume_signal(resume_file, token, scenario_name)
+                            if not _wait_for_resume_consumed(resume_file, timeout=300.0):
+                                print(f"[WARN] Resume signal not consumed for {scenario_name} (token={token}) within timeout")
+                            deploy_tokens.add(token)
+                            continue
+                    if deploy_proc.poll() is not None:
+                        break
+                    time.sleep(0.1)
+            finally:
+                if deploy_proc.poll() is None:
+                    deploy_proc.terminate()
+                    try:
+                        deploy_proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        deploy_proc.kill()
+                        deploy_proc.wait()
+            if deploy_proc.returncode != 0:
+                raise subprocess.CalledProcessError(deploy_proc.returncode, deploy_cmd)
 
         testing_dir = payloads_dir / "testing"
         seen_testing_files: set[str] = set()
