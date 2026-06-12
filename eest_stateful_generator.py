@@ -1670,7 +1670,7 @@ def main():
                 f"--rpc-seed-key={args.rpc_seed_key}",
                 f"--rpc-chain-id={chain_id}",
                 f"--rpc-endpoint={tests_rpc}",
-                "--gas-benchmark-values=1",
+                "--gas-benchmark-values=1000",
                 "--tx-wait-timeout", "5",
                 # Offset the EOA pool so deployment senders never collide
                 # with the senders the benchmark run derives.
