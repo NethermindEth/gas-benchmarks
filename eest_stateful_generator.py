@@ -1683,6 +1683,7 @@ def main():
             ]
             print("[INFO] Deploying CREATE2 receiver contracts (global setup).")
             print("\n[RUN] " + " ".join(deploy_cmd))
+            deploy_start = time.monotonic()
             deploy_proc = subprocess.Popen(deploy_cmd, cwd=str(repo_dir), env=run_env)
             deploy_tokens: set[str] = set()
             try:
@@ -1712,6 +1713,11 @@ def main():
                     except subprocess.TimeoutExpired:
                         deploy_proc.kill()
                         deploy_proc.wait()
+            deploy_elapsed = time.monotonic() - deploy_start
+            print(
+                f"[INFO] Contract deployment finished in {deploy_elapsed:.1f}s "
+                f"({deploy_elapsed / 60:.1f} min)."
+            )
             if deploy_proc.returncode != 0:
                 raise subprocess.CalledProcessError(deploy_proc.returncode, deploy_cmd)
 
