@@ -555,6 +555,50 @@ def _has_phase_payloads(payload_dir: Path) -> bool:
             continue
     return False
 
+def _promote_deploy_setup_to_global(payloads_dir: Path, setup_global_file: Path, deploy_filter: str) -> bool:
+    """Relocate the predeployment scenario's setup payload into the top-level
+    setup-global-test.txt base file.
+
+    The deploy run (`test_deploy_existing_contracts`) builds its blocks on the
+    funding head and writes them under payloads/setup/<deploy>.txt (its
+    pre-funding + CREATE2 deployments). We move those lines into
+    setup-global-test.txt so they are replayed — like gas-bump.txt and
+    funding.txt — ahead of every test, and we drop the deploy's per-scenario
+    files so it is never treated as a normal measured test. The benchmark
+    scenarios then anchor on this base head (see the addon's
+    _read_hook_block_for_first_setup) and build on top of the predeployments.
+
+    Returns True if a deploy payload was promoted.
+    """
+    setup_dir = payloads_dir / "setup"
+    testing_dir = payloads_dir / "testing"
+    deploy_setup_files = (
+        sorted(f for f in setup_dir.glob("*.txt") if deploy_filter in f.stem)
+        if setup_dir.is_dir() else []
+    )
+    if not deploy_setup_files:
+        print(f"[WARN] No deploy setup payload found to promote (filter={deploy_filter!r}); "
+              "predeployments will not be in the base.")
+        return False
+    lines: list = []
+    for f in deploy_setup_files:
+        for ln in f.read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                lines.append(ln)
+    setup_global_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"[INFO] Promoted deploy predeployments -> {setup_global_file.name} "
+          f"({len(deploy_setup_files)} file(s), {len(lines)} lines).")
+    removed = 0
+    for d in (setup_dir, testing_dir):
+        if d.is_dir():
+            for f in list(d.glob("*.txt")):
+                if deploy_filter in f.stem:
+                    f.unlink(missing_ok=True)
+                    removed += 1
+    print(f"[INFO] Removed {removed} per-scenario deploy payload file(s) "
+          "(predeployments now live in the base).")
+    return True
+
 def is_mounted(mount_point: Path) -> bool:
     try:
         with open("/proc/mounts", "r") as f:
@@ -1720,6 +1764,10 @@ def main():
             )
             if deploy_proc.returncode != 0:
                 raise subprocess.CalledProcessError(deploy_proc.returncode, deploy_cmd)
+            # Move the predeployment payloads into the setup-global-test.txt base
+            # so they replay ahead of every test (like gas-bump/funding) and the
+            # benchmark scenarios build on top of them, rather than being a test.
+            _promote_deploy_setup_to_global(payloads_dir, setup_global_file, deployment_test_filter)
 
         testing_dir = payloads_dir / "testing"
         seen_testing_files: set[str] = set()

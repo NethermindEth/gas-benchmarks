@@ -753,18 +753,8 @@ def _next_lifecycle_timestamp(parent_ts: int) -> int:
     return _LIFECYCLE_TS
 
 
-def _read_hook_block_for_first_setup() -> Optional[str]:
-    # Preferred hook source: dedicated empty hook anchor.
-    hook_anchor = (HOOK_BLOCK or "").strip()
-    if hook_anchor:
-        return hook_anchor
-
-    # Fallback: funding anchor passed by generator config.
-    funding_anchor = (FINALIZED_BLOCK or "").strip()
-    if funding_anchor:
-        return funding_anchor
-
-    # Legacy fallback: derive hook from setup-global-test payload file.
+def _last_block_hash_in_setup_global() -> Optional[str]:
+    """Return the hash of the last newPayload block in setup-global-test.txt."""
     if not _SETUP_GLOBAL_FILE.exists():
         return None
     try:
@@ -790,6 +780,27 @@ def _read_hook_block_for_first_setup() -> Optional[str]:
     except Exception as e:
         _log(f"hook block read failed from {_SETUP_GLOBAL_FILE}: {e}")
         return None
+
+
+def _read_hook_block_for_first_setup() -> Optional[str]:
+    # Preferred hook source: dedicated empty hook anchor.
+    hook_anchor = (HOOK_BLOCK or "").strip()
+    if hook_anchor:
+        return hook_anchor
+
+    # Prefer the global-setup base head (e.g. predeployed contracts in
+    # setup-global-test.txt) so the first phased test block builds ON TOP of
+    # the deploy base rather than forking from funding and ignoring it.
+    global_head = _last_block_hash_in_setup_global()
+    if global_head:
+        return global_head
+
+    # Fallback: funding anchor passed by generator config.
+    funding_anchor = (FINALIZED_BLOCK or "").strip()
+    if funding_anchor:
+        return funding_anchor
+
+    return None
 
 
 def _append_line(path: pathlib.Path, line: str) -> None:
