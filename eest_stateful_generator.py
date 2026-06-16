@@ -599,6 +599,28 @@ def _promote_deploy_setup_to_global(payloads_dir: Path, setup_global_file: Path,
           "(predeployments now live in the base).")
     return True
 
+# Chainspec param whose timestamp activates each post-Osaka fork in Nethermind
+# (used to floor the benchmark phase's block timestamps past the transition).
+_FORK_TRANSITION_PARAM = {
+    "amsterdam": "eip7928TransitionTimestamp",  # AmsterdamTimestamp <- EIP-7928
+}
+
+def _fork_transition_timestamp(genesis_file: Path, fork: str) -> Optional[int]:
+    """Return the genesis-scheduled activation timestamp for *fork*, or None."""
+    key = _FORK_TRANSITION_PARAM.get(fork.lower())
+    if key is None:
+        return None
+    try:
+        params = json.loads(
+            Path(genesis_file).read_text(encoding="utf-8")
+        ).get("params", {})
+        val = params.get(key)
+        if val is None:
+            return None
+        return int(val, 16) if isinstance(val, str) else int(val)
+    except Exception:
+        return None
+
 def is_mounted(mount_point: Path) -> bool:
     try:
         with open("/proc/mounts", "r") as f:
@@ -1150,6 +1172,15 @@ def main():
     parser.add_argument("--sim-parallelism", type=int, default=1)
     parser.add_argument("--test-path", default="tests")
     parser.add_argument("--fork", default="Prague")
+    parser.add_argument(
+        "--benchmark-fork",
+        default=None,
+        help="Fork for the benchmark (second 'execute remote') phase. Defaults "
+        "to --fork. Set it to a later fork (e.g. Amsterdam while --fork=Osaka) "
+        "to fill the setup/prestate on --fork and the benchmarks on a later "
+        "fork; requires a genesis that schedules the later fork's transition "
+        "(its block timestamps are floored past that transition).",
+    )
     parser.add_argument("--rpc-endpoint", default=None)
     parser.add_argument("--seed-account-sweep-amount", default="1000 ether")
     parser.add_argument("--rpc-chain-id", type=int, default=None)
@@ -1608,6 +1639,29 @@ def main():
         print(f"[WARN] Finalized block {finalized_hash} not found; clearing anchor.")
         finalized_hash = ""
 
+    # Optional two-fork split: setup/prestate on --fork, benchmarks on a later
+    # fork scheduled in the genesis. The benchmark phase runs under a restarted
+    # mitm addon whose block timestamps are floored past the transition.
+    benchmark_fork = args.benchmark_fork or args.fork
+    benchmark_min_ts: Optional[int] = None
+    if benchmark_fork.lower() != args.fork.lower():
+        if genesis_file is None:
+            raise SystemExit(
+                "--benchmark-fork requires --genesis-path scheduling the "
+                "benchmark fork's transition."
+            )
+        benchmark_min_ts = _fork_transition_timestamp(genesis_file, benchmark_fork)
+        if benchmark_min_ts is None:
+            raise SystemExit(
+                f"--benchmark-fork={benchmark_fork} but genesis {genesis_file} "
+                "has no transition timestamp for it."
+            )
+        print(
+            f"[INFO] Two-fork run: setup/prestate on {args.fork}, benchmarks on "
+            f"{benchmark_fork} (benchmark block timestamps floored to "
+            f"{benchmark_min_ts})."
+        )
+
     mitm_config = {
         "rpc_direct": "http://127.0.0.1:8545",
         "engine_url": "http://127.0.0.1:8551",
@@ -1662,7 +1716,7 @@ def main():
         deployment_test_filter = "test_deploy_existing_contracts"
         uv_cmd = [
             "uv", "run", "execute", "remote", "-v",
-            f"--fork={args.fork}",
+            f"--fork={benchmark_fork}",
             f"--rpc-seed-key={args.rpc_seed_key}",
             f"--rpc-chain-id={chain_id}",
             f"--rpc-endpoint={tests_rpc}",
@@ -1773,6 +1827,48 @@ def main():
         seen_testing_files: set[str] = set()
         if testing_dir.exists():
             seen_testing_files = {f.stem for f in testing_dir.glob("*.txt") if f.is_file()}
+
+        # Two-fork split: restart the mitm addon for the benchmark phase so its
+        # blocks are built on the later fork (newPayload version) with
+        # timestamps floored past the genesis transition. The node keeps
+        # running; the benchmark scenarios re-derive their anchor from
+        # setup-global-test.txt on disk, which survives the restart.
+        if benchmark_fork.lower() != args.fork.lower():
+            print(
+                f"[INFO] Restarting mitm addon for benchmark phase: fork="
+                f"{benchmark_fork}, min_block_timestamp={benchmark_min_ts}."
+            )
+            benchmark_config = dict(mitm_config)
+            benchmark_config["fork"] = benchmark_fork
+            benchmark_config["min_block_timestamp"] = benchmark_min_ts
+            # The prestate (setup-global-test.txt) is already built by the
+            # deploy phase + promotion; mark globals as reusable so the
+            # restarted addon does NOT truncate it on startup and instead
+            # anchors the benchmark scenarios on the deploy head.
+            benchmark_config["reuse_globals"] = True
+            if benchmark_fork.lower() in ("amsterdam",):
+                benchmark_config["slot_counter_start"] = benchmark_min_ts // 12
+            else:
+                benchmark_config.pop("slot_counter_start", None)
+            old_mitm = CLEANUP.get("mitm")
+            if old_mitm is not None and old_mitm.poll() is None:
+                old_mitm.terminate()
+                try:
+                    old_mitm.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    old_mitm.kill()
+                    old_mitm.wait()
+            Path("mitm_config.json").write_text(
+                json.dumps(benchmark_config), encoding="utf-8"
+            )
+            mitm = start_mitm_proxy(
+                addon_path, listen_port=8549, upstream="http://127.0.0.1:8545"
+            )
+            CLEANUP["mitm"] = mitm
+            if not wait_for_port("127.0.0.1", 8549, timeout=30):
+                raise RuntimeError(
+                    "mitmproxy failed to rebind on 8549 after benchmark restart"
+                )
 
         tests_proc = subprocess.Popen(uv_cmd, cwd=str(repo_dir), env=run_env)
         processed_tokens: set[str] = set()

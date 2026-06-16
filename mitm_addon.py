@@ -62,6 +62,12 @@ _NEWPAYLOAD_METHOD = _newpayload_method_for_fork(FORK)
 
 _IS_AMSTERDAM: bool = FORK.lower() in ("amsterdam",)
 
+# Floor for every built block's timestamp. Used to push the benchmark phase
+# past a genesis fork-transition timestamp (e.g. Amsterdam) so the setup phase
+# (built by a separate addon instance without this floor) stays on the earlier
+# fork while the benchmarks run on the later fork. 0 disables the floor.
+MIN_BLOCK_TIMESTAMP: int = int(_CFG.get("min_block_timestamp") or 0)
+
 _SLOT_COUNTER: int = int(_CFG.get("slot_counter_start") or 0)
 
 def _next_slot() -> str:
@@ -750,6 +756,10 @@ def _next_lifecycle_timestamp(parent_ts: int) -> int:
     # Safety: always keep timestamp valid vs chosen parent.
     if _LIFECYCLE_TS <= parent_ts:
         _LIFECYCLE_TS = parent_ts + 12
+    # Floor to the configured minimum (e.g. a genesis fork-transition
+    # timestamp), so every block this instance builds lands on/after it.
+    if MIN_BLOCK_TIMESTAMP and _LIFECYCLE_TS < MIN_BLOCK_TIMESTAMP:
+        _LIFECYCLE_TS = MIN_BLOCK_TIMESTAMP
     return _LIFECYCLE_TS
 
 
