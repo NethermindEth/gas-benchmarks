@@ -37,6 +37,12 @@ OVERLAY_RESTORE_TRIGGER_ADDRESS: str = _CFG.get("overlay_restore_trigger_address
 REUSE_GLOBALS: bool = bool(_CFG.get("reuse_globals"))
 FORK: str = str(_CFG.get("fork") or "Prague")
 
+# Tests whose transactions are global setup (deploy shared contracts),
+# not measured scenarios. Their phase is stripped so they route as
+# no-phase: written to setup-global-test.txt, advancing the rollback
+# anchor, and never overlay-restored.
+GLOBAL_SETUP_TESTS = ("test_deploy_existing_contracts",)
+
 def _cfg_bool(value: Any, default: bool = False) -> bool:
     if value is None:
         return default
@@ -188,6 +194,12 @@ _PENDING_SEPARATOR_PAIR: Optional[Tuple[Dict[str, Any], Dict[str, Any]]] = None
 _LEGACY_PHASE_DIRS_CLEANED: bool = False
 
 _OVERLAY_PRIMED: bool = False
+
+# Running head of the global-setup phase (gas-bump/funding/deployment).
+# The overlay rollback baseline is captured here, deferred until the
+# first phased test, so it reflects the full post-deployment state
+# rather than the first global-setup block.
+_LAST_GLOBAL_SETUP_BLOCK: Optional[str] = None
 
 
 def _scenario_file_path(phase: str, scenario: str) -> pathlib.Path:
@@ -754,6 +766,12 @@ def _next_lifecycle_timestamp(parent_ts: int) -> int:
 
 
 def _read_hook_block_for_first_setup() -> Optional[str]:
+    # Prefer the post-setup head (after gas-bump/funding/deployment) so the
+    # first scenario branches from the deployed state, not funding — whose
+    # in-memory state has been pruned away by the time benchmarks run.
+    if _LAST_GLOBAL_SETUP_BLOCK:
+        return _LAST_GLOBAL_SETUP_BLOCK
+
     # Preferred hook source: dedicated empty hook anchor.
     hook_anchor = (HOOK_BLOCK or "").strip()
     if hook_anchor:
@@ -943,6 +961,26 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
             and scenario not in _SEEN_SCENARIOS
         )
 
+        # Deferred overlay init: the first time a phased scenario block is
+        # about to be built, snapshot the rollback baseline at the
+        # post-setup head (after gas-bump/funding/deployment) before this
+        # block is applied. Mirrors the old behavior when there was a
+        # single global-setup block, but stays correct once a large
+        # deployment phase moves the head far past the first one.
+        if (
+            not DISABLE_OVERLAY_RESTORE
+            and not _OVERLAY_PRIMED
+            and phase_lc in ("setup", "testing", "cleanup")
+            and file_base not in {"global-setup", "global-nophase"}
+        ):
+            globals()["_OVERLAY_PRIMED"] = True
+            baseline = _LAST_GLOBAL_SETUP_BLOCK or _DYN_FINALIZED or FINALIZED_BLOCK
+            if baseline:
+                globals()["_PENDING_OVERLAY"] = ("__overlay_init__", 0, baseline)
+                _signal_cleanup_pause("__overlay_init__", 0, baseline)
+                _log(f"overlay init deferred to post-setup head {baseline}")
+                _wait_for_resume()
+
         latest_block = _rpc("eth_getBlockByNumber", ["latest", False])
         if not isinstance(latest_block, dict):
             _log(f"flush failed: could not fetch latest block for group={grp}")
@@ -1089,13 +1127,16 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
         _engine(_NEWPAYLOAD_METHOD, [exec_payload, blob_versioned_hashes, parent_beacon_block_root, execution_requests])
         _emit_newpayload_event(exec_payload, parent_hash)
 
-        if file_base == "global-setup":
-            # keep anchor update logic for historical behavior
+        # Advance the rollback anchor across the whole global-setup phase
+        # (gas-bump, funding, contract deployment), which all arrive as
+        # no-phase blocks. Freeze it once the first phased test starts so
+        # scenarios roll back to the post-deployment state, not funding.
+        if file_base in {"global-setup", "global-nophase"} and not _TESTS_STARTED:
             old = _DYN_FINALIZED
             _globals = globals()
             _globals["_DYN_FINALIZED"] = exec_payload.get("blockHash") or old
             if _globals["_DYN_FINALIZED"] != old:
-                _log(f"FINALIZED anchor updated by global-setup → {_globals['_DYN_FINALIZED']}")
+                _log(f"FINALIZED anchor updated by {file_base} → {_globals['_DYN_FINALIZED']}")
 
         dyn_final = _DYN_FINALIZED or FINALIZED_BLOCK or exec_payload.get("blockHash")
         fcs = {
@@ -1133,12 +1174,11 @@ def _flush_group(grp: Tuple[str, str, str] | None, txrlps: List[str], last_extra
                         _minified_json_line(fcu_body)
                     ])
                     _log(f"global-no-phase CURRENT-LAST updated -> {_CURRENT_LAST_FILE}")
-            if not DISABLE_OVERLAY_RESTORE and not _OVERLAY_PRIMED and not _TESTS_STARTED:
-                block_hash = exec_payload.get("blockHash")
-                globals()["_PENDING_OVERLAY"] = ("__overlay_init__", idx, block_hash)
-                _signal_cleanup_pause("__overlay_init__", idx, block_hash)
-                _log("global-no-phase overlay init pause triggered")
-                globals()['_OVERLAY_PRIMED'] = True
+            # Defer overlay init to the first phased test (see _flush_group
+            # top): just track the running post-setup head here so the
+            # baseline captures all of gas-bump/funding/deployment.
+            if not _TESTS_STARTED:
+                globals()["_LAST_GLOBAL_SETUP_BLOCK"] = exec_payload.get("blockHash")
             _log(f"produced block group={grp} stage={idx}")
             return
         # -------------------------------------------------------------------------------------
@@ -1460,6 +1500,12 @@ def _record_sendraw(item: Dict[str, Any], headers: Dict[str, str]) -> None:
         return
 
     meta, src = _extract_meta(headers, item)
+
+    # Force global-setup tests onto the no-phase route so their deployed
+    # state survives into the benchmark scenarios (not overlay-restored)
+    # and advances the rollback anchor.
+    if meta and any(t in str(meta.get("testId") or "") for t in GLOBAL_SETUP_TESTS):
+        meta = {**meta, "phase": None}
 
     scenario_name = "global-nophase"
     phase_name = "none"
