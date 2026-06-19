@@ -1633,6 +1633,7 @@ def main():
             uv_cmd.append(f"--gas-benchmark-values={args.gas_benchmark_values}")
         uv_cmd += [
             "--tx-wait-timeout", "5",
+            "--max-tx-per-batch", "30000",
             "--eoa-start", benchmark_eoa_start,
             "--skip-cleanup",
             args.test_path,
