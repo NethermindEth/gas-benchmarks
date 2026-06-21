@@ -62,6 +62,17 @@ on:
         description: 'Restart the execution client container before each measured test'
         type: boolean
         default: false
+      checkpoint_before_testing:
+        description: 'Use Podman/CRIU checkpoint-restore before each measured test (Linux only)'
+        type: boolean
+        default: false
+      container_runtime:
+        description: 'Container runtime to use (docker or podman). Podman is required for checkpoint_before_testing.'
+        type: choice
+        options:
+          - docker
+          - podman
+        default: docker
       nethermind_extra_flags:
         description: "Extra Nethermind CLI flags appended to the container command (e.g. '--Pruning.Mode=None --FlatDb.Enabled=true')"
         default: ''
@@ -174,16 +185,21 @@ jobs:
           missing=()
           docker_missing=false
           compose_missing=false
+          CONTAINER_RUNTIME="${{ inputs.container_runtime || 'docker' }}"
 
           if ! command -v git-lfs >/dev/null 2>&1; then missing+=("git-lfs"); fi
           if ! command -v zip >/dev/null 2>&1; then missing+=("zip"); fi
           if ! command -v curl >/dev/null 2>&1; then missing+=("curl"); fi
           if ! command -v make >/dev/null 2>&1; then missing+=("make"); fi
+          if [ "${{ inputs.checkpoint_before_testing }}" = "true" ] && ! command -v ss >/dev/null 2>&1; then missing+=("iproute2"); fi
+          if [ "${{ inputs.checkpoint_before_testing }}" = "true" ] && ! command -v iptables >/dev/null 2>&1; then missing+=("iptables"); fi
+          if [ "${{ inputs.checkpoint_before_testing }}" = "true" ] && ! command -v criu >/dev/null 2>&1; then missing+=("criu"); fi
+          if [ "$CONTAINER_RUNTIME" = "podman" ] && ! command -v podman >/dev/null 2>&1; then missing+=("podman"); fi
 
-          if ! command -v docker >/dev/null 2>&1; then
+          if [ "$CONTAINER_RUNTIME" = "docker" ] && ! command -v docker >/dev/null 2>&1; then
             docker_missing=true
             compose_missing=true
-          else
+          elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
             if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
               compose_missing=true
             fi
@@ -209,13 +225,25 @@ jobs:
             fi
           fi
 
-          if command -v systemctl >/dev/null 2>&1; then
+          if [ "$CONTAINER_RUNTIME" = "docker" ] && command -v systemctl >/dev/null 2>&1; then
             sudo systemctl start docker >/dev/null 2>&1 || true
-          elif command -v service >/dev/null 2>&1; then
+          elif [ "$CONTAINER_RUNTIME" = "docker" ] && command -v service >/dev/null 2>&1; then
             sudo service docker start >/dev/null 2>&1 || true
           fi
 
-          if ! docker compose version >/dev/null 2>&1; then
+          if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+            podman --version
+            if [ "${{ inputs.checkpoint_before_testing }}" = "true" ]; then
+              command -v criu >/dev/null 2>&1 || {
+                echo "criu is required for Podman checkpoint_before_testing but is not in PATH"
+                exit 1
+              }
+              criu_bin="$(command -v criu)"
+              sudo "$criu_bin" check || "$criu_bin" check
+            fi
+          fi
+
+          if [ "$CONTAINER_RUNTIME" = "docker" ] && ! docker compose version >/dev/null 2>&1; then
             arch="$(uname -m)"
             case "$arch" in
               x86_64|amd64) arch="x86_64" ;;
@@ -234,9 +262,12 @@ jobs:
           fi
 
           mkdir -p "$NUGET_PACKAGES"
-          docker version --format 'CLIENT={{.Client.Version}} API={{.Client.APIVersion}} SERVER_MIN={{.Server.MinAPIVersion}}' || true
+          if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+            docker version --format 'CLIENT={{.Client.Version}} API={{.Client.APIVersion}} SERVER_MIN={{.Server.MinAPIVersion}}' || true
+          fi
 
       - name: Ensure Docker client API compatibility
+        if: ${{ inputs.container_runtime == 'docker' || inputs.container_runtime == '' }}
         run: |
           set -euo pipefail
 
@@ -414,6 +445,7 @@ jobs:
           CUSTOM_SNAPSHOT="${{ inputs.snapshot_root }}"
           CUSTOM_OVERLAY="${{ inputs.overlay_root }}"
           GENESIS_FILE="${{ inputs.genesis_file }}"
+          CONTAINER_RUNTIME="${{ inputs.container_runtime || 'docker' }}"
 
           # Auto-resolve genesis from fork+network when caller didn't override.
           # Convention: scripts/genesisfiles/nethermind/generator-<fork>-<network>.json
@@ -438,10 +470,27 @@ jobs:
           fi
 
           RUN_ARGS=()
+          if [[ "${{ inputs.restart_before_testing }}" == "true" && "${{ inputs.checkpoint_before_testing }}" == "true" ]]; then
+            echo "restart_before_testing and checkpoint_before_testing are mutually exclusive"
+            exit 1
+          fi
+          case "$CONTAINER_RUNTIME" in
+            docker|podman) ;;
+            *) echo "Invalid container_runtime: $CONTAINER_RUNTIME"; exit 1 ;;
+          esac
           if [[ "${{ inputs.restart_before_testing }}" == "true" ]]; then
             echo "Restarting execution client before each measured test"
             RUN_ARGS+=(-R)
           fi
+          if [[ "${{ inputs.checkpoint_before_testing }}" == "true" ]]; then
+            if [[ "$CONTAINER_RUNTIME" != "podman" ]]; then
+              echo "checkpoint_before_testing requires container_runtime=podman"
+              exit 1
+            fi
+            echo "Using Podman/CRIU checkpoint-restore before each measured test"
+            RUN_ARGS+=(-C)
+          fi
+          RUN_ARGS+=(-M "$CONTAINER_RUNTIME")
 
           # Snapshot path: /mnt/sda/<network>/nethermind on stateful-generator.
           # When -n is passed, run.sh appends network to -B, so give it
@@ -549,7 +598,11 @@ jobs:
         shell: bash
         run: |
           set +e
-          if docker inspect gas-execution-client >/dev/null 2>&1; then
+          if [[ "${{ inputs.container_runtime || 'docker' }}" == "podman" ]]; then
+            if sudo podman inspect gas-execution-client >/dev/null 2>&1; then
+              sudo podman logs gas-execution-client > nethermind-repricing.log 2>&1 || true
+            fi
+          elif docker inspect gas-execution-client >/dev/null 2>&1; then
             docker logs gas-execution-client > nethermind-repricing.log 2>&1 || true
           fi
 
@@ -566,9 +619,15 @@ jobs:
       - name: Docker full prune
         if: always()
         run: |
-          docker ps -q | xargs -r docker stop || true
-          docker ps -aq | xargs -r docker rm -f || true
-          docker system prune -af --volumes || true
+          if [[ "${{ inputs.container_runtime || 'docker' }}" == "podman" ]]; then
+            sudo podman ps -q | xargs -r sudo podman stop || true
+            sudo podman ps -aq | xargs -r sudo podman rm -f || true
+            sudo podman system prune -af --volumes || true
+          else
+            docker ps -q | xargs -r docker stop || true
+            docker ps -aq | xargs -r docker rm -f || true
+            docker system prune -af --volumes || true
+          fi
 
   dottrace-xml:
     needs: repricing
