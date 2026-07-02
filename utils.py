@@ -736,11 +736,19 @@ def merge_html(first_data, second_data):
     # Merge the elements of the tables that has the same id on both HTML files
     for first_table, second_table in zip(first_soup.find_all('table'), second_soup.find_all('table')):
         if first_table['id'] == second_table['id']:
-            second_table.find_all('thread')[0].decompose()
-            # Only merge the elements of the table, not the table itself, Completely remove from second table thread,
-            # will be the same on both files
-            for first_element, second_element in zip(first_table.find_all('tr'), second_table.find_all('tr')):
-                first_element.append(second_element)
+            # The two tables are the same client's results from different report
+            # folders, so stack the second table's data rows under the first
+            # table's rows, sharing a single header. Remove the second header
+            # first (the tag is <thead>, not <thread>, and may be absent, so
+            # decompose every match rather than indexing [0], which raised
+            # IndexError and crashed the merge). Append the remaining rows into
+            # the first table's <tbody> instead of nesting <tr> inside <tr>.
+            for thead in second_table.find_all('thead'):
+                thead.decompose()
+            first_body = first_table.find('tbody')
+            target = first_body if first_body is not None else first_table
+            for row in second_table.find_all('tr'):
+                target.append(row)
 
 
     return first_soup.prettify()
