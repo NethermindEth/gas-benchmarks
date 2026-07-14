@@ -1,0 +1,7 @@
+# Legacy rollback: stop/remove the container after each test and start a
+# fresh one (what the ethpandaops stateful runs use today). Slow for large
+# suites; kept for A/B comparison against container-checkpoint-restore.
+runner:
+  client:
+    config:
+      rollback_strategy: container-recreate

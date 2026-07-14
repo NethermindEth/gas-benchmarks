@@ -1,0 +1,15 @@
+# Base benchmarkoor runner settings shared by every "Benchmarkoor - Nethermind" run.
+# Podman is mandatory: the container-checkpoint-restore rollback strategy uses
+# Podman's CRIU-based checkpoint/restore (memory snapshots) instead of
+# restarting the client between tests.
+global:
+  log_level: info
+
+runner:
+  container_runtime: podman
+  client_logs_to_stdout: true
+  container_network: benchmarkoor
+  cleanup_on_start: true
+  client:
+    config:
+      drop_memory_caches: "steps"

@@ -1,0 +1,11 @@
+# Pre-populated Nethermind data directory served from ZFS.
+# The container-checkpoint-restore strategy requires the datadir to be on ZFS
+# (instant snapshot/rollback pairs with the CRIU memory checkpoint).
+# GB_DATADIR is exported by the workflow's "Prepare ZFS-backed datadir" step:
+# either the snapshot dir itself (already on ZFS) or a dataset seeded from it.
+runner:
+  client:
+    datadirs:
+      nethermind:
+        source_dir: ${GB_DATADIR}
+        method: zfs

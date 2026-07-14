@@ -1,0 +1,379 @@
+name: Benchmarkoor - Nethermind
+run-name: "Benchmarkoor - Nethermind [${{ inputs.network }}/${{ inputs.test_type }}] rollback=${{ inputs.rollback_strategy }}"
+
+# Runs ethpandaops/benchmarkoor for Nethermind only, on the stateful-generator
+# self-hosted runner. Uses Podman as the container runtime so the
+# container-checkpoint-restore rollback strategy (CRIU memory snapshots +
+# ZFS datadir rollback) can replace the slow restart-per-test flow used for
+# the stateful category. See benchmarkoor/README.md for details.
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Test category'
+        type: choice
+        options:
+          - stateful
+          - compute
+        default: 'stateful'
+      network:
+        description: 'Chain/network the tests and snapshot were generated for'
+        type: choice
+        options:
+          - jochemnet
+          - mainnet
+          - perf-devnet-3
+        default: 'jochemnet'
+      release_tag:
+        description: 'gas-benchmarks release tag holding generated-tests-<type>-<network>.tar.gz'
+        default: 'amsterdam-repricings-v5.2.0'
+      tests_archive_url:
+        description: 'Override tests archive URL (release asset or GitHub Actions artifact URL). Empty = derive from release_tag'
+        default: ''
+      opcodes_url:
+        description: "Opcode metadata JSON URL. Empty = derive from release_tag, 'none' = disable"
+        default: ''
+      filter:
+        description: 'Test filter (substring, or regex:<expr>)'
+        default: ''
+      image:
+        description: 'Nethermind Docker image'
+        default: 'nethermindeth/nethermind:bal-devnet-7'
+      nethermind_extra_flags:
+        description: 'Extra Nethermind CLI flags (whitespace-separated)'
+        default: '--config=mainnet --FlatDb.Enabled=true --FlatDb.CompactionOffset=0 --Blocks.ParallelExecution=true --Blocks.ParallelExecutionBatchRead=true'
+      genesis_url:
+        description: 'Nethermind chainspec URL. Empty = scripts/genesisfiles/nethermind/generator-amsterdam-<network>.json from this commit'
+        default: ''
+      rollback_strategy:
+        description: 'Rollback between tests. auto = checkpoint-restore for stateful, none for compute'
+        type: choice
+        options:
+          - auto
+          - container-checkpoint-restore
+          - container-recreate
+          - rpc-debug-setHead
+          - none
+        default: 'auto'
+      checkpoint_options:
+        description: 'JSON options for container-checkpoint-restore'
+        default: '{"tmpfs_threshold":"10g","tmpfs_max_size":"15g","wait_after_tcp_drop_connections":"10s","restart_container":true}'
+      snapshot_dir:
+        description: "Nethermind snapshot datadir on the runner. Empty = /mnt/sda/<network>/nethermind, 'none' = run without a datadir"
+        default: ''
+      zpool:
+        description: 'File-backed zpool settings used when snapshot_dir is not already on ZFS'
+        default: '{"name":"benchmarkoor","image":"/mnt/sda/benchmarkoor-zpool.img","size":"500G","reseed":false}'
+      benchmarkoor_image:
+        description: 'Benchmarkoor image to extract the binary from. Empty = build locally from benchmarkoor_git_ref'
+        default: 'ghcr.io/ethpandaops/benchmarkoor:master'
+      benchmarkoor_git_ref:
+        description: 'Benchmarkoor git ref to build when benchmarkoor_image is empty'
+        default: ''
+      run_timeout_minutes:
+        description: 'Benchmarkoor internal run timeout (minutes)'
+        default: '2160'
+      runner:
+        description: 'Runner labels as JSON array. Default = ["stateful-generator"]'
+        default: ''
+      extra_run_config:
+        description: 'Raw benchmarkoor YAML merged on top of everything else (last wins)'
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: benchmarkoor-nethermind-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmarkoor:
+    runs-on: ${{ inputs.runner != '' && fromJson(inputs.runner) || fromJson('["stateful-generator"]') }}
+    timeout-minutes: 10080
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve configuration
+        id: resolve
+        shell: bash
+        env:
+          IN_TEST_TYPE: ${{ inputs.test_type }}
+          IN_NETWORK: ${{ inputs.network }}
+          IN_RELEASE_TAG: ${{ inputs.release_tag }}
+          IN_TESTS_ARCHIVE_URL: ${{ inputs.tests_archive_url }}
+          IN_OPCODES_URL: ${{ inputs.opcodes_url }}
+          IN_FILTER: ${{ inputs.filter }}
+          IN_GENESIS_URL: ${{ inputs.genesis_url }}
+          IN_ROLLBACK: ${{ inputs.rollback_strategy }}
+          IN_CHECKPOINT_OPTIONS: ${{ inputs.checkpoint_options }}
+          IN_SNAPSHOT_DIR: ${{ inputs.snapshot_dir }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq
+          fi
+
+          RELEASE_BASE="https://github.com/${REPO}/releases/download/${IN_RELEASE_TAG}"
+
+          ARCHIVE_URL="$IN_TESTS_ARCHIVE_URL"
+          if [ -z "$ARCHIVE_URL" ]; then
+            ARCHIVE_URL="${RELEASE_BASE}/generated-tests-${IN_TEST_TYPE}-${IN_NETWORK}.tar.gz"
+          fi
+
+          OPCODES_URL="$IN_OPCODES_URL"
+          if [ "$OPCODES_URL" = "none" ]; then
+            OPCODES_URL=""
+          elif [ -z "$OPCODES_URL" ]; then
+            OPCODES_URL="${RELEASE_BASE}/opcodes_tracing-${IN_TEST_TYPE}-${IN_NETWORK}.json"
+          fi
+
+          GENESIS_URL="$IN_GENESIS_URL"
+          if [ -z "$GENESIS_URL" ]; then
+            GENESIS_URL="https://raw.githubusercontent.com/${REPO}/${SHA}/scripts/genesisfiles/nethermind/generator-amsterdam-${IN_NETWORK}.json"
+          fi
+
+          ROLLBACK="$IN_ROLLBACK"
+          if [ "$ROLLBACK" = "auto" ]; then
+            case "$IN_TEST_TYPE" in
+              stateful) ROLLBACK="container-checkpoint-restore" ;;
+              *)        ROLLBACK="none" ;;
+            esac
+          fi
+
+          DATADIR_ENABLED=true
+          SNAPSHOT_DIR="$IN_SNAPSHOT_DIR"
+          if [ "$SNAPSHOT_DIR" = "none" ]; then
+            DATADIR_ENABLED=false
+            SNAPSHOT_DIR=""
+          elif [ -z "$SNAPSHOT_DIR" ]; then
+            SNAPSHOT_DIR="/mnt/sda/${IN_NETWORK}/nethermind"
+          fi
+
+          # Scratch space for benchmarkoor (archive cache, datadir copies,
+          # checkpoint files). Prefer the big data disk when present.
+          if [ -d /mnt/sda ]; then
+            TMP_DIR="/mnt/sda/benchmarkoor-tmp"
+          else
+            TMP_DIR="/tmp/benchmarkoor-tmp"
+          fi
+          sudo mkdir -p "$TMP_DIR"
+
+          # Checkpoint-restore knobs, consumed by
+          # benchmarkoor/rollback/container-checkpoint-restore.yaml.
+          cp_get() { echo "$IN_CHECKPOINT_OPTIONS" | jq -r --arg k "$1" --arg d "$2" '.[$k] // $d'; }
+          {
+            echo "GB_CP_TMPFS_THRESHOLD=$(cp_get tmpfs_threshold 10g)"
+            echo "GB_CP_TMPFS_MAX_SIZE=$(cp_get tmpfs_max_size 15g)"
+            echo "GB_CP_WAIT_TCP_DROP=$(cp_get wait_after_tcp_drop_connections 10s)"
+            echo "GB_CP_RESTART_CONTAINER=$(cp_get restart_container true)"
+            echo "GB_NETWORK=${IN_NETWORK}"
+            echo "GB_TEST_TYPE=${IN_TEST_TYPE}"
+            echo "GB_SUITE_NAME=${IN_NETWORK}-${IN_TEST_TYPE}-gas-benchmarks"
+            echo "GB_TESTS_ARCHIVE_URL=${ARCHIVE_URL}"
+            echo "GB_TESTS_PREFIX=repricings_${IN_TEST_TYPE}/${IN_NETWORK}"
+            echo "GB_TESTS_FILTER=${IN_FILTER}"
+            echo "GB_OPCODES_URL=${OPCODES_URL}"
+          } >> "$GITHUB_ENV"
+
+          # Config files are consumed by the benchmarkoor action via raw URLs
+          # pinned to this commit; order matters (later files override earlier).
+          BASE="https://raw.githubusercontent.com/${REPO}/${SHA}/benchmarkoor"
+          URLS="${BASE}/global.yaml,${BASE}/tests-archive.yaml"
+          if [ -n "$OPCODES_URL" ]; then
+            URLS="${URLS},${BASE}/opcodes.yaml"
+          fi
+          if [ "$DATADIR_ENABLED" = "true" ]; then
+            URLS="${URLS},${BASE}/datadir-zfs.yaml"
+          fi
+          URLS="${URLS},${BASE}/rollback/${ROLLBACK}.yaml"
+
+          {
+            echo "config_urls=${URLS}"
+            echo "datadir_enabled=${DATADIR_ENABLED}"
+            echo "snapshot_dir=${SNAPSHOT_DIR}"
+            echo "rollback=${ROLLBACK}"
+            echo "genesis_url=${GENESIS_URL}"
+            echo "tmp_dir=${TMP_DIR}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "== Resolved configuration =="
+          echo "tests archive:    $ARCHIVE_URL"
+          echo "opcodes:          ${OPCODES_URL:-<disabled>}"
+          echo "genesis:          $GENESIS_URL"
+          echo "rollback:         $ROLLBACK"
+          echo "snapshot dir:     ${SNAPSHOT_DIR:-<no datadir>}"
+          echo "config urls:      $URLS"
+
+      - name: Prepare ZFS-backed datadir
+        if: steps.resolve.outputs.datadir_enabled == 'true'
+        shell: bash
+        env:
+          SRC: ${{ steps.resolve.outputs.snapshot_dir }}
+          IN_ZPOOL: ${{ inputs.zpool }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -d "$SRC" ]; then
+            echo "ERROR: snapshot datadir not found on runner: $SRC"
+            echo "Download it first (see run-on-stateful-generator.yml) or pass snapshot_dir."
+            exit 1
+          fi
+
+          # ZFS userland + kernel module. container-checkpoint-restore requires
+          # the datadir on ZFS (instant snapshot/rollback per test).
+          if ! command -v zfs >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y zfsutils-linux
+          fi
+          sudo modprobe zfs || {
+            echo "ERROR: cannot load the zfs kernel module on this runner."
+            exit 1
+          }
+
+          FSTYPE=$(stat -f -c %T "$SRC")
+          if [ "$FSTYPE" = "zfs" ]; then
+            echo "Snapshot dir is already on ZFS; using it directly."
+            echo "GB_DATADIR=$SRC" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # Snapshot lives on a regular filesystem: bootstrap (or reuse) a
+          # file-backed zpool and seed a dedicated dataset from the snapshot.
+          # The seed copy happens once; later runs reuse the dataset.
+          POOL=$(echo "$IN_ZPOOL" | jq -r '.name // "benchmarkoor"')
+          IMG=$(echo "$IN_ZPOOL" | jq -r '.image // "/mnt/sda/benchmarkoor-zpool.img"')
+          SIZE=$(echo "$IN_ZPOOL" | jq -r '.size // "500G"')
+          RESEED=$(echo "$IN_ZPOOL" | jq -r '.reseed // false')
+
+          if ! sudo zpool list -H -o name 2>/dev/null | grep -qx "$POOL"; then
+            CREATE=0
+            if [ -f "$IMG" ]; then
+              echo "Importing existing zpool $POOL from $IMG"
+              sudo zpool import -f -d "$(dirname "$IMG")" "$POOL" || CREATE=1
+            else
+              CREATE=1
+            fi
+            if [ "$CREATE" = "1" ]; then
+              echo "Creating file-backed zpool $POOL at $IMG (sparse, $SIZE)"
+              sudo mkdir -p "$(dirname "$IMG")"
+              sudo truncate -s "$SIZE" "$IMG"
+              sudo zpool create -f -O compression=off -O atime=off -m "/${POOL}" "$POOL" "$IMG"
+            fi
+          fi
+
+          NETWORK_SLUG=$(basename "$(dirname "$SRC")")
+          DATASET="${POOL}/nethermind-${NETWORK_SLUG}"
+
+          if [ "$RESEED" = "true" ] && sudo zfs list -H -o name "$DATASET" >/dev/null 2>&1; then
+            echo "Reseed requested: destroying dataset $DATASET"
+            sudo zfs destroy -r "$DATASET"
+          fi
+
+          if ! sudo zfs list -H -o name "$DATASET" >/dev/null 2>&1; then
+            sudo zfs create "$DATASET"
+          fi
+
+          MOUNTPOINT=$(sudo zfs get -H -o value mountpoint "$DATASET")
+
+          if [ -z "$(sudo find "$MOUNTPOINT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+            command -v rsync >/dev/null 2>&1 || {
+              sudo apt-get update
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y rsync
+            }
+            echo "Seeding $DATASET from $SRC (one-time copy, this can take a while)..."
+            sudo rsync -a --info=progress2 "$SRC"/ "$MOUNTPOINT"/
+          else
+            echo "Dataset $DATASET already seeded; reusing it. Pass zpool.reseed=true to refresh."
+          fi
+
+          sudo zpool list "$POOL"
+          echo "GB_DATADIR=$MOUNTPOINT" >> "$GITHUB_ENV"
+
+      - name: Compose Nethermind instance config
+        id: overlay
+        shell: bash
+        env:
+          GENESIS_URL: ${{ steps.resolve.outputs.genesis_url }}
+          NETHERMIND_IMAGE: ${{ inputs.image }}
+          NETHERMIND_FLAGS: ${{ inputs.nethermind_extra_flags }}
+          EXTRA_RUN_CONFIG: ${{ inputs.extra_run_config }}
+        run: |
+          set -euo pipefail
+
+          OVERLAY=$(mktemp --suffix=.yaml)
+          cat > "$OVERLAY" <<EOF
+          runner:
+            client:
+              config:
+                genesis:
+                  nethermind: ${GENESIS_URL}
+            instances:
+              - id: nethermind
+                client: nethermind
+                image: ${NETHERMIND_IMAGE}
+          EOF
+
+          if [ -n "$NETHERMIND_FLAGS" ]; then
+            echo "      extra_args:" >> "$OVERLAY"
+            for flag in $NETHERMIND_FLAGS; do
+              printf '        - "%s"\n' "$flag" >> "$OVERLAY"
+            done
+          fi
+
+          if [ -n "$EXTRA_RUN_CONFIG" ]; then
+            if ! command -v yq >/dev/null 2>&1; then
+              sudo wget -qO /usr/local/bin/yq \
+                "https://github.com/mikefarah/yq/releases/download/v4.44.6/yq_linux_amd64"
+              sudo chmod +x /usr/local/bin/yq
+            fi
+            EXTRA=$(mktemp --suffix=.yaml)
+            printf '%s\n' "$EXTRA_RUN_CONFIG" > "$EXTRA"
+            MERGED=$(mktemp --suffix=.yaml)
+            yq eval-all '. as $item ireduce ({}; . * $item)' "$OVERLAY" "$EXTRA" > "$MERGED"
+            OVERLAY="$MERGED"
+          fi
+
+          echo "== Inline run-config overlay =="
+          cat "$OVERLAY"
+
+          {
+            echo 'config<<GB_OVERLAY_EOF'
+            cat "$OVERLAY"
+            echo 'GB_OVERLAY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run benchmarkoor
+        uses: ethpandaops/benchmarkoor@master
+        env:
+          BENCHMARKOOR_RUNNER_RUN_TIMEOUT: ${{ inputs.run_timeout_minutes }}m
+        with:
+          mode: run
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          image: ${{ inputs.benchmarkoor_image }}
+          git-ref: ${{ inputs.benchmarkoor_git_ref }}
+          tmp-dir: ${{ steps.resolve.outputs.tmp_dir }}
+          upload-artifacts: 'true'
+          run-config-urls: ${{ steps.resolve.outputs.config_urls }}
+          run-config: ${{ steps.overlay.outputs.config }}
+          run-args: >-
+            --limit-instance-client=nethermind
+
+      - name: Cleanup podman leftovers
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if command -v podman >/dev/null 2>&1; then
+            sudo podman ps -aq | xargs -r sudo podman rm -f -t 0
+            sudo podman network rm -f benchmarkoor 2>/dev/null
+          fi
+          true
