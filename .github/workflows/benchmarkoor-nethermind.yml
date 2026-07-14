@@ -88,9 +88,11 @@ permissions:
   contents: read
   actions: read
 
+# cancel-in-progress must stay false: a new dispatch should QUEUE behind a
+# running benchmark, not kill it hours in (learned the hard way).
 concurrency:
   group: benchmarkoor-nethermind-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   benchmarkoor:
