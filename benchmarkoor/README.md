@@ -60,11 +60,19 @@ workflow uses; the jochemnet snapshot can be downloaded with
 
 **ZFS bootstrap:** `container-checkpoint-restore` only supports ZFS datadirs.
 If the snapshot directory is not already on ZFS, the workflow creates a
-file-backed zpool (default: sparse 500G image at
-`/mnt/sda/benchmarkoor-zpool.img`, pool `benchmarkoor`) and seeds a dataset
-from the snapshot with a **one-time** rsync copy (~snapshot size of extra disk
-usage; make sure `/mnt/sda` has headroom). Subsequent runs reuse the dataset.
-Pass `zpool: {"reseed": true, ...}` to refresh it after updating the snapshot.
+file-backed zpool (sparse image at `/mnt/sda/benchmarkoor-zpool.img`, pool
+`benchmarkoor`, auto-sized to snapshot + 15% + 32G — the jochemnet nethermind
+snapshot is ~900G) and seeds a dataset from the snapshot with a **one-time**
+rsync copy (~snapshot size of extra disk usage; free space is checked first).
+Interrupted seeds resume (completion is tracked via the `gb:seeded` ZFS
+property) and undersized pools are grown in place. Subsequent runs reuse the
+dataset; pass `zpool: {"reseed": true, ...}` to refresh it after updating the
+snapshot.
+
+**Datadir layout:** the runner snapshots hold the `nethermind_db` content at
+their root (`mainnet/blocks/...`), so the instance must run with
+`--Init.BaseDbPath=/data` (included in the default flags) — benchmarkoor's
+stock `--datadir=/data` alone would look under `/data/nethermind_db/`.
 
 ## Defaults
 

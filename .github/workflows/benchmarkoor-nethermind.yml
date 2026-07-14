@@ -41,8 +41,8 @@ on:
         description: 'Nethermind Docker image'
         default: 'nethermindeth/nethermind:bal-devnet-7'
       nethermind_extra_flags:
-        description: 'Extra Nethermind CLI flags (whitespace-separated)'
-        default: '--config=mainnet --FlatDb.Enabled=true --FlatDb.CompactionOffset=0 --Blocks.ParallelExecution=true --Blocks.ParallelExecutionBatchRead=true'
+        description: 'Extra Nethermind CLI flags (whitespace-separated). Init.BaseDbPath=/data is required: the runner snapshots hold the nethermind_db content at their root'
+        default: '--config=mainnet --Init.BaseDbPath=/data --FlatDb.Enabled=true --FlatDb.CompactionOffset=0 --Blocks.ParallelExecution=true --Blocks.ParallelExecutionBatchRead=true'
       genesis_url:
         description: 'Nethermind chainspec URL. Empty = scripts/genesisfiles/nethermind/generator-amsterdam-<network>.json from this commit'
         default: ''
@@ -63,8 +63,8 @@ on:
         description: "Nethermind snapshot datadir on the runner. Empty = /mnt/sda/<network>/nethermind, 'none' = run without a datadir"
         default: ''
       zpool:
-        description: 'File-backed zpool settings used when snapshot_dir is not already on ZFS'
-        default: '{"name":"benchmarkoor","image":"/mnt/sda/benchmarkoor-zpool.img","size":"500G","reseed":false}'
+        description: 'File-backed zpool settings used when snapshot_dir is not already on ZFS. size "auto" = snapshot size + 15% + 32G; existing pools are grown when too small'
+        default: '{"name":"benchmarkoor","image":"/mnt/sda/benchmarkoor-zpool.img","size":"auto","reseed":false}'
       benchmarkoor_image:
         description: 'Benchmarkoor image to extract the binary from. Empty = build locally from benchmarkoor_git_ref'
         default: 'ghcr.io/ethpandaops/benchmarkoor:master'
@@ -251,8 +251,18 @@ jobs:
           # The seed copy happens once; later runs reuse the dataset.
           POOL=$(echo "$IN_ZPOOL" | jq -r '.name // "benchmarkoor"')
           IMG=$(echo "$IN_ZPOOL" | jq -r '.image // "/mnt/sda/benchmarkoor-zpool.img"')
-          SIZE=$(echo "$IN_ZPOOL" | jq -r '.size // "500G"')
+          SIZE=$(echo "$IN_ZPOOL" | jq -r '.size // "auto"')
           RESEED=$(echo "$IN_ZPOOL" | jq -r '.reseed // false')
+
+          # Required pool capacity: snapshot size + 15% CoW/metadata headroom
+          # + 32G, unless an explicit size was requested.
+          SNAP_BYTES=$(sudo du -sb "$SRC" | cut -f1)
+          if [ "$SIZE" = "auto" ]; then
+            NEED_BYTES=$(( SNAP_BYTES + SNAP_BYTES / 100 * 15 + 32 * 1024 * 1024 * 1024 ))
+          else
+            NEED_BYTES=$(numfmt --from=iec "$SIZE")
+          fi
+          echo "Snapshot size: $(numfmt --to=iec "$SNAP_BYTES"), required pool size: $(numfmt --to=iec "$NEED_BYTES")"
 
           if ! sudo zpool list -H -o name 2>/dev/null | grep -qx "$POOL"; then
             CREATE=0
@@ -263,11 +273,35 @@ jobs:
               CREATE=1
             fi
             if [ "$CREATE" = "1" ]; then
-              echo "Creating file-backed zpool $POOL at $IMG (sparse, $SIZE)"
+              AVAIL=$(df -B1 --output=avail "$(dirname "$IMG")" | tail -1 | tr -d ' ')
+              if [ "$AVAIL" -lt "$NEED_BYTES" ]; then
+                echo "ERROR: $(dirname "$IMG") has $(numfmt --to=iec "$AVAIL") free," \
+                     "but the pool needs $(numfmt --to=iec "$NEED_BYTES"). Free up space first."
+                exit 1
+              fi
+              echo "Creating file-backed zpool $POOL at $IMG (sparse, $(numfmt --to=iec "$NEED_BYTES"))"
               sudo mkdir -p "$(dirname "$IMG")"
-              sudo truncate -s "$SIZE" "$IMG"
+              sudo truncate -s "$NEED_BYTES" "$IMG"
               sudo zpool create -f -O compression=off -O atime=off -m "/${POOL}" "$POOL" "$IMG"
             fi
+          fi
+
+          # Grow an existing pool that is smaller than required (sparse file:
+          # truncate up, then expand the vdev in place; seeded data survives).
+          POOL_BYTES=$(sudo zpool get -Hp -o value size "$POOL")
+          if [ "$POOL_BYTES" -lt "$NEED_BYTES" ]; then
+            ALLOC_BYTES=$(sudo zpool get -Hp -o value allocated "$POOL")
+            REMAIN_BYTES=$(( NEED_BYTES - ALLOC_BYTES ))
+            AVAIL=$(df -B1 --output=avail "$(dirname "$IMG")" | tail -1 | tr -d ' ')
+            if [ "$AVAIL" -lt "$REMAIN_BYTES" ]; then
+              echo "ERROR: growing pool $POOL to $(numfmt --to=iec "$NEED_BYTES") needs up to" \
+                   "$(numfmt --to=iec "$REMAIN_BYTES") more on $(dirname "$IMG")" \
+                   "(only $(numfmt --to=iec "$AVAIL") free). Free up space first."
+              exit 1
+            fi
+            echo "Growing zpool $POOL: $(numfmt --to=iec "$POOL_BYTES") -> $(numfmt --to=iec "$NEED_BYTES")"
+            sudo truncate -s "$NEED_BYTES" "$IMG"
+            sudo zpool online -e "$POOL" "$IMG"
           fi
 
           NETWORK_SLUG=$(basename "$(dirname "$SRC")")
@@ -284,13 +318,16 @@ jobs:
 
           MOUNTPOINT=$(sudo zfs get -H -o value mountpoint "$DATASET")
 
-          if [ -z "$(sudo find "$MOUNTPOINT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+          # Seed completion is tracked with a ZFS user property so an
+          # interrupted copy resumes instead of being mistaken for done.
+          if [ "$(sudo zfs get -H -o value gb:seeded "$DATASET")" != "true" ]; then
             command -v rsync >/dev/null 2>&1 || {
               sudo apt-get update
               sudo DEBIAN_FRONTEND=noninteractive apt-get install -y rsync
             }
-            echo "Seeding $DATASET from $SRC (one-time copy, this can take a while)..."
-            sudo rsync -a --info=progress2 "$SRC"/ "$MOUNTPOINT"/
+            echo "Seeding $DATASET from $SRC (one-time copy, resumable; this can take a while)..."
+            sudo rsync -a --delete --info=progress2 "$SRC"/ "$MOUNTPOINT"/
+            sudo zfs set gb:seeded=true "$DATASET"
           else
             echo "Dataset $DATASET already seeded; reusing it. Pass zpool.reseed=true to refresh."
           fi
