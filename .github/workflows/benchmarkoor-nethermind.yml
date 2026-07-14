@@ -69,7 +69,7 @@ on:
         description: 'Benchmarkoor image to extract the binary from. Empty = build locally from benchmarkoor_git_ref'
         default: 'ghcr.io/ethpandaops/benchmarkoor:master'
       benchmarkoor_git_ref:
-        description: 'Benchmarkoor git ref to build when benchmarkoor_image is empty'
+        description: 'Benchmarkoor git ref: when set, benchmarkoor is BUILT from source (benchmarkoor_image is ignored — GitHub replaces empty dispatch inputs with their defaults, so an empty image cannot be passed explicitly)'
         default: ''
       benchmarkoor_git_repo:
         description: 'Benchmarkoor git repo to build from when benchmarkoor_image is empty'
@@ -400,7 +400,9 @@ jobs:
         with:
           mode: run
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          image: ${{ inputs.benchmarkoor_image }}
+          # A set git-ref forces a local source build (empty image); the
+          # `== '' && x || ''` form is deliberate — image may itself be ''.
+          image: ${{ inputs.benchmarkoor_git_ref == '' && inputs.benchmarkoor_image || '' }}
           git-ref: ${{ inputs.benchmarkoor_git_ref }}
           git-repo: ${{ inputs.benchmarkoor_git_repo }}
           tmp-dir: ${{ steps.resolve.outputs.tmp_dir }}
