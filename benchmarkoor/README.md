@@ -70,9 +70,13 @@ dataset; pass `zpool: {"reseed": true, ...}` to refresh it after updating the
 snapshot.
 
 **Datadir layout:** the runner snapshots hold the `nethermind_db` content at
-their root (`mainnet/blocks/...`), so the instance must run with
-`--Init.BaseDbPath=/data` (included in the default flags) — benchmarkoor's
-stock `--datadir=/data` alone would look under `/data/nethermind_db/`.
+their root (`mainnet/blocks/...`), and Nethermind's `BaseDbPath` includes the
+network subdir (the same convention as
+`scripts/nethermind/docker-compose.yaml`), so the instance must run with
+`--Init.BaseDbPath=/data/mainnet` (included in the default flags).
+benchmarkoor's stock `--datadir=/data` alone would look under
+`/data/nethermind_db/mainnet` and boot an empty database (symptom: chain head
+at block 0 / genesis hash, endless `SYNCING` responses).
 
 ## Defaults
 

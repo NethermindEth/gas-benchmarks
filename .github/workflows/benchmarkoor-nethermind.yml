@@ -41,8 +41,8 @@ on:
         description: 'Nethermind Docker image'
         default: 'nethermindeth/nethermind:bal-devnet-7'
       nethermind_extra_flags:
-        description: 'Extra Nethermind CLI flags (whitespace-separated). Init.BaseDbPath=/data is required: the runner snapshots hold the nethermind_db content at their root'
-        default: '--config=mainnet --Init.BaseDbPath=/data --FlatDb.Enabled=true --FlatDb.CompactionOffset=0 --Blocks.ParallelExecution=true --Blocks.ParallelExecutionBatchRead=true'
+        description: 'Extra Nethermind CLI flags (whitespace-separated). Init.BaseDbPath=/data/mainnet is required: BaseDbPath includes the network subdir, and the runner snapshots hold nethermind_db content (mainnet/...) at their root'
+        default: '--config=mainnet --Init.BaseDbPath=/data/mainnet --FlatDb.Enabled=true --FlatDb.CompactionOffset=0 --Blocks.ParallelExecution=true --Blocks.ParallelExecutionBatchRead=true'
       genesis_url:
         description: 'Nethermind chainspec URL. Empty = scripts/genesisfiles/nethermind/generator-amsterdam-<network>.json from this commit'
         default: ''
