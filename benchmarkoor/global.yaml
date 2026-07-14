@@ -7,7 +7,11 @@ global:
 
 runner:
   container_runtime: podman
-  client_logs_to_stdout: true
+  # Client output always goes to runs/<run_id>/container.log in the results
+  # artifact; this switch only mirrors it into the CI job log (very noisy
+  # during the ~230-block startup replay). Enable ad hoc via extra_run_config
+  # when live-debugging a client boot.
+  client_logs_to_stdout: false
   container_network: benchmarkoor
   cleanup_on_start: true
   client:
