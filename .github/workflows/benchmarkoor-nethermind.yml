@@ -71,6 +71,9 @@ on:
       benchmarkoor_git_ref:
         description: 'Benchmarkoor git ref to build when benchmarkoor_image is empty'
         default: ''
+      benchmarkoor_git_repo:
+        description: 'Benchmarkoor git repo to build from when benchmarkoor_image is empty'
+        default: 'https://github.com/ethpandaops/benchmarkoor.git'
       run_timeout_minutes:
         description: 'Benchmarkoor internal run timeout (minutes)'
         default: '2160'
@@ -397,6 +400,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           image: ${{ inputs.benchmarkoor_image }}
           git-ref: ${{ inputs.benchmarkoor_git_ref }}
+          git-repo: ${{ inputs.benchmarkoor_git_repo }}
           tmp-dir: ${{ steps.resolve.outputs.tmp_dir }}
           upload-artifacts: 'true'
           run-config-urls: ${{ steps.resolve.outputs.config_urls }}
