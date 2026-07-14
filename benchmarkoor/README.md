@@ -87,8 +87,16 @@ at block 0 / genesis hash, endless `SYNCING` responses).
   the ethpandaops amsterdam-devnet-7 context)
 - image `nethermindeth/nethermind:bal-devnet-7` with the same flags
   ethpandaops use for `nethermind-bal-full`
-- rollback `auto`: `container-checkpoint-restore` for stateful, `none` for
-  compute; `container-recreate` remains selectable for A/B comparison
+- rollback `auto`: `container-checkpoint-restore` **with `restore_in_place`**
+  for stateful (~4 s/test restores); `none` for compute — compute tests don't
+  mutate state that needs reverting, so they carry no checkpoint burden at
+  all. `container-recreate` remains selectable for A/B comparison.
+  `restore_in_place` needs benchmarkoor with
+  [ethpandaops/benchmarkoor#282](https://github.com/ethpandaops/benchmarkoor/pull/282);
+  until it merges, upstream images silently ignore the option (falling back
+  to ~15 s export/import restores) — pass
+  `benchmarkoor_git_repo=https://github.com/kamilchodola/benchmarkoor.git`
+  and `benchmarkoor_git_ref=feat/checkpoint-restore-in-place` to get it now.
 
 Results are uploaded as the `benchmarkoor-<run_id>` workflow artifact and a
 per-test summary is rendered on the job summary page.

@@ -16,3 +16,8 @@ runner:
         # Restart the container once before checkpointing so the checkpoint
         # captures a cold-cache, cleanly-shut-down process state.
         restart_container: ${GB_CP_RESTART_CONTAINER:-true}
+        # Restore the same container in place between tests (restore ~4s
+        # instead of ~15s per test). Requires benchmarkoor with
+        # ethpandaops/benchmarkoor#282; older/upstream binaries ignore the
+        # option and fall back to the export/import path.
+        restore_in_place: ${GB_CP_RESTORE_IN_PLACE:-true}

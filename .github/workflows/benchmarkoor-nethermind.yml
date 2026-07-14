@@ -58,7 +58,7 @@ on:
         default: 'auto'
       checkpoint_options:
         description: 'JSON options for container-checkpoint-restore'
-        default: '{"tmpfs_threshold":"10g","tmpfs_max_size":"15g","wait_after_tcp_drop_connections":"10s","restart_container":true}'
+        default: '{"tmpfs_threshold":"10g","tmpfs_max_size":"15g","wait_after_tcp_drop_connections":"10s","restart_container":true,"restore_in_place":true}'
       snapshot_dir:
         description: "Nethermind snapshot datadir on the runner. Empty = /mnt/sda/<network>/nethermind, 'none' = run without a datadir"
         default: ''
@@ -180,6 +180,7 @@ jobs:
             echo "GB_CP_TMPFS_MAX_SIZE=$(cp_get tmpfs_max_size 15g)"
             echo "GB_CP_WAIT_TCP_DROP=$(cp_get wait_after_tcp_drop_connections 10s)"
             echo "GB_CP_RESTART_CONTAINER=$(cp_get restart_container true)"
+            echo "GB_CP_RESTORE_IN_PLACE=$(cp_get restore_in_place true)"
             echo "GB_NETWORK=${IN_NETWORK}"
             echo "GB_TEST_TYPE=${IN_TEST_TYPE}"
             echo "GB_SUITE_NAME=${IN_NETWORK}-${IN_TEST_TYPE}-gas-benchmarks"
