@@ -473,6 +473,12 @@ jobs:
           # mode, while API mode suppresses whole-run collection, so an image
           # without the BlockProfiler plugin collects nothing under
           # trace_blocks.
+          # NB: the entrypoint must be a flat argv with NO shell variables —
+          # benchmarkoor env-expands the raw config text at load time, so any
+          # $var inside an embedded script gets blanked. benchmarkoor's
+          # command (the client flags) is appended after the entrypoint by
+          # the container runtime, ENTRYPOINT+CMD style. The dottrace tool
+          # path is where the nethermind diag images install it.
           if [ "$DIAG_MODE" = "dottrace" ]; then
             {
               if [ -n "$TRACE_BLOCKS" ]; then
@@ -480,19 +486,16 @@ jobs:
                 echo "        NETHERMIND_PROFILE_BLOCKS: \"${TRACE_BLOCKS}\""
               fi
               echo "      entrypoint:"
-              echo "        - /bin/bash"
-              echo "        - -c"
-              echo '        - |'
-              echo '          set -e'
-              echo '          tool='
-              echo '          for c in dottrace /opt/diag-tools/dottrace /root/.dotnet/tools/dottrace /usr/local/bin/dottrace; do'
-              echo '            command -v "$c" >/dev/null 2>&1 && { tool="$c"; break; }'
-              echo '          done'
-              echo '          if [ -z "$tool" ]; then echo "dottrace tool not found in image" >&2; exit 2; fi'
-              echo '          api='
-              echo '          if [ -n "${NETHERMIND_PROFILE_BLOCKS:-}" ]; then api=--use-api; fi'
-              echo '          exec "$tool" start --framework=netcore --propagate-exit-code --save-to=/nethermind/diag/nethermind.dtp $api -- ./nethermind "$@"'
-              echo "        - bash"
+              echo "        - /opt/diag-tools/dottrace"
+              echo "        - start"
+              echo "        - --framework=netcore"
+              echo "        - --propagate-exit-code"
+              echo "        - --save-to=/nethermind/diag/nethermind.dtp"
+              if [ -n "$TRACE_BLOCKS" ]; then
+                echo "        - --use-api"
+              fi
+              echo "        - \"--\""
+              echo "        - ./nethermind"
               echo "      extra_mounts:"
               echo "        - \"${DIAG_DIR}:/nethermind/diag\""
             } >> "$OVERLAY"
