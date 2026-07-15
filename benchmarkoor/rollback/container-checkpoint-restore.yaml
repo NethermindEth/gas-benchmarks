@@ -1,0 +1,23 @@
+# Memory-snapshot rollback: Podman + CRIU checkpoint/restore.
+# Flow: container starts -> (optional clean restart) -> pre-run steps
+# (gas-bump/funding) are baked in -> datadir ZFS snapshot + CRIU memory
+# checkpoint -> per test: instant datadir rollback + process restore.
+# No client restart and no RPC polling between tests.
+runner:
+  client:
+    config:
+      rollback_strategy: container-checkpoint-restore
+      checkpoint_restore_strategy_options:
+        # Keep the checkpoint image in RAM when the client's memory footprint
+        # is below the threshold; falls back to disk otherwise.
+        tmpfs_threshold: "${GB_CP_TMPFS_THRESHOLD:-10g}"
+        tmpfs_max_size: "${GB_CP_TMPFS_MAX_SIZE:-15g}"
+        wait_after_tcp_drop_connections: "${GB_CP_WAIT_TCP_DROP:-10s}"
+        # Restart the container once before checkpointing so the checkpoint
+        # captures a cold-cache, cleanly-shut-down process state.
+        restart_container: ${GB_CP_RESTART_CONTAINER:-true}
+        # Restore the same container in place between tests (restore ~4s
+        # instead of ~15s per test). Requires benchmarkoor with
+        # ethpandaops/benchmarkoor#282; older/upstream binaries ignore the
+        # option and fall back to the export/import path.
+        restore_in_place: ${GB_CP_RESTORE_IN_PLACE:-true}

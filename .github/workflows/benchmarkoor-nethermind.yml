@@ -41,8 +41,8 @@ on:
         description: 'Nethermind Docker image'
         default: 'nethermindeth/nethermind:bal-devnet-7'
       nethermind_extra_flags:
-        description: 'Extra Nethermind CLI flags (whitespace-separated)'
-        default: '--config=mainnet --FlatDb.Enabled=true --FlatDb.CompactionOffset=0 --Blocks.ParallelExecution=true --Blocks.ParallelExecutionBatchRead=true'
+        description: 'Extra Nethermind CLI flags (whitespace-separated). Init.BaseDbPath=/data/mainnet is required: BaseDbPath includes the network subdir, and the runner snapshots hold nethermind_db content (mainnet/...) at their root'
+        default: '--config=mainnet --Init.BaseDbPath=/data/mainnet --FlatDb.Enabled=true --FlatDb.CompactionOffset=0 --Blocks.ParallelExecution=true --Blocks.ParallelExecutionBatchRead=true'
       genesis_url:
         description: 'Nethermind chainspec URL. Empty = scripts/genesisfiles/nethermind/generator-amsterdam-<network>.json from this commit'
         default: ''
@@ -58,19 +58,34 @@ on:
         default: 'auto'
       checkpoint_options:
         description: 'JSON options for container-checkpoint-restore'
-        default: '{"tmpfs_threshold":"10g","tmpfs_max_size":"15g","wait_after_tcp_drop_connections":"10s","restart_container":true}'
+        default: '{"tmpfs_threshold":"10g","tmpfs_max_size":"15g","wait_after_tcp_drop_connections":"10s","restart_container":true,"restore_in_place":true}'
+      diagnostics_mode:
+        description: 'Profile Nethermind via the diag-image entrypoint (requires a diag-capable image, e.g. nethermindeth/nethermind:masterdiag). dottrace snapshots are auto-converted to XML'
+        type: choice
+        options:
+          - none
+          - dottrace
+          - dotmemory
+          - dotnet-trace
+        default: 'none'
+      trace_blocks:
+        description: "Comma-separated block numbers for NETHERMIND_PROFILE_BLOCKS (per-block dotTrace windows, NethermindEth/nethermind#12444). 'auto' = jochemnet testing blocks. Implies diagnostics_mode=dottrace"
+        default: ''
       snapshot_dir:
         description: "Nethermind snapshot datadir on the runner. Empty = /mnt/sda/<network>/nethermind, 'none' = run without a datadir"
         default: ''
       zpool:
-        description: 'File-backed zpool settings used when snapshot_dir is not already on ZFS'
-        default: '{"name":"benchmarkoor","image":"/mnt/sda/benchmarkoor-zpool.img","size":"500G","reseed":false}'
+        description: 'File-backed zpool settings used when snapshot_dir is not already on ZFS. size "auto" = snapshot size + 15% + 32G; existing pools are grown when too small'
+        default: '{"name":"benchmarkoor","image":"/mnt/sda/benchmarkoor-zpool.img","size":"auto","reseed":false}'
       benchmarkoor_image:
         description: 'Benchmarkoor image to extract the binary from. Empty = build locally from benchmarkoor_git_ref'
         default: 'ghcr.io/ethpandaops/benchmarkoor:master'
       benchmarkoor_git_ref:
-        description: 'Benchmarkoor git ref to build when benchmarkoor_image is empty'
+        description: 'Benchmarkoor git ref: when set, benchmarkoor is BUILT from source (benchmarkoor_image is ignored — GitHub replaces empty dispatch inputs with their defaults, so an empty image cannot be passed explicitly)'
         default: ''
+      benchmarkoor_git_repo:
+        description: 'Benchmarkoor git repo to build from when benchmarkoor_image is empty'
+        default: 'https://github.com/ethpandaops/benchmarkoor.git'
       run_timeout_minutes:
         description: 'Benchmarkoor internal run timeout (minutes)'
         default: '2160'
@@ -85,9 +100,11 @@ permissions:
   contents: read
   actions: read
 
+# cancel-in-progress must stay false: a new dispatch should QUEUE behind a
+# running benchmark, not kill it hours in (learned the hard way).
 concurrency:
   group: benchmarkoor-nethermind-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   benchmarkoor:
@@ -112,6 +129,12 @@ jobs:
           IN_ROLLBACK: ${{ inputs.rollback_strategy }}
           IN_CHECKPOINT_OPTIONS: ${{ inputs.checkpoint_options }}
           IN_SNAPSHOT_DIR: ${{ inputs.snapshot_dir }}
+          IN_DIAG_MODE: ${{ inputs.diagnostics_mode }}
+          IN_TRACE_BLOCKS: ${{ inputs.trace_blocks }}
+          IN_IMAGE: ${{ inputs.image }}
+          IN_BM_IMAGE: ${{ inputs.benchmarkoor_image }}
+          IN_BM_REF: ${{ inputs.benchmarkoor_git_ref }}
+          IN_BM_REPO: ${{ inputs.benchmarkoor_git_repo }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
@@ -141,12 +164,71 @@ jobs:
             GENESIS_URL="https://raw.githubusercontent.com/${REPO}/${SHA}/scripts/genesisfiles/nethermind/generator-amsterdam-${IN_NETWORK}.json"
           fi
 
+          # Diagnostics: trace_blocks implies dottrace (mirrors
+          # NethermindEth/nethermind#12444's trace_blocks input).
+          DIAG_MODE="$IN_DIAG_MODE"
+          TRACE_BLOCKS="$IN_TRACE_BLOCKS"
+          if [ -n "$TRACE_BLOCKS" ] && [ "$DIAG_MODE" = "none" ]; then
+            DIAG_MODE="dottrace"
+          fi
+          if [ "$TRACE_BLOCKS" = "auto" ]; then
+            case "$IN_NETWORK" in
+              # head 24402727 + 5000 gas-bump + 1 funding + 1 setup block;
+              # testing blocks land at +2/+3 for single-setup-block suites.
+              jochemnet) TRACE_BLOCKS="24407730,24407731" ;;
+              *)
+                echo "ERROR: trace_blocks=auto is only mapped for jochemnet;"
+                echo "pass explicit block numbers for $IN_NETWORK."
+                exit 1
+                ;;
+            esac
+          fi
+
+          DIAG_DIR=""
+          if [ "$DIAG_MODE" != "none" ]; then
+            DIAG_DIR="${RUNNER_TEMP}/diagfiles"
+            sudo rm -rf "$DIAG_DIR"
+            mkdir -p "$DIAG_DIR"
+            chmod 777 "$DIAG_DIR"
+            case "$IN_IMAGE" in
+              *diag*) : ;;
+              *)
+                echo "WARNING: diagnostics_mode=$DIAG_MODE but image '$IN_IMAGE'"
+                echo "does not look diag-capable (no DIAG_WITH entrypoint) —"
+                echo "expect no diagnostic output. Use e.g. nethermindeth/nethermind:masterdiag."
+                ;;
+            esac
+          fi
+
           ROLLBACK="$IN_ROLLBACK"
           if [ "$ROLLBACK" = "auto" ]; then
-            case "$IN_TEST_TYPE" in
-              stateful) ROLLBACK="container-checkpoint-restore" ;;
-              *)        ROLLBACK="none" ;;
-            esac
+            if [ "$DIAG_MODE" != "none" ]; then
+              # Profiling wants one live client process for the whole run:
+              # a continuous dotTrace session (with optional per-block
+              # windows) is incompatible with CRIU checkpoint/restore.
+              ROLLBACK="rpc-debug-setHead"
+            else
+              case "$IN_TEST_TYPE" in
+                stateful) ROLLBACK="container-checkpoint-restore" ;;
+                *)        ROLLBACK="none" ;;
+              esac
+            fi
+          fi
+
+          # benchmarkoor source: a set git ref forces a source build (an
+          # explicitly-empty image input is impossible — GitHub swaps empty
+          # dispatch inputs for their defaults). Diagnostics need the fork's
+          # extra_mounts until it lands upstream, so default the ref there.
+          BM_REF="$IN_BM_REF"
+          BM_REPO="$IN_BM_REPO"
+          if [ "$DIAG_MODE" != "none" ] && [ -z "$BM_REF" ]; then
+            BM_REPO="https://github.com/kamilchodola/benchmarkoor.git"
+            BM_REF="gas-benchmarks"
+            echo "Diagnostics mode: defaulting benchmarkoor to ${BM_REPO}@${BM_REF} (extra_mounts support)"
+          fi
+          BM_IMAGE="$IN_BM_IMAGE"
+          if [ -n "$BM_REF" ]; then
+            BM_IMAGE=""
           fi
 
           DATADIR_ENABLED=true
@@ -175,6 +257,7 @@ jobs:
             echo "GB_CP_TMPFS_MAX_SIZE=$(cp_get tmpfs_max_size 15g)"
             echo "GB_CP_WAIT_TCP_DROP=$(cp_get wait_after_tcp_drop_connections 10s)"
             echo "GB_CP_RESTART_CONTAINER=$(cp_get restart_container true)"
+            echo "GB_CP_RESTORE_IN_PLACE=$(cp_get restore_in_place true)"
             echo "GB_NETWORK=${IN_NETWORK}"
             echo "GB_TEST_TYPE=${IN_TEST_TYPE}"
             echo "GB_SUITE_NAME=${IN_NETWORK}-${IN_TEST_TYPE}-gas-benchmarks"
@@ -203,6 +286,12 @@ jobs:
             echo "rollback=${ROLLBACK}"
             echo "genesis_url=${GENESIS_URL}"
             echo "tmp_dir=${TMP_DIR}"
+            echo "diag_mode=${DIAG_MODE}"
+            echo "diag_dir=${DIAG_DIR}"
+            echo "trace_blocks=${TRACE_BLOCKS}"
+            echo "bm_image=${BM_IMAGE}"
+            echo "bm_git_ref=${BM_REF}"
+            echo "bm_git_repo=${BM_REPO}"
           } >> "$GITHUB_OUTPUT"
 
           echo "== Resolved configuration =="
@@ -211,6 +300,8 @@ jobs:
           echo "genesis:          $GENESIS_URL"
           echo "rollback:         $ROLLBACK"
           echo "snapshot dir:     ${SNAPSHOT_DIR:-<no datadir>}"
+          echo "diagnostics:      ${DIAG_MODE} trace_blocks=${TRACE_BLOCKS:-<none>}"
+          echo "benchmarkoor:     ${BM_IMAGE:-build ${BM_REPO}@${BM_REF}}"
           echo "config urls:      $URLS"
 
       - name: Prepare ZFS-backed datadir
@@ -251,8 +342,18 @@ jobs:
           # The seed copy happens once; later runs reuse the dataset.
           POOL=$(echo "$IN_ZPOOL" | jq -r '.name // "benchmarkoor"')
           IMG=$(echo "$IN_ZPOOL" | jq -r '.image // "/mnt/sda/benchmarkoor-zpool.img"')
-          SIZE=$(echo "$IN_ZPOOL" | jq -r '.size // "500G"')
+          SIZE=$(echo "$IN_ZPOOL" | jq -r '.size // "auto"')
           RESEED=$(echo "$IN_ZPOOL" | jq -r '.reseed // false')
+
+          # Required pool capacity: snapshot size + 15% CoW/metadata headroom
+          # + 32G, unless an explicit size was requested.
+          SNAP_BYTES=$(sudo du -sb "$SRC" | cut -f1)
+          if [ "$SIZE" = "auto" ]; then
+            NEED_BYTES=$(( SNAP_BYTES + SNAP_BYTES / 100 * 15 + 32 * 1024 * 1024 * 1024 ))
+          else
+            NEED_BYTES=$(numfmt --from=iec "$SIZE")
+          fi
+          echo "Snapshot size: $(numfmt --to=iec "$SNAP_BYTES"), required pool size: $(numfmt --to=iec "$NEED_BYTES")"
 
           if ! sudo zpool list -H -o name 2>/dev/null | grep -qx "$POOL"; then
             CREATE=0
@@ -263,11 +364,35 @@ jobs:
               CREATE=1
             fi
             if [ "$CREATE" = "1" ]; then
-              echo "Creating file-backed zpool $POOL at $IMG (sparse, $SIZE)"
+              AVAIL=$(df -B1 --output=avail "$(dirname "$IMG")" | tail -1 | tr -d ' ')
+              if [ "$AVAIL" -lt "$NEED_BYTES" ]; then
+                echo "ERROR: $(dirname "$IMG") has $(numfmt --to=iec "$AVAIL") free," \
+                     "but the pool needs $(numfmt --to=iec "$NEED_BYTES"). Free up space first."
+                exit 1
+              fi
+              echo "Creating file-backed zpool $POOL at $IMG (sparse, $(numfmt --to=iec "$NEED_BYTES"))"
               sudo mkdir -p "$(dirname "$IMG")"
-              sudo truncate -s "$SIZE" "$IMG"
+              sudo truncate -s "$NEED_BYTES" "$IMG"
               sudo zpool create -f -O compression=off -O atime=off -m "/${POOL}" "$POOL" "$IMG"
             fi
+          fi
+
+          # Grow an existing pool that is smaller than required (sparse file:
+          # truncate up, then expand the vdev in place; seeded data survives).
+          POOL_BYTES=$(sudo zpool get -Hp -o value size "$POOL")
+          if [ "$POOL_BYTES" -lt "$NEED_BYTES" ]; then
+            ALLOC_BYTES=$(sudo zpool get -Hp -o value allocated "$POOL")
+            REMAIN_BYTES=$(( NEED_BYTES - ALLOC_BYTES ))
+            AVAIL=$(df -B1 --output=avail "$(dirname "$IMG")" | tail -1 | tr -d ' ')
+            if [ "$AVAIL" -lt "$REMAIN_BYTES" ]; then
+              echo "ERROR: growing pool $POOL to $(numfmt --to=iec "$NEED_BYTES") needs up to" \
+                   "$(numfmt --to=iec "$REMAIN_BYTES") more on $(dirname "$IMG")" \
+                   "(only $(numfmt --to=iec "$AVAIL") free). Free up space first."
+              exit 1
+            fi
+            echo "Growing zpool $POOL: $(numfmt --to=iec "$POOL_BYTES") -> $(numfmt --to=iec "$NEED_BYTES")"
+            sudo truncate -s "$NEED_BYTES" "$IMG"
+            sudo zpool online -e "$POOL" "$IMG"
           fi
 
           NETWORK_SLUG=$(basename "$(dirname "$SRC")")
@@ -284,13 +409,16 @@ jobs:
 
           MOUNTPOINT=$(sudo zfs get -H -o value mountpoint "$DATASET")
 
-          if [ -z "$(sudo find "$MOUNTPOINT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+          # Seed completion is tracked with a ZFS user property so an
+          # interrupted copy resumes instead of being mistaken for done.
+          if [ "$(sudo zfs get -H -o value gb:seeded "$DATASET")" != "true" ]; then
             command -v rsync >/dev/null 2>&1 || {
               sudo apt-get update
               sudo DEBIAN_FRONTEND=noninteractive apt-get install -y rsync
             }
-            echo "Seeding $DATASET from $SRC (one-time copy, this can take a while)..."
-            sudo rsync -a --info=progress2 "$SRC"/ "$MOUNTPOINT"/
+            echo "Seeding $DATASET from $SRC (one-time copy, resumable; this can take a while)..."
+            sudo rsync -a --delete --info=progress2 "$SRC"/ "$MOUNTPOINT"/
+            sudo zfs set gb:seeded=true "$DATASET"
           else
             echo "Dataset $DATASET already seeded; reusing it. Pass zpool.reseed=true to refresh."
           fi
@@ -306,6 +434,9 @@ jobs:
           NETHERMIND_IMAGE: ${{ inputs.image }}
           NETHERMIND_FLAGS: ${{ inputs.nethermind_extra_flags }}
           EXTRA_RUN_CONFIG: ${{ inputs.extra_run_config }}
+          DIAG_MODE: ${{ steps.resolve.outputs.diag_mode }}
+          DIAG_DIR: ${{ steps.resolve.outputs.diag_dir }}
+          TRACE_BLOCKS: ${{ steps.resolve.outputs.trace_blocks }}
         run: |
           set -euo pipefail
 
@@ -327,6 +458,54 @@ jobs:
             for flag in $NETHERMIND_FLAGS; do
               printf '        - "%s"\n' "$flag" >> "$OVERLAY"
             done
+          fi
+
+          # Diagnostics. The extra mount collects output on the host (needs
+          # benchmarkoor with extra_mounts — fork branch until upstream).
+          #
+          # dottrace does NOT use the image's DIAG_WITH entrypoint: masterdiag
+          # profiles with --profiling-type=timeline, whose snapshots
+          # Reporter.exe cannot convert to XML ("Invalid storage type").
+          # Instead the entrypoint is overridden with an expb-style wrapper:
+          # default (sampling) profiling, .dtp naming, and --use-api only when
+          # NETHERMIND_PROFILE_BLOCKS is set — MeasureProfiler per-block
+          # windows (NethermindEth/nethermind#12444) are ignored without API
+          # mode, while API mode suppresses whole-run collection, so an image
+          # without the BlockProfiler plugin collects nothing under
+          # trace_blocks.
+          # NB: the entrypoint must be a flat argv with NO shell variables —
+          # benchmarkoor env-expands the raw config text at load time, so any
+          # $var inside an embedded script gets blanked. benchmarkoor's
+          # command (the client flags) is appended after the entrypoint by
+          # the container runtime, ENTRYPOINT+CMD style. The dottrace tool
+          # path is where the nethermind diag images install it.
+          if [ "$DIAG_MODE" = "dottrace" ]; then
+            {
+              if [ -n "$TRACE_BLOCKS" ]; then
+                echo "      environment:"
+                echo "        NETHERMIND_PROFILE_BLOCKS: \"${TRACE_BLOCKS}\""
+              fi
+              echo "      entrypoint:"
+              echo "        - /opt/diag-tools/dottrace"
+              echo "        - start"
+              echo "        - --framework=netcore"
+              echo "        - --propagate-exit-code"
+              echo "        - --save-to=/nethermind/diag/nethermind.dtp"
+              if [ -n "$TRACE_BLOCKS" ]; then
+                echo "        - --use-api"
+              fi
+              echo "        - \"--\""
+              echo "        - ./nethermind"
+              echo "      extra_mounts:"
+              echo "        - \"${DIAG_DIR}:/nethermind/diag\""
+            } >> "$OVERLAY"
+          elif [ "$DIAG_MODE" != "none" ]; then
+            {
+              echo "      environment:"
+              echo "        DIAG_WITH: \"${DIAG_MODE}\""
+              echo "      extra_mounts:"
+              echo "        - \"${DIAG_DIR}:/nethermind/diag\""
+            } >> "$OVERLAY"
           fi
 
           if [ -n "$EXTRA_RUN_CONFIG" ]; then
@@ -358,14 +537,68 @@ jobs:
         with:
           mode: run
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          image: ${{ inputs.benchmarkoor_image }}
-          git-ref: ${{ inputs.benchmarkoor_git_ref }}
+          # Resolved in the resolve step: a set git ref forces a source build
+          # (bm_image=''), and diagnostics mode defaults to the fork branch.
+          image: ${{ steps.resolve.outputs.bm_image }}
+          git-ref: ${{ steps.resolve.outputs.bm_git_ref }}
+          git-repo: ${{ steps.resolve.outputs.bm_git_repo }}
           tmp-dir: ${{ steps.resolve.outputs.tmp_dir }}
           upload-artifacts: 'true'
           run-config-urls: ${{ steps.resolve.outputs.config_urls }}
           run-config: ${{ steps.overlay.outputs.config }}
           run-args: >-
             --limit-instance-client=nethermind
+
+      - name: Per-test MGas/s summary
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          WORK=$(mktemp -d)
+          if ! gh run download "${{ github.run_id }}" --repo "${{ github.repository }}" \
+               -n "benchmarkoor-${{ github.run_id }}" -D "$WORK" 2>/dev/null; then
+            echo "No results artifact found; skipping per-test summary." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          tar xzf "$WORK/benchmarkoor-results.tar.gz" -C "$WORK"
+          RESULT=$(find "$WORK/results/runs" -maxdepth 2 -name result.json | head -1)
+          if [ -z "$RESULT" ]; then
+            echo "No result.json in artifact; skipping per-test summary." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## Per-test throughput"
+            echo ""
+            jq -r -f .github/scripts/benchmarkoor-pertest-summary.jq "$RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          rm -rf "$WORK"
+
+      - name: Collect diagnostics
+        if: always() && steps.resolve.outputs.diag_mode != 'none' && steps.resolve.outputs.diag_mode != ''
+        shell: bash
+        env:
+          DIAG_DIR: ${{ steps.resolve.outputs.diag_dir }}
+        run: |
+          set +e
+          sudo chown -R "$(id -u):$(id -g)" "$DIAG_DIR" 2>/dev/null
+          echo "Diagnostic files:"
+          find "$DIAG_DIR" -type f -printf "%p %s bytes\n" | sort
+          true
+
+      - name: Upload diagnostics artifact
+        if: always() && steps.resolve.outputs.diag_mode != 'none' && steps.resolve.outputs.diag_mode != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethermind-diagnostics-${{ steps.resolve.outputs.diag_mode }}-${{ github.run_id }}
+          path: ${{ steps.resolve.outputs.diag_dir }}
+          if-no-files-found: warn
+          compression-level: 0
 
       - name: Cleanup podman leftovers
         if: always()
@@ -377,3 +610,91 @@ jobs:
             sudo podman network rm -f benchmarkoor 2>/dev/null
           fi
           true
+
+  # dotTrace snapshot -> XML report conversion (Reporter.exe is Windows-only;
+  # same approach as NethermindEth/nethermind run-expb-reproducible-benchmarks).
+  dottrace-xml:
+    needs: benchmarkoor
+    if: always() && (inputs.diagnostics_mode == 'dottrace' || inputs.trace_blocks != '')
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download dotTrace snapshots
+        uses: actions/download-artifact@v4
+        with:
+          name: nethermind-diagnostics-dottrace-${{ github.run_id }}
+          path: snapshots
+
+      - name: Install dotTrace Reporter
+        shell: pwsh
+        run: |
+          # Keep in lockstep with the dotTrace CLI bundled in the diag image
+          # (a Reporter older than the profiler rejects the snapshot format:
+          # "unknown or unsupported snapshot format").
+          $url = 'https://www.nuget.org/api/v2/package/JetBrains.dotTrace.CommandLineTools.windows-x64/2026.1.4'
+          Write-Host "Downloading dotTrace CommandLineTools from NuGet..."
+          Invoke-WebRequest -Uri $url -OutFile dottrace-clt.zip
+          Expand-Archive -Path dottrace-clt.zip -DestinationPath dottrace-clt
+          $reporter = Get-ChildItem -Path dottrace-clt -Recurse -Filter 'Reporter.exe' | Select-Object -First 1
+          if (-not $reporter) {
+            Write-Error "Reporter.exe not found in package"
+            exit 1
+          }
+          Write-Host "Found Reporter.exe at $($reporter.FullName)"
+          echo "REPORTER=$($reporter.FullName)" >> $env:GITHUB_ENV
+
+      - name: Generate XML reports
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path reports | Out-Null
+
+          $patternFile = 'pattern.xml'
+          @'
+          <Patterns>
+            <Pattern PrintCallstacks="Full">.*</Pattern>
+          </Patterns>
+          '@ | Set-Content -Path $patternFile
+
+          # Snapshot index files: *.dtp / *.dtc, or the chunked-layout index
+          # named exactly 'dottrace' (the diag entrypoint's --save-to base;
+          # its dottrace.XXXX chunk files sit alongside and are read via the
+          # index). Chunk files themselves are excluded.
+          $snapshots = Get-ChildItem -Path snapshots -Recurse -File |
+            Where-Object { $_.Extension -in '.dtp', '.dtc' -or $_.Name -eq 'dottrace' }
+
+          if ($snapshots.Count -eq 0) {
+            Write-Host "No dotTrace snapshot index files found."
+            exit 0
+          }
+
+          foreach ($dtp in $snapshots) {
+            $name = $dtp.BaseName
+            $outFile = "reports/${name}-report.xml"
+            Write-Host "::group::Generating report for $name"
+            Write-Host "  $($dtp.FullName) -> $outFile"
+            & $env:REPORTER report $dtp.FullName --pattern=$patternFile --save-to=$outFile
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Reporter failed for $name with exit code $LASTEXITCODE"
+            }
+            Write-Host "::endgroup::"
+          }
+
+          # Fail loudly only when snapshots existed but nothing converted
+          # (e.g. a profiler/Reporter version mismatch); otherwise the last
+          # Reporter exit code would leak as the step's own.
+          $made = @(Get-ChildItem -Path reports -Filter '*.xml' -ErrorAction SilentlyContinue)
+          if ($made.Count -eq 0) {
+            Write-Error "Snapshots were found but no XML report was produced."
+            exit 1
+          }
+          Write-Host "Produced $($made.Count) XML report(s)."
+          exit 0
+
+      - name: Upload XML reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dottrace-xml-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+          if-no-files-found: warn

@@ -1,0 +1,28 @@
+# Test source: a generated-tests archive from a gas-benchmarks release
+# (or a GitHub Actions artifact URL). All ${GB_*} variables are exported by
+# the "Benchmarkoor - Nethermind" workflow before benchmarkoor loads this file.
+runner:
+  benchmark:
+    results_dir: ./results
+    generate_results_index: true
+    generate_suite_stats: true
+    tests:
+      metadata:
+        labels:
+          name: ${GB_SUITE_NAME}
+          chain: ${GB_NETWORK}
+          test-type: ${GB_TEST_TYPE}
+          context: repricing
+          source: gas-benchmarks
+      filter: "${GB_TESTS_FILTER:-}"
+      source:
+        archive:
+          file: ${GB_TESTS_ARCHIVE_URL}
+          pre_run_steps:
+            - "${GB_TESTS_PREFIX}/gas-bump.txt"
+            - "${GB_TESTS_PREFIX}/funding.txt"
+          steps:
+            setup:
+              - "${GB_TESTS_PREFIX}/setup/*.txt"
+            test:
+              - "${GB_TESTS_PREFIX}/testing/*.txt"

@@ -1,0 +1,19 @@
+# Base benchmarkoor runner settings shared by every "Benchmarkoor - Nethermind" run.
+# Podman is mandatory: the container-checkpoint-restore rollback strategy uses
+# Podman's CRIU-based checkpoint/restore (memory snapshots) instead of
+# restarting the client between tests.
+global:
+  log_level: info
+
+runner:
+  container_runtime: podman
+  # Client output always goes to runs/<run_id>/container.log in the results
+  # artifact; this switch only mirrors it into the CI job log (very noisy
+  # during the ~230-block startup replay). Enable ad hoc via extra_run_config
+  # when live-debugging a client boot.
+  client_logs_to_stdout: false
+  container_network: benchmarkoor
+  cleanup_on_start: true
+  client:
+    config:
+      drop_memory_caches: "steps"

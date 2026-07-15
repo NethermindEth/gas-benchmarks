@@ -1,0 +1,6 @@
+# No rollback between tests (default for compute suites, whose tests don't
+# depend on state mutations being reverted).
+runner:
+  client:
+    config:
+      rollback_strategy: none

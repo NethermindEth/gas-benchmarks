@@ -1,0 +1,7 @@
+# Optional opcode metadata for the suite. Only included by the workflow when
+# an opcodes URL is resolved (release asset or explicit input).
+runner:
+  benchmark:
+    tests:
+      opcode_source:
+        file: ${GB_OPCODES_URL}

@@ -1,0 +1,6 @@
+# RPC-based rollback: Nethermind uses debug_resetHead (block hash) after each
+# test. Cheapest option, but the client process keeps warm caches between tests.
+runner:
+  client:
+    config:
+      rollback_strategy: rpc-debug-setHead
