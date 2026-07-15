@@ -59,6 +59,18 @@ on:
       checkpoint_options:
         description: 'JSON options for container-checkpoint-restore'
         default: '{"tmpfs_threshold":"10g","tmpfs_max_size":"15g","wait_after_tcp_drop_connections":"10s","restart_container":true,"restore_in_place":true}'
+      diagnostics_mode:
+        description: 'Profile Nethermind via the diag-image entrypoint (requires a diag-capable image, e.g. nethermindeth/nethermind:masterdiag). dottrace snapshots are auto-converted to XML'
+        type: choice
+        options:
+          - none
+          - dottrace
+          - dotmemory
+          - dotnet-trace
+        default: 'none'
+      trace_blocks:
+        description: "Comma-separated block numbers for NETHERMIND_PROFILE_BLOCKS (per-block dotTrace windows, NethermindEth/nethermind#12444). 'auto' = jochemnet testing blocks. Implies diagnostics_mode=dottrace"
+        default: ''
       snapshot_dir:
         description: "Nethermind snapshot datadir on the runner. Empty = /mnt/sda/<network>/nethermind, 'none' = run without a datadir"
         default: ''
@@ -117,6 +129,12 @@ jobs:
           IN_ROLLBACK: ${{ inputs.rollback_strategy }}
           IN_CHECKPOINT_OPTIONS: ${{ inputs.checkpoint_options }}
           IN_SNAPSHOT_DIR: ${{ inputs.snapshot_dir }}
+          IN_DIAG_MODE: ${{ inputs.diagnostics_mode }}
+          IN_TRACE_BLOCKS: ${{ inputs.trace_blocks }}
+          IN_IMAGE: ${{ inputs.image }}
+          IN_BM_IMAGE: ${{ inputs.benchmarkoor_image }}
+          IN_BM_REF: ${{ inputs.benchmarkoor_git_ref }}
+          IN_BM_REPO: ${{ inputs.benchmarkoor_git_repo }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
         run: |
@@ -146,12 +164,71 @@ jobs:
             GENESIS_URL="https://raw.githubusercontent.com/${REPO}/${SHA}/scripts/genesisfiles/nethermind/generator-amsterdam-${IN_NETWORK}.json"
           fi
 
+          # Diagnostics: trace_blocks implies dottrace (mirrors
+          # NethermindEth/nethermind#12444's trace_blocks input).
+          DIAG_MODE="$IN_DIAG_MODE"
+          TRACE_BLOCKS="$IN_TRACE_BLOCKS"
+          if [ -n "$TRACE_BLOCKS" ] && [ "$DIAG_MODE" = "none" ]; then
+            DIAG_MODE="dottrace"
+          fi
+          if [ "$TRACE_BLOCKS" = "auto" ]; then
+            case "$IN_NETWORK" in
+              # head 24402727 + 5000 gas-bump + 1 funding + 1 setup block;
+              # testing blocks land at +2/+3 for single-setup-block suites.
+              jochemnet) TRACE_BLOCKS="24407730,24407731" ;;
+              *)
+                echo "ERROR: trace_blocks=auto is only mapped for jochemnet;"
+                echo "pass explicit block numbers for $IN_NETWORK."
+                exit 1
+                ;;
+            esac
+          fi
+
+          DIAG_DIR=""
+          if [ "$DIAG_MODE" != "none" ]; then
+            DIAG_DIR="${RUNNER_TEMP}/diagfiles"
+            sudo rm -rf "$DIAG_DIR"
+            mkdir -p "$DIAG_DIR"
+            chmod 777 "$DIAG_DIR"
+            case "$IN_IMAGE" in
+              *diag*) : ;;
+              *)
+                echo "WARNING: diagnostics_mode=$DIAG_MODE but image '$IN_IMAGE'"
+                echo "does not look diag-capable (no DIAG_WITH entrypoint) —"
+                echo "expect no diagnostic output. Use e.g. nethermindeth/nethermind:masterdiag."
+                ;;
+            esac
+          fi
+
           ROLLBACK="$IN_ROLLBACK"
           if [ "$ROLLBACK" = "auto" ]; then
-            case "$IN_TEST_TYPE" in
-              stateful) ROLLBACK="container-checkpoint-restore" ;;
-              *)        ROLLBACK="none" ;;
-            esac
+            if [ "$DIAG_MODE" != "none" ]; then
+              # Profiling wants one live client process for the whole run:
+              # a continuous dotTrace session (with optional per-block
+              # windows) is incompatible with CRIU checkpoint/restore.
+              ROLLBACK="rpc-debug-setHead"
+            else
+              case "$IN_TEST_TYPE" in
+                stateful) ROLLBACK="container-checkpoint-restore" ;;
+                *)        ROLLBACK="none" ;;
+              esac
+            fi
+          fi
+
+          # benchmarkoor source: a set git ref forces a source build (an
+          # explicitly-empty image input is impossible — GitHub swaps empty
+          # dispatch inputs for their defaults). Diagnostics need the fork's
+          # extra_mounts until it lands upstream, so default the ref there.
+          BM_REF="$IN_BM_REF"
+          BM_REPO="$IN_BM_REPO"
+          if [ "$DIAG_MODE" != "none" ] && [ -z "$BM_REF" ]; then
+            BM_REPO="https://github.com/kamilchodola/benchmarkoor.git"
+            BM_REF="gas-benchmarks"
+            echo "Diagnostics mode: defaulting benchmarkoor to ${BM_REPO}@${BM_REF} (extra_mounts support)"
+          fi
+          BM_IMAGE="$IN_BM_IMAGE"
+          if [ -n "$BM_REF" ]; then
+            BM_IMAGE=""
           fi
 
           DATADIR_ENABLED=true
@@ -209,6 +286,12 @@ jobs:
             echo "rollback=${ROLLBACK}"
             echo "genesis_url=${GENESIS_URL}"
             echo "tmp_dir=${TMP_DIR}"
+            echo "diag_mode=${DIAG_MODE}"
+            echo "diag_dir=${DIAG_DIR}"
+            echo "trace_blocks=${TRACE_BLOCKS}"
+            echo "bm_image=${BM_IMAGE}"
+            echo "bm_git_ref=${BM_REF}"
+            echo "bm_git_repo=${BM_REPO}"
           } >> "$GITHUB_OUTPUT"
 
           echo "== Resolved configuration =="
@@ -217,6 +300,8 @@ jobs:
           echo "genesis:          $GENESIS_URL"
           echo "rollback:         $ROLLBACK"
           echo "snapshot dir:     ${SNAPSHOT_DIR:-<no datadir>}"
+          echo "diagnostics:      ${DIAG_MODE} trace_blocks=${TRACE_BLOCKS:-<none>}"
+          echo "benchmarkoor:     ${BM_IMAGE:-build ${BM_REPO}@${BM_REF}}"
           echo "config urls:      $URLS"
 
       - name: Prepare ZFS-backed datadir
@@ -349,6 +434,9 @@ jobs:
           NETHERMIND_IMAGE: ${{ inputs.image }}
           NETHERMIND_FLAGS: ${{ inputs.nethermind_extra_flags }}
           EXTRA_RUN_CONFIG: ${{ inputs.extra_run_config }}
+          DIAG_MODE: ${{ steps.resolve.outputs.diag_mode }}
+          DIAG_DIR: ${{ steps.resolve.outputs.diag_dir }}
+          TRACE_BLOCKS: ${{ steps.resolve.outputs.trace_blocks }}
         run: |
           set -euo pipefail
 
@@ -370,6 +458,23 @@ jobs:
             for flag in $NETHERMIND_FLAGS; do
               printf '        - "%s"\n' "$flag" >> "$OVERLAY"
             done
+          fi
+
+          # Diagnostics: DIAG_WITH drives the diag-image entrypoint (dotTrace
+          # et al.); NETHERMIND_PROFILE_BLOCKS scopes profiling to specific
+          # blocks (BlockProfiler plugin, NethermindEth/nethermind#12444).
+          # The extra mount collects snapshots on the host; requires
+          # benchmarkoor with extra_mounts support (fork branch until upstream).
+          if [ "$DIAG_MODE" != "none" ]; then
+            {
+              echo "      environment:"
+              echo "        DIAG_WITH: \"${DIAG_MODE}\""
+              if [ -n "$TRACE_BLOCKS" ]; then
+                echo "        NETHERMIND_PROFILE_BLOCKS: \"${TRACE_BLOCKS}\""
+              fi
+              echo "      extra_mounts:"
+              echo "        - \"${DIAG_DIR}:/nethermind/diag\""
+            } >> "$OVERLAY"
           fi
 
           if [ -n "$EXTRA_RUN_CONFIG" ]; then
@@ -401,17 +506,68 @@ jobs:
         with:
           mode: run
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          # A set git-ref forces a local source build (empty image); the
-          # `== '' && x || ''` form is deliberate — image may itself be ''.
-          image: ${{ inputs.benchmarkoor_git_ref == '' && inputs.benchmarkoor_image || '' }}
-          git-ref: ${{ inputs.benchmarkoor_git_ref }}
-          git-repo: ${{ inputs.benchmarkoor_git_repo }}
+          # Resolved in the resolve step: a set git ref forces a source build
+          # (bm_image=''), and diagnostics mode defaults to the fork branch.
+          image: ${{ steps.resolve.outputs.bm_image }}
+          git-ref: ${{ steps.resolve.outputs.bm_git_ref }}
+          git-repo: ${{ steps.resolve.outputs.bm_git_repo }}
           tmp-dir: ${{ steps.resolve.outputs.tmp_dir }}
           upload-artifacts: 'true'
           run-config-urls: ${{ steps.resolve.outputs.config_urls }}
           run-config: ${{ steps.overlay.outputs.config }}
           run-args: >-
             --limit-instance-client=nethermind
+
+      - name: Per-test MGas/s summary
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          WORK=$(mktemp -d)
+          if ! gh run download "${{ github.run_id }}" --repo "${{ github.repository }}" \
+               -n "benchmarkoor-${{ github.run_id }}" -D "$WORK" 2>/dev/null; then
+            echo "No results artifact found; skipping per-test summary." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          tar xzf "$WORK/benchmarkoor-results.tar.gz" -C "$WORK"
+          RESULT=$(find "$WORK/results/runs" -maxdepth 2 -name result.json | head -1)
+          if [ -z "$RESULT" ]; then
+            echo "No result.json in artifact; skipping per-test summary." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## Per-test throughput"
+            echo ""
+            jq -r -f .github/scripts/benchmarkoor-pertest-summary.jq "$RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          rm -rf "$WORK"
+
+      - name: Collect diagnostics
+        if: always() && steps.resolve.outputs.diag_mode != 'none' && steps.resolve.outputs.diag_mode != ''
+        shell: bash
+        env:
+          DIAG_DIR: ${{ steps.resolve.outputs.diag_dir }}
+        run: |
+          set +e
+          sudo chown -R "$(id -u):$(id -g)" "$DIAG_DIR" 2>/dev/null
+          echo "Diagnostic files:"
+          find "$DIAG_DIR" -type f -printf "%p %s bytes\n" | sort
+          true
+
+      - name: Upload diagnostics artifact
+        if: always() && steps.resolve.outputs.diag_mode != 'none' && steps.resolve.outputs.diag_mode != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nethermind-diagnostics-${{ steps.resolve.outputs.diag_mode }}-${{ github.run_id }}
+          path: ${{ steps.resolve.outputs.diag_dir }}
+          if-no-files-found: warn
+          compression-level: 0
 
       - name: Cleanup podman leftovers
         if: always()
@@ -423,3 +579,73 @@ jobs:
             sudo podman network rm -f benchmarkoor 2>/dev/null
           fi
           true
+
+  # dotTrace snapshot -> XML report conversion (Reporter.exe is Windows-only;
+  # same approach as NethermindEth/nethermind run-expb-reproducible-benchmarks).
+  dottrace-xml:
+    needs: benchmarkoor
+    if: always() && (inputs.diagnostics_mode == 'dottrace' || inputs.trace_blocks != '')
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download dotTrace snapshots
+        uses: actions/download-artifact@v4
+        with:
+          name: nethermind-diagnostics-dottrace-${{ github.run_id }}
+          path: snapshots
+
+      - name: Install dotTrace Reporter
+        shell: pwsh
+        run: |
+          $url = 'https://www.nuget.org/api/v2/package/JetBrains.dotTrace.CommandLineTools.windows-x64/2026.1.0.1'
+          Write-Host "Downloading dotTrace CommandLineTools from NuGet..."
+          Invoke-WebRequest -Uri $url -OutFile dottrace-clt.zip
+          Expand-Archive -Path dottrace-clt.zip -DestinationPath dottrace-clt
+          $reporter = Get-ChildItem -Path dottrace-clt -Recurse -Filter 'Reporter.exe' | Select-Object -First 1
+          if (-not $reporter) {
+            Write-Error "Reporter.exe not found in package"
+            exit 1
+          }
+          Write-Host "Found Reporter.exe at $($reporter.FullName)"
+          echo "REPORTER=$($reporter.FullName)" >> $env:GITHUB_ENV
+
+      - name: Generate XML reports
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path reports | Out-Null
+
+          $patternFile = 'pattern.xml'
+          @'
+          <Patterns>
+            <Pattern PrintCallstacks="Full">.*</Pattern>
+          </Patterns>
+          '@ | Set-Content -Path $patternFile
+
+          # Exact .dtp extension only (not .dtp.0000 chunk files).
+          $snapshots = Get-ChildItem -Path snapshots -Recurse | Where-Object { $_.Extension -eq '.dtp' }
+
+          if ($snapshots.Count -eq 0) {
+            Write-Host "No .dtp snapshot files found."
+            exit 0
+          }
+
+          foreach ($dtp in $snapshots) {
+            $name = $dtp.BaseName
+            $outFile = "reports/${name}-report.xml"
+            Write-Host "::group::Generating report for $name"
+            Write-Host "  $($dtp.FullName) -> $outFile"
+            & $env:REPORTER report $dtp.FullName --pattern=$patternFile --save-to=$outFile
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Reporter failed for $name with exit code $LASTEXITCODE"
+            }
+            Write-Host "::endgroup::"
+          }
+
+      - name: Upload XML reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dottrace-xml-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+          if-no-files-found: warn

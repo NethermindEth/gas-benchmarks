@@ -101,6 +101,38 @@ at block 0 / genesis hash, endless `SYNCING` responses).
 Results are uploaded as the `benchmarkoor-<run_id>` workflow artifact and a
 per-test summary is rendered on the job summary page.
 
+## Job summary
+
+Besides benchmarkoor's own overview, the workflow appends a **per-test
+MGas/s table** to the GitHub job summary (median/min/max headline + a
+collapsible row per test), generated from the run's `result.json` by
+`.github/scripts/benchmarkoor-pertest-summary.jq`.
+
+## Profiling (dotTrace / trace_blocks)
+
+`diagnostics_mode: dottrace` runs Nethermind through the diag-image
+entrypoint (`DIAG_WITH`), so the `image` input must be diag-capable (e.g.
+`nethermindeth/nethermind:masterdiag`). Snapshots are written to a host
+directory bind-mounted at `/nethermind/diag` (via the fork's `extra_mounts`
+instance option — diagnostics runs auto-default to the fork's
+`gas-benchmarks` branch), uploaded as the
+`nethermind-diagnostics-dottrace-<run_id>` artifact, and auto-converted to
+XML by a Windows job (`Reporter.exe`, same approach as nethermind's
+run-expb-reproducible-benchmarks) into `dottrace-xml-<run_id>`.
+
+`trace_blocks` (implies dottrace) injects `NETHERMIND_PROFILE_BLOCKS` for
+the BlockProfiler plugin
+([NethermindEth/nethermind#12444](https://github.com/NethermindEth/nethermind/pull/12444)):
+one focused snapshot per listed block instead of a whole-run capture —
+i.e. profile only the testing blocks, excluding gas-bump and setup blocks.
+`auto` maps to the jochemnet testing blocks `24407730,24407731` (head
+24402727 + 5000 gas-bump + funding + one setup block; test families with
+multi-block setups need explicit numbers). Until #12444 merges, images
+without the plugin ignore the variable and produce a whole-run snapshot.
+Profiling runs force `rollback_strategy: rpc-debug-setHead` (under `auto`):
+one live client process for the whole run — a continuous dotTrace session
+is incompatible with CRIU checkpoint/restore.
+
 ## Notes
 
 - If `tests_archive_url` points at a GitHub Actions artifact (flat layout:
