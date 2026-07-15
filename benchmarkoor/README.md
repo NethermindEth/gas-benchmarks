@@ -142,6 +142,14 @@ Profiling runs force `rollback_strategy: rpc-debug-setHead` (under `auto`):
 one live client process for the whole run — a continuous dotTrace session
 is incompatible with CRIU checkpoint/restore.
 
+**⚠️ Never compare MGas/s numbers from a diagnostics run against
+checkpoint-restore runs.** With `rpc-debug-setHead` the client's in-memory
+caches survive between tests, so only the *first* test measures cold-state
+performance (observed: test 1 at ~31 MGas/s ≈ the checkpoint-restore
+baseline, tests 2+ up to ~4× faster). Checkpoint-restore exists precisely
+to reset memory to an identical cold state per test. For a pure-cold
+profile, filter the run down to a single test.
+
 ## Notes
 
 - If `tests_archive_url` points at a GitHub Actions artifact (flat layout:
