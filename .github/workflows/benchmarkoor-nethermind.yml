@@ -460,18 +460,46 @@ jobs:
             done
           fi
 
-          # Diagnostics: DIAG_WITH drives the diag-image entrypoint (dotTrace
-          # et al.); NETHERMIND_PROFILE_BLOCKS scopes profiling to specific
-          # blocks (BlockProfiler plugin, NethermindEth/nethermind#12444).
-          # The extra mount collects snapshots on the host; requires
-          # benchmarkoor with extra_mounts support (fork branch until upstream).
-          if [ "$DIAG_MODE" != "none" ]; then
+          # Diagnostics. The extra mount collects output on the host (needs
+          # benchmarkoor with extra_mounts — fork branch until upstream).
+          #
+          # dottrace does NOT use the image's DIAG_WITH entrypoint: masterdiag
+          # profiles with --profiling-type=timeline, whose snapshots
+          # Reporter.exe cannot convert to XML ("Invalid storage type").
+          # Instead the entrypoint is overridden with an expb-style wrapper:
+          # default (sampling) profiling, .dtp naming, and --use-api only when
+          # NETHERMIND_PROFILE_BLOCKS is set — MeasureProfiler per-block
+          # windows (NethermindEth/nethermind#12444) are ignored without API
+          # mode, while API mode suppresses whole-run collection, so an image
+          # without the BlockProfiler plugin collects nothing under
+          # trace_blocks.
+          if [ "$DIAG_MODE" = "dottrace" ]; then
+            {
+              if [ -n "$TRACE_BLOCKS" ]; then
+                echo "      environment:"
+                echo "        NETHERMIND_PROFILE_BLOCKS: \"${TRACE_BLOCKS}\""
+              fi
+              echo "      entrypoint:"
+              echo "        - /bin/bash"
+              echo "        - -c"
+              echo '        - |'
+              echo '          set -e'
+              echo '          tool='
+              echo '          for c in dottrace /opt/diag-tools/dottrace /root/.dotnet/tools/dottrace /usr/local/bin/dottrace; do'
+              echo '            command -v "$c" >/dev/null 2>&1 && { tool="$c"; break; }'
+              echo '          done'
+              echo '          if [ -z "$tool" ]; then echo "dottrace tool not found in image" >&2; exit 2; fi'
+              echo '          api='
+              echo '          if [ -n "${NETHERMIND_PROFILE_BLOCKS:-}" ]; then api=--use-api; fi'
+              echo '          exec "$tool" start --framework=netcore --propagate-exit-code --save-to=/nethermind/diag/nethermind.dtp $api -- ./nethermind "$@"'
+              echo "        - bash"
+              echo "      extra_mounts:"
+              echo "        - \"${DIAG_DIR}:/nethermind/diag\""
+            } >> "$OVERLAY"
+          elif [ "$DIAG_MODE" != "none" ]; then
             {
               echo "      environment:"
               echo "        DIAG_WITH: \"${DIAG_MODE}\""
-              if [ -n "$TRACE_BLOCKS" ]; then
-                echo "        NETHERMIND_PROFILE_BLOCKS: \"${TRACE_BLOCKS}\""
-              fi
               echo "      extra_mounts:"
               echo "        - \"${DIAG_DIR}:/nethermind/diag\""
             } >> "$OVERLAY"

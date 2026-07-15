@@ -110,15 +110,20 @@ collapsible row per test), generated from the run's `result.json` by
 
 ## Profiling (dotTrace / trace_blocks)
 
-`diagnostics_mode: dottrace` runs Nethermind through the diag-image
-entrypoint (`DIAG_WITH`), so the `image` input must be diag-capable (e.g.
-`nethermindeth/nethermind:masterdiag`). Snapshots are written to a host
-directory bind-mounted at `/nethermind/diag` (via the fork's `extra_mounts`
-instance option — diagnostics runs auto-default to the fork's
-`gas-benchmarks` branch), uploaded as the
-`nethermind-diagnostics-dottrace-<run_id>` artifact, and auto-converted to
-XML by a Windows job (`Reporter.exe`, same approach as nethermind's
-run-expb-reproducible-benchmarks) into `dottrace-xml-<run_id>`.
+`diagnostics_mode: dottrace` needs a diag-capable `image` (one bundling the
+dotTrace CLI, e.g. `nethermindeth/nethermind:masterdiag`) but does **not**
+use the image's `DIAG_WITH` entrypoint: masterdiag profiles with
+`--profiling-type=timeline`, and `Reporter.exe` cannot convert Timeline
+snapshots ("Invalid storage type"). The workflow instead overrides the
+container entrypoint with an expb-style wrapper — default (sampling)
+profiling, `.dtp` naming, `--use-api` only under `trace_blocks`. Snapshots
+land in a host directory bind-mounted at `/nethermind/diag` (via the fork's
+`extra_mounts` instance option — diagnostics runs auto-default to the
+fork's `gas-benchmarks` branch), upload as the
+`nethermind-diagnostics-dottrace-<run_id>` artifact, and are auto-converted
+to XML by a Windows job (`Reporter.exe`, version pinned to the image's
+dotTrace CLI) into `dottrace-xml-<run_id>`. `dotmemory`/`dotnet-trace`
+modes still use the image's `DIAG_WITH` entrypoint.
 
 `trace_blocks` (implies dottrace) injects `NETHERMIND_PROFILE_BLOCKS` for
 the BlockProfiler plugin
@@ -127,8 +132,12 @@ one focused snapshot per listed block instead of a whole-run capture —
 i.e. profile only the testing blocks, excluding gas-bump and setup blocks.
 `auto` maps to the jochemnet testing blocks `24407730,24407731` (head
 24402727 + 5000 gas-bump + funding + one setup block; test families with
-multi-block setups need explicit numbers). Until #12444 merges, images
-without the plugin ignore the variable and produce a whole-run snapshot.
+multi-block setups need explicit numbers). **`trace_blocks` requires an
+image with the BlockProfiler plugin**: it switches dotTrace to API mode
+(`--use-api`), which suppresses whole-run collection — an image without
+the plugin (masterdiag until #12444 merges) collects nothing. For a
+whole-run snapshot, use `diagnostics_mode: dottrace` without
+`trace_blocks`.
 Profiling runs force `rollback_strategy: rpc-debug-setHead` (under `auto`):
 one live client process for the whole run — a continuous dotTrace session
 is incompatible with CRIU checkpoint/restore.
