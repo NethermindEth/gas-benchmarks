@@ -3,6 +3,7 @@
 
 import argparse
 import os
+import shutil
 
 import yaml
 from bs4 import BeautifulSoup
@@ -39,12 +40,12 @@ def main():
 
         # If the file is not in the first folder, copy it from the second folder
         if not os.path.exists(first_file):
-            os.system(f'cp {second_file} {output_file}')
+            shutil.copy(second_file, output_file)
             continue
 
         # If the file is not in the second folder, copy it from the first folder
         if not os.path.exists(second_file):
-            os.system(f'cp {first_file} {output_file}')
+            shutil.copy(first_file, output_file)
             continue
 
         # If the file is in both folders, merge them
