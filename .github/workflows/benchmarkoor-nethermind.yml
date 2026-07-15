@@ -621,11 +621,15 @@ jobs:
           </Patterns>
           '@ | Set-Content -Path $patternFile
 
-          # Exact .dtp extension only (not .dtp.0000 chunk files).
-          $snapshots = Get-ChildItem -Path snapshots -Recurse | Where-Object { $_.Extension -eq '.dtp' }
+          # Snapshot index files: *.dtp / *.dtc, or the chunked-layout index
+          # named exactly 'dottrace' (the diag entrypoint's --save-to base;
+          # its dottrace.XXXX chunk files sit alongside and are read via the
+          # index). Chunk files themselves are excluded.
+          $snapshots = Get-ChildItem -Path snapshots -Recurse -File |
+            Where-Object { $_.Extension -in '.dtp', '.dtc' -or $_.Name -eq 'dottrace' }
 
           if ($snapshots.Count -eq 0) {
-            Write-Host "No .dtp snapshot files found."
+            Write-Host "No dotTrace snapshot index files found."
             exit 0
           }
 
