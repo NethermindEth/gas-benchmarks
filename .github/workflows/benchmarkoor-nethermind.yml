@@ -597,7 +597,10 @@ jobs:
       - name: Install dotTrace Reporter
         shell: pwsh
         run: |
-          $url = 'https://www.nuget.org/api/v2/package/JetBrains.dotTrace.CommandLineTools.windows-x64/2026.1.0.1'
+          # Keep in lockstep with the dotTrace CLI bundled in the diag image
+          # (a Reporter older than the profiler rejects the snapshot format:
+          # "unknown or unsupported snapshot format").
+          $url = 'https://www.nuget.org/api/v2/package/JetBrains.dotTrace.CommandLineTools.windows-x64/2026.1.4'
           Write-Host "Downloading dotTrace CommandLineTools from NuGet..."
           Invoke-WebRequest -Uri $url -OutFile dottrace-clt.zip
           Expand-Archive -Path dottrace-clt.zip -DestinationPath dottrace-clt
@@ -644,6 +647,17 @@ jobs:
             }
             Write-Host "::endgroup::"
           }
+
+          # Fail loudly only when snapshots existed but nothing converted
+          # (e.g. a profiler/Reporter version mismatch); otherwise the last
+          # Reporter exit code would leak as the step's own.
+          $made = @(Get-ChildItem -Path reports -Filter '*.xml' -ErrorAction SilentlyContinue)
+          if ($made.Count -eq 0) {
+            Write-Error "Snapshots were found but no XML report was produced."
+            exit 1
+          }
+          Write-Host "Produced $($made.Count) XML report(s)."
+          exit 0
 
       - name: Upload XML reports
         if: always()
