@@ -1,0 +1,410 @@
+name: gas-benchmark-compare-action
+
+description: |
+  Run gas-benchmarks twice with different images and generate a comparison report.
+  This action runs benchmarks sequentially with imagesA and imagesB, then compares results.
+
+inputs:
+  testPath:
+    description: 'Path to benchmark tests inside the gas-benchmarks repo'
+    required: false
+    default: 'eest_tests'
+  genesisFile:
+    description: 'Genesis filename used for all clients (under scripts/genesisfiles/<client>/)'
+    required: false
+    default: ''
+  warmupFile:
+    description: 'Warmup file path; set to empty string to disable warmup'
+    required: false
+    default: 'warmup/warmup-1000bl-16wi-24tx.txt'
+  clients:
+    description: 'Comma-separated list of clients to benchmark (should match keys in imagesA/imagesB)'
+    required: false
+    default: 'nethermind'
+  runs:
+    description: 'Number of independent benchmark iterations to average (each iteration produces a separate report, then all are averaged)'
+    required: false
+    default: '1'
+  opcodeWarmupCount:
+    description: 'Number of opcode warmup iterations per test case'
+    required: false
+    default: '1'
+  filter:
+    description: 'Comma-separated include-only filename patterns for stateful scenarios'
+    required: false
+    default: ''
+  baselineConfig:
+    description: 'JSON config for baseline run: {"images": {"client":"image:tag"}, "label": "Name"}'
+    required: true
+  comparisonConfig:
+    description: 'JSON config for comparison run: {"images": {"client":"image:tag"}, "label": "Name"}'
+    required: true
+  metrics:
+    description: 'Comma-separated metrics to display in comparison table (available: min,max,p50,p95,p99,duration,fcu,np)'
+    required: false
+    default: 'min,max,duration'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Set up .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Ensure scripts are executable
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        chmod +x ./run.sh || true
+
+    - name: Pull LFS files for gas-benchmarks
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        if [ -d .git ]; then
+          git lfs install
+          git lfs pull
+        else
+          echo "Not a git repository, skipping LFS pull."
+        fi
+
+    - name: Install Python dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        pip install -r requirements.txt
+
+    - name: Prepare Kute tools
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        if [ ! -d nethermind ]; then
+          git clone https://github.com/NethermindEth/nethermind nethermind
+          (cd nethermind && git lfs pull || true)
+        fi
+        cd nethermind
+        git checkout e1857d7ca6613ccdc40973899290f565f367e235
+        cd ..
+        dotnet build ./nethermind/tools/Nethermind.Tools.Kute -c Release --property WarningLevel=0
+
+    - name: Parse config JSON
+      id: parse-config
+      shell: bash
+      env:
+        BASELINE_CONFIG: ${{ inputs.baselineConfig }}
+        COMPARISON_CONFIG: ${{ inputs.comparisonConfig }}
+      run: |
+        set -euo pipefail
+
+        echo "=== Parsing baseline config ==="
+        echo "Raw BASELINE_CONFIG: $BASELINE_CONFIG"
+        BASELINE_IMAGES=$(echo "$BASELINE_CONFIG" | jq -c '.images')
+        BASELINE_LABEL=$(echo "$BASELINE_CONFIG" | jq -r '.label // "Baseline"')
+        echo "Parsed BASELINE_IMAGES: $BASELINE_IMAGES"
+        echo "Parsed BASELINE_LABEL: $BASELINE_LABEL"
+
+        echo "=== Parsing comparison config ==="
+        echo "Raw COMPARISON_CONFIG: $COMPARISON_CONFIG"
+        COMPARISON_IMAGES=$(echo "$COMPARISON_CONFIG" | jq -c '.images')
+        COMPARISON_LABEL=$(echo "$COMPARISON_CONFIG" | jq -r '.label // "Comparison"')
+        echo "Parsed COMPARISON_IMAGES: $COMPARISON_IMAGES"
+        echo "Parsed COMPARISON_LABEL: $COMPARISON_LABEL"
+
+        # Verify configs are different
+        if [ "$BASELINE_IMAGES" = "$COMPARISON_IMAGES" ]; then
+          echo "WARNING: BASELINE_IMAGES and COMPARISON_IMAGES are identical!"
+          echo "This will result in comparing the same benchmark results."
+        fi
+
+        # Export to GITHUB_OUTPUT using heredoc for proper handling of special characters
+        {
+          echo "baseline_images<<EOF"
+          echo "$BASELINE_IMAGES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
+        echo "baseline_label=$BASELINE_LABEL" >> $GITHUB_OUTPUT
+
+        {
+          echo "comparison_images<<EOF"
+          echo "$COMPARISON_IMAGES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
+        echo "comparison_label=$COMPARISON_LABEL" >> $GITHUB_OUTPUT
+
+    # === RUN A: Baseline ===
+    - name: Clean directories for run A
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        rm -rf results reports reports_a reports_a_run* reports_b reports_b_run*
+        # Clean execution-data directories (files may be owned by root from containers)
+        sudo rm -rf scripts/*/execution-data 2>/dev/null || true
+        mkdir -p results
+
+    - name: Run benchmarks (Run A - Baseline)
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        TEST_PATH: ${{ inputs.testPath }}
+        GENESIS_FILE: ${{ inputs.genesisFile }}
+        WARMUP_FILE: ${{ inputs.warmupFile }}
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
+        IMAGES: ${{ steps.parse-config.outputs.baseline_images }}
+        OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
+        FILTER: ${{ inputs.filter }}
+      run: |
+        set -euo pipefail
+        echo "=== Starting Baseline Run (A) ==="
+        echo "IMAGES: $IMAGES"
+        echo "Number of iterations: $RUNS"
+
+        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+
+        for run_num in $(seq 1 $RUNS); do
+          echo ""
+          echo "=========================================="
+          echo "=== Baseline Run A - Iteration $run_num/$RUNS ==="
+          echo "=========================================="
+
+          # Clean results and reports for this iteration
+          rm -rf results reports
+          mkdir -p results
+
+          # Run benchmark (single iteration)
+          ./run.sh \
+            -T "$TEST_PATHS_JSON" \
+            -w "$WARMUP_FILE" \
+            -c "$CLIENTS" \
+            -r 1 \
+            -i "$IMAGES" \
+            -o "$OPCODE_WARMUP_COUNT" \
+            -f "$FILTER"
+
+          # Save reports for this iteration
+          mkdir -p "reports_a_run${run_num}"
+          if [ -d reports ]; then
+            cp -r reports/* "reports_a_run${run_num}/"
+            echo "Saved reports to reports_a_run${run_num}/"
+            ls -la "reports_a_run${run_num}/"
+          fi
+
+          # Save results for this iteration
+          mkdir -p "results_a_run${run_num}"
+          if [ -d results ]; then
+            cp -r results/* "results_a_run${run_num}/"
+            echo "Saved results to results_a_run${run_num}/"
+          fi
+        done
+
+    - name: Average reports for Run A
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
+      run: |
+        set -euo pipefail
+        echo "=== Averaging reports for Run A ==="
+
+        if [ "$RUNS" -eq 1 ]; then
+          # Single run - just copy directly
+          mkdir -p reports_a
+          cp -r reports_a_run1/* reports_a/
+          echo "Single run - copied reports_a_run1 to reports_a"
+        else
+          # Multiple runs - calculate averages
+          python3 scripts/average_reports.py \
+            --input-pattern "reports_a_run*" \
+            --output reports_a \
+            --clients "$CLIENTS"
+        fi
+
+        echo "Final reports_a contents:"
+        ls -la reports_a/
+
+    # === RUN B: Comparison ===
+    - name: Clean directories for run B
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        rm -rf results reports
+        # Clean execution-data directories (files may be owned by root from containers)
+        sudo rm -rf scripts/*/execution-data 2>/dev/null || true
+        mkdir -p results
+
+    - name: Run benchmarks (Run B - Comparison)
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        TEST_PATH: ${{ inputs.testPath }}
+        GENESIS_FILE: ${{ inputs.genesisFile }}
+        WARMUP_FILE: ${{ inputs.warmupFile }}
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
+        IMAGES: ${{ steps.parse-config.outputs.comparison_images }}
+        OPCODE_WARMUP_COUNT: ${{ inputs.opcodeWarmupCount }}
+        FILTER: ${{ inputs.filter }}
+      run: |
+        set -euo pipefail
+        echo "=== Starting Comparison Run (B) ==="
+        echo "IMAGES: $IMAGES"
+        echo "Number of iterations: $RUNS"
+
+        TEST_PATHS_JSON="[ {\"path\": \"${TEST_PATH}\", \"genesis\": \"${GENESIS_FILE}\"} ]"
+
+        for run_num in $(seq 1 $RUNS); do
+          echo ""
+          echo "=========================================="
+          echo "=== Comparison Run B - Iteration $run_num/$RUNS ==="
+          echo "=========================================="
+
+          # Clean results and reports for this iteration
+          rm -rf results reports
+          mkdir -p results
+
+          # Run benchmark (single iteration)
+          ./run.sh \
+            -T "$TEST_PATHS_JSON" \
+            -w "$WARMUP_FILE" \
+            -c "$CLIENTS" \
+            -r 1 \
+            -i "$IMAGES" \
+            -o "$OPCODE_WARMUP_COUNT" \
+            -f "$FILTER"
+
+          # Save reports for this iteration
+          mkdir -p "reports_b_run${run_num}"
+          if [ -d reports ]; then
+            cp -r reports/* "reports_b_run${run_num}/"
+            echo "Saved reports to reports_b_run${run_num}/"
+            ls -la "reports_b_run${run_num}/"
+          fi
+
+          # Save results for this iteration
+          mkdir -p "results_b_run${run_num}"
+          if [ -d results ]; then
+            cp -r results/* "results_b_run${run_num}/"
+            echo "Saved results to results_b_run${run_num}/"
+          fi
+        done
+
+    - name: Average reports for Run B
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        CLIENTS: ${{ inputs.clients }}
+        RUNS: ${{ inputs.runs }}
+      run: |
+        set -euo pipefail
+        echo "=== Averaging reports for Run B ==="
+
+        if [ "$RUNS" -eq 1 ]; then
+          # Single run - just copy directly
+          mkdir -p reports_b
+          cp -r reports_b_run1/* reports_b/
+          echo "Single run - copied reports_b_run1 to reports_b"
+        else
+          # Multiple runs - calculate averages
+          python3 scripts/average_reports.py \
+            --input-pattern "reports_b_run*" \
+            --output reports_b \
+            --clients "$CLIENTS"
+        fi
+
+        echo "Final reports_b contents:"
+        ls -la reports_b/
+
+    - name: Verify reports are different
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        CLIENTS: ${{ inputs.clients }}
+      run: |
+        echo "=== Verifying reports_a and reports_b are different ==="
+        for client in ${CLIENTS//,/ }; do
+          csv_a="reports_a/output_${client}.csv"
+          csv_b="reports_b/output_${client}.csv"
+
+          if [ -f "$csv_a" ] && [ -f "$csv_b" ]; then
+            echo "Comparing $csv_a and $csv_b:"
+            echo "  Size A: $(stat -c%s "$csv_a" 2>/dev/null || stat -f%z "$csv_a")"
+            echo "  Size B: $(stat -c%s "$csv_b" 2>/dev/null || stat -f%z "$csv_b")"
+
+            if diff -q "$csv_a" "$csv_b" > /dev/null 2>&1; then
+              echo "  WARNING: Files are IDENTICAL! This indicates a problem."
+              echo "  First 5 lines of both files:"
+              echo "  --- $csv_a ---"
+              head -5 "$csv_a"
+              echo "  --- $csv_b ---"
+              head -5 "$csv_b"
+            else
+              echo "  OK: Files are different (as expected)"
+            fi
+          else
+            echo "WARNING: Missing CSV files for client $client"
+            [ ! -f "$csv_a" ] && echo "  Missing: $csv_a"
+            [ ! -f "$csv_b" ] && echo "  Missing: $csv_b"
+          fi
+        done
+
+    # === COMPARISON ===
+    - name: Generate comparison report
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        CLIENTS: ${{ inputs.clients }}
+        LABEL_A: ${{ steps.parse-config.outputs.baseline_label }}
+        LABEL_B: ${{ steps.parse-config.outputs.comparison_label }}
+        METRICS: ${{ inputs.metrics }}
+        MAX_TITLE_LENGTH: 0
+      run: |
+        set -euo pipefail
+        mkdir -p reports_comparison
+        python3 scripts/compare_benchmarks.py \
+          --reports-a reports_a \
+          --reports-b reports_b \
+          --output reports_comparison \
+          --clients "$CLIENTS" \
+          --label-a "$LABEL_A" \
+          --label-b "$LABEL_B" \
+          --metrics "$METRICS" \
+          --max-title-length "$MAX_TITLE_LENGTH"
+
+    - name: Write comparison to GitHub Summary
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        if [ -f reports_comparison/comparison_summary.md ]; then
+          cat reports_comparison/comparison_summary.md >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Package all reports
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        # Include individual run reports and results if they exist
+        zip -r comparison_reports.zip reports_a reports_b reports_comparison reports_a_run* reports_b_run* results_a_run* results_b_run* 2>/dev/null || \
+        zip -r comparison_reports.zip reports_a reports_b reports_comparison
+
+    - name: Upload comparison artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gas-benchmarks-comparison-outputs
+        path: |
+          reports_a_run*
+          reports_b_run*
+          results_a_run*
+          results_b_run*
+          reports_comparison
+          comparison_reports.zip
