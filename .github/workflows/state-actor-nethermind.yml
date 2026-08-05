@@ -1,0 +1,299 @@
+name: Benchmarkoor State-Actor - Nethermind
+run-name: "Benchmarkoor State-Actor [${{ inputs.test_type }}] ${{ inputs.image }}"
+
+# Nethermind-only reproduction of ethpandaops' state-actor EEST benchmarks
+# (ethpandaops/benchmarkoor-tests benchmarkoor-run.yaml): stage 1 builds the
+# state-actor/v1 synthetic datadir (~520 GB for nethermind) with the exact
+# upstream spec (seed 42, osaka, 350GB state target), then replays the
+# released EEST amsterdam fixtures (stateful = EIP-7928 BAL suite, compute)
+# against a chosen Nethermind image. The datadir lives on a ZFS dataset so
+# the per-test rollback matches upstream's schelk CoW semantics.
+#
+# The build runs with --rebuild-on-diff, so only the first dispatch pays the
+# multi-hour datadir build; later runs reuse the dataset.
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'EEST suite to run'
+        type: choice
+        options:
+          - stateful
+          - compute
+        default: 'stateful'
+      image:
+        description: 'Nethermind Docker image to benchmark'
+        default: 'nethermindeth/nethermind:bal-devnet-7'
+      instance_id:
+        description: 'Instance profile (mirrors ethpandaops clients.yaml)'
+        type: choice
+        options:
+          - nethermind-bal-full
+        default: 'nethermind-bal-full'
+      tests_repo_ref:
+        description: 'ethpandaops/benchmarkoor-tests commit for configs + fixture release'
+        default: 'b711e361aaa3a7cbfccfbc720b6c6023a1d54617'
+      datadir:
+        description: 'State-actor datadir: auto = build if spec changed/absent, rebuild = force full rebuild, reuse = never build'
+        type: choice
+        options:
+          - auto
+          - rebuild
+          - reuse
+        default: 'auto'
+      build_timeout_minutes:
+        description: 'Step timeout for the state-actor datadir build (minutes)'
+        default: '720'
+      run_timeout_minutes:
+        description: 'Benchmarkoor internal run timeout (minutes)'
+        default: '2130'
+      benchmarkoor_image:
+        description: 'Benchmarkoor image to extract the binary from'
+        default: 'ghcr.io/ethpandaops/benchmarkoor:master'
+      extra_run_config:
+        description: 'Raw benchmarkoor YAML merged on top of everything else (last wins)'
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+# Queue behind (never cancel) an in-flight benchmark on the same ref.
+concurrency:
+  group: benchmarkoor-state-actor-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmarkoor:
+    runs-on: stateful-generator
+    timeout-minutes: 10080
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare ZFS dataset for the state-actor datadir
+        shell: bash
+        env:
+          DATADIR_MODE: ${{ inputs.datadir }}
+        run: |
+          set -euo pipefail
+
+          POOL=benchmarkoor
+          DATASET="$POOL/state-actor-v1-nethermind"
+          MP=/benchmarkoor/state-actor-v1/nethermind
+          # ~520 GB datadir (upstream builder.yaml comment) + CoW headroom.
+          NEED_BYTES=$(( 650 * 1024 * 1024 * 1024 ))
+
+          if ! command -v zfs >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y zfsutils-linux
+          fi
+          sudo modprobe zfs
+
+          if ! sudo zpool list -H -o name 2>/dev/null | grep -qx "$POOL"; then
+            sudo zpool import -f -d /mnt/sda "$POOL"
+          fi
+
+          if [ "$DATADIR_MODE" = "rebuild" ] && sudo zfs list -H -o name "$DATASET" >/dev/null 2>&1; then
+            echo "Rebuild requested: destroying $DATASET"
+            sudo zfs destroy -r "$DATASET"
+          fi
+
+          if ! sudo zfs list -H -o name "$DATASET" >/dev/null 2>&1; then
+            if [ "$DATADIR_MODE" = "reuse" ]; then
+              echo "ERROR: datadir=reuse but dataset $DATASET does not exist."
+              exit 1
+            fi
+            AVAIL=$(sudo zfs get -Hp -o value available "$POOL")
+            if [ "$AVAIL" -lt "$NEED_BYTES" ]; then
+              # The jochemnet seed dataset is a cache: the archive-based
+              # "Benchmarkoor - Nethermind" workflow reseeds it automatically
+              # from /mnt/sda/jochemnet/nethermind on its next run.
+              if sudo zfs list -H -o name "$POOL/nethermind-jochemnet" >/dev/null 2>&1; then
+                echo "Pool has $(numfmt --to=iec "$AVAIL") free, need $(numfmt --to=iec "$NEED_BYTES")."
+                echo "Destroying reseedable cache dataset $POOL/nethermind-jochemnet to make room."
+                sudo zfs destroy -r "$POOL/nethermind-jochemnet"
+                AVAIL=$(sudo zfs get -Hp -o value available "$POOL")
+              fi
+            fi
+            if [ "$AVAIL" -lt "$NEED_BYTES" ]; then
+              echo "ERROR: pool $POOL has $(numfmt --to=iec "$AVAIL") free, need $(numfmt --to=iec "$NEED_BYTES")."
+              exit 1
+            fi
+            sudo zfs create -o mountpoint="$MP" "$DATASET"
+          fi
+
+          sudo zfs list "$DATASET"
+          echo "GB_STATE_DIR=/benchmarkoor/state-actor-v1" >> "$GITHUB_ENV"
+          # benchmarkoor's internal build timeout, 30m under the step timeout.
+          echo "GB_BUILDER_TIMEOUT=$(( ${{ fromJson(inputs.build_timeout_minutes) }} - 30 ))m" >> "$GITHUB_ENV"
+
+      - name: Build state-actor datadir
+        if: inputs.datadir != 'reuse'
+        timeout-minutes: ${{ fromJson(inputs.build_timeout_minutes) }}
+        uses: ethpandaops/benchmarkoor@master
+        env:
+          BENCHMARKOOR_BUILDER_RUN_TIMEOUT: ${{ env.GB_BUILDER_TIMEOUT }}
+        with:
+          mode: build
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          image: ${{ inputs.benchmarkoor_image }}
+          tmp-dir: /mnt/sda/benchmarkoor-tmp
+          upload-artifacts: 'false'
+          build-config-urls: >-
+            https://raw.githubusercontent.com/ethpandaops/benchmarkoor-tests/${{ inputs.tests_repo_ref }}/configs/datadirs/state-actor/v1/builder.yaml
+          build-config: |
+            global:
+              log_level: info
+              env:
+                STATE_DIR: ${{ env.GB_STATE_DIR }}
+            builder:
+              cleanup_on_start: true
+          build-args: >-
+            --rebuild-on-diff
+            --limit-state-actor-target=nethermind
+
+      - name: Verify datadir
+        shell: bash
+        run: |
+          set -euo pipefail
+          DD="$GB_STATE_DIR/nethermind"
+          if ! sudo test -f "$DD/parity-chainspec.json"; then
+            echo "ERROR: $DD/parity-chainspec.json missing - state-actor build incomplete."
+            sudo ls -la "$DD" || true
+            exit 1
+          fi
+          echo "Datadir size:"
+          sudo du -sh "$DD"
+
+      - name: Compose run overlay
+        id: overlay
+        shell: bash
+        env:
+          NETHERMIND_IMAGE: ${{ inputs.image }}
+          INSTANCE_ID: ${{ inputs.instance_id }}
+          EXTRA_RUN_CONFIG: ${{ inputs.extra_run_config }}
+        run: |
+          set -euo pipefail
+
+          # Mirrors the nethermind-bal-full instance from
+          # ethpandaops/benchmarkoor-tests configs/contexts/repricing/v1/
+          # bal-devnet-7/clients.yaml, with the image parameterised. The
+          # datadirs/genesis blocks replace the upstream schelk-based
+          # datadirs runner.yaml (our datadir lives on ZFS instead).
+          OVERLAY=$(mktemp --suffix=.yaml)
+          cat > "$OVERLAY" <<EOF
+          runner:
+            client:
+              datadirs:
+                nethermind:
+                  source_dir: ${GB_STATE_DIR}/nethermind
+                  method: zfs
+              config:
+                genesis:
+                  nethermind: ${GB_STATE_DIR}/nethermind/parity-chainspec.json
+                bootstrap_fcu:
+                  enabled: true
+                  max_retries: 10
+                  backoff: 1s
+            instances:
+              - id: ${INSTANCE_ID}
+                client: nethermind
+                metadata:
+                  labels:
+                    bal-mode: full
+                image: ${NETHERMIND_IMAGE}
+                genesis_eip_override:
+                  timestamp: 1
+                  eips: [7708, 7778, 7843, 7928, 7954, 7976, 7981, 8024, 8037]
+                extra_args:
+                  - --Init.BaseDbPath=/data
+                  - --FlatDb.Enabled=true
+                  - --FlatDb.CompactionOffset=0
+                  - --Blocks.ParallelExecution=true
+                  - --Blocks.ParallelExecutionBatchRead=true
+          EOF
+
+          if [ -n "$EXTRA_RUN_CONFIG" ]; then
+            if ! command -v yq >/dev/null 2>&1; then
+              sudo wget -qO /usr/local/bin/yq \
+                "https://github.com/mikefarah/yq/releases/download/v4.44.6/yq_linux_amd64"
+              sudo chmod +x /usr/local/bin/yq
+            fi
+            EXTRA=$(mktemp --suffix=.yaml)
+            printf '%s\n' "$EXTRA_RUN_CONFIG" > "$EXTRA"
+            MERGED=$(mktemp --suffix=.yaml)
+            yq eval-all '. as $item ireduce ({}; . * $item)' "$OVERLAY" "$EXTRA" > "$MERGED"
+            OVERLAY="$MERGED"
+          fi
+
+          echo "== Inline run-config overlay =="
+          cat "$OVERLAY"
+
+          {
+            echo 'config<<GB_OVERLAY_EOF'
+            cat "$OVERLAY"
+            echo 'GB_OVERLAY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run benchmarkoor
+        uses: ethpandaops/benchmarkoor@master
+        env:
+          BENCHMARKOOR_RUNNER_RUN_TIMEOUT: ${{ inputs.run_timeout_minutes }}m
+        with:
+          mode: run
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          image: ${{ inputs.benchmarkoor_image }}
+          tmp-dir: /mnt/sda/benchmarkoor-tmp
+          upload-artifacts: 'true'
+          run-config-urls: >-
+            https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/benchmarkoor/global.yaml,
+            https://raw.githubusercontent.com/ethpandaops/benchmarkoor-tests/${{ inputs.tests_repo_ref }}/configs/resource-limits-eip-7870-fullnode.yaml,
+            https://raw.githubusercontent.com/ethpandaops/benchmarkoor-tests/${{ inputs.tests_repo_ref }}/configs/contexts/repricing/v1/bal-devnet-7/test-source.${{ inputs.test_type }}.runner.yaml
+          run-config: ${{ steps.overlay.outputs.config }}
+          run-args: >-
+            --limit-instance-client=nethermind
+            --limit-instance-id=${{ inputs.instance_id }}
+
+      - name: Per-test MGas/s summary
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          WORK=$(mktemp -d)
+          if ! gh run download "${{ github.run_id }}" --repo "${{ github.repository }}" \
+               -n "benchmarkoor-${{ github.run_id }}" -D "$WORK" 2>/dev/null; then
+            echo "No results artifact found; skipping per-test summary." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          tar xzf "$WORK/benchmarkoor-results.tar.gz" -C "$WORK"
+          RESULT=$(find "$WORK/results/runs" -maxdepth 2 -name result.json | head -1)
+          if [ -z "$RESULT" ]; then
+            echo "No result.json in artifact; skipping per-test summary." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo "## Per-test throughput"
+            echo ""
+            jq -r -f .github/scripts/benchmarkoor-pertest-summary.jq "$RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          rm -rf "$WORK"
+
+      - name: Cleanup podman leftovers
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if command -v podman >/dev/null 2>&1; then
+            sudo podman ps -aq | xargs -r sudo podman rm -f -t 0
+            sudo podman network rm -f benchmarkoor 2>/dev/null
+          fi
+          true
