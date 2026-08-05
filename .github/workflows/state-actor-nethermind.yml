@@ -31,6 +31,13 @@ on:
         options:
           - nethermind-bal-full
         default: 'nethermind-bal-full'
+      subdir:
+        description: 'Test context subdir (mirrors ethpandaops benchmarkoor-run)'
+        type: choice
+        options:
+          - v1/glamsterdam-devnet-7-full
+          - v1/bal-devnet-7
+        default: 'v1/glamsterdam-devnet-7-full'
       tests_repo_ref:
         description: 'ethpandaops/benchmarkoor-tests commit for configs + fixture release'
         default: 'b711e361aaa3a7cbfccfbc720b6c6023a1d54617'
@@ -186,14 +193,30 @@ jobs:
         env:
           NETHERMIND_IMAGE: ${{ inputs.image }}
           INSTANCE_ID: ${{ inputs.instance_id }}
+          SUBDIR: ${{ inputs.subdir }}
           EXTRA_RUN_CONFIG: ${{ inputs.extra_run_config }}
         run: |
           set -euo pipefail
 
-          # Mirrors the nethermind-bal-full instance from
-          # ethpandaops/benchmarkoor-tests configs/contexts/repricing/v1/
-          # bal-devnet-7/clients.yaml, with the image parameterised. The
-          # datadirs/genesis blocks replace the upstream schelk-based
+          # Per-context nethermind-bal-full instance settings, mirroring
+          # ethpandaops/benchmarkoor-tests configs/contexts/repricing/
+          # <subdir>/clients.yaml. Keep in sync when contexts change.
+          case "$SUBDIR" in
+            v1/glamsterdam-devnet-7-full)
+              EIPS="[2780, 7708, 7778, 7843, 7928, 7954, 7976, 7981, 7997, 8024, 8037, 8038, 8246, 8282]"
+              EXTRA_FLAT_ARGS="
+                  - --FlatDb.MinReorgDepth=1024
+                  - --FlatDb.MaxReorgDepth=1024"
+              ;;
+            v1/bal-devnet-7)
+              EIPS="[7708, 7778, 7843, 7928, 7954, 7976, 7981, 8024, 8037]"
+              EXTRA_FLAT_ARGS=""
+              ;;
+            *)
+              echo "ERROR: no instance mapping for subdir '$SUBDIR'"; exit 1 ;;
+          esac
+
+          # The datadirs/genesis blocks replace the upstream schelk-based
           # datadirs runner.yaml (our datadir lives on ZFS instead).
           OVERLAY=$(mktemp --suffix=.yaml)
           cat > "$OVERLAY" <<EOF
@@ -219,11 +242,11 @@ jobs:
                 image: ${NETHERMIND_IMAGE}
                 genesis_eip_override:
                   timestamp: 1
-                  eips: [7708, 7778, 7843, 7928, 7954, 7976, 7981, 8024, 8037]
+                  eips: ${EIPS}
                 extra_args:
                   - --Init.BaseDbPath=/data
                   - --FlatDb.Enabled=true
-                  - --FlatDb.CompactionOffset=0
+                  - --FlatDb.CompactionOffset=0${EXTRA_FLAT_ARGS}
                   - --Blocks.ParallelExecution=true
                   - --Blocks.ParallelExecutionBatchRead=true
           EOF
@@ -263,7 +286,7 @@ jobs:
           run-config-urls: >-
             https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/benchmarkoor/global.yaml,
             https://raw.githubusercontent.com/ethpandaops/benchmarkoor-tests/${{ inputs.tests_repo_ref }}/configs/resource-limits-eip-7870-fullnode.yaml,
-            https://raw.githubusercontent.com/ethpandaops/benchmarkoor-tests/${{ inputs.tests_repo_ref }}/configs/contexts/repricing/v1/bal-devnet-7/test-source.${{ inputs.test_type }}.runner.yaml
+            https://raw.githubusercontent.com/ethpandaops/benchmarkoor-tests/${{ inputs.tests_repo_ref }}/configs/contexts/repricing/${{ inputs.subdir }}/test-source.${{ inputs.test_type }}.runner.yaml
           run-config: ${{ steps.overlay.outputs.config }}
           run-args: >-
             --limit-instance-client=nethermind
