@@ -115,7 +115,13 @@ jobs:
                 echo "Pool has $(numfmt --to=iec "$AVAIL") free, need $(numfmt --to=iec "$NEED_BYTES")."
                 echo "Destroying reseedable cache dataset $POOL/nethermind-jochemnet to make room."
                 sudo zfs destroy -r "$POOL/nethermind-jochemnet"
-                AVAIL=$(sudo zfs get -Hp -o value available "$POOL")
+                # zfs destroy frees space asynchronously; wait for it to land.
+                for _ in $(seq 1 60); do
+                  AVAIL=$(sudo zfs get -Hp -o value available "$POOL")
+                  [ "$AVAIL" -ge "$NEED_BYTES" ] && break
+                  echo "Waiting for async destroy: $(numfmt --to=iec "$AVAIL") available..."
+                  sleep 10
+                done
               fi
             fi
             if [ "$AVAIL" -lt "$NEED_BYTES" ]; then
