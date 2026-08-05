@@ -59,8 +59,8 @@ on:
         description: 'Benchmarkoor image to extract the binary from'
         default: 'ghcr.io/ethpandaops/benchmarkoor:master'
       state_actor_image:
-        description: 'state-actor-nethermind builder image (pin a main-<sha> tag to sidestep :main regressions)'
-        default: 'ghcr.io/ethereum/state-actor-nethermind:main'
+        description: 'state-actor-nethermind builder image. Pinned by default: a changed image re-triggers the multi-hour datadir build (and :main carried a writer regression on 2026-08-04, see ethereum/state-actor#125)'
+        default: 'ghcr.io/ethereum/state-actor-nethermind:main-0701382'
       extra_run_config:
         description: 'Raw benchmarkoor YAML merged on top of everything else (last wins)'
         default: ''
@@ -169,7 +169,7 @@ jobs:
               cleanup_on_start: true
               state_actor:
                 images:
-                  nethermind: ${{ inputs.state_actor_image || 'ghcr.io/ethereum/state-actor-nethermind:main' }}
+                  nethermind: ${{ inputs.state_actor_image || 'ghcr.io/ethereum/state-actor-nethermind:main-0701382' }}
           build-args: >-
             --rebuild-on-diff
             --limit-state-actor-target=nethermind
