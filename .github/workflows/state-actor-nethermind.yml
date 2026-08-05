@@ -51,6 +51,9 @@ on:
       benchmarkoor_image:
         description: 'Benchmarkoor image to extract the binary from'
         default: 'ghcr.io/ethpandaops/benchmarkoor:master'
+      state_actor_image:
+        description: 'state-actor-nethermind builder image (pin a main-<sha> tag to sidestep :main regressions)'
+        default: 'ghcr.io/ethereum/state-actor-nethermind:main'
       extra_run_config:
         description: 'Raw benchmarkoor YAML merged on top of everything else (last wins)'
         default: ''
@@ -157,6 +160,9 @@ jobs:
                 STATE_DIR: ${{ env.GB_STATE_DIR }}
             builder:
               cleanup_on_start: true
+              state_actor:
+                images:
+                  nethermind: ${{ inputs.state_actor_image || 'ghcr.io/ethereum/state-actor-nethermind:main' }}
           build-args: >-
             --rebuild-on-diff
             --limit-state-actor-target=nethermind
