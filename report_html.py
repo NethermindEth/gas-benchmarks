@@ -48,7 +48,7 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                         '</head>' +
                         '<body>'
                         '<h2>Computer Specs</h2>'
-                        '<pre">' + computer_spec + '</pre>')
+                        '<pre>' + computer_spec + '</pre>')
     csv_table = {}
     for client in clients:
         image_to_print = ''
@@ -98,8 +98,8 @@ def get_html_report(client_results, clients, results_paths, test_cases, methods,
                                  f'<td>{data[11]}</td>\n'
                                  f'<td>{data[12]}</td>\n</tr>\n')
         results_to_print += '\n'
-        results_to_print += ('</table>\n'
-                             '</tbody>\n')
+        results_to_print += ('</tbody>\n'
+                             '</table>\n')
 
     results_to_print += ('    <script>'
                          'function sortTable(n, table_name, nm) {'
