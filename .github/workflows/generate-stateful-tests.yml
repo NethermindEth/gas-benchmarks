@@ -371,7 +371,14 @@ jobs:
           WARMUP_DIR="${PAYLOAD_DIR}_warmup"
           GAS_BUMP_COUNT="$CFG_GAS_BUMP_COUNT"
           if [[ "$GAS_BUMP_COUNT" == "-1" ]]; then
-            if [[ "$EFFECTIVE_CHAIN" == "perf-devnet-3" || "$EFFECTIVE_CHAIN" == "jochemnet" ]]; then
+            if [[ "$EFFECTIVE_CHAIN" == "jochemnet" ]]; then
+              # jochemnet final block already has a ~1T gas limit, so only one
+              # gas-bump block is enough; each gas-bump block also carries the
+              # 15K sender withdrawals from PR #144, so running many would
+              # overwhelm the client (see "Connection aborted" failures around
+              # block ~220).
+              GAS_BUMP_COUNT="1"
+            elif [[ "$EFFECTIVE_CHAIN" == "perf-devnet-3" ]]; then
               GAS_BUMP_COUNT="5000"
             else
               GAS_BUMP_COUNT="10000"
