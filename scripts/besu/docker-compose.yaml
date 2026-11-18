@@ -13,6 +13,8 @@ services:
       - ${CHAINSPEC_PATH}:/tmp/chainspec/chainspec.json
     environment:
       BESU_USER_NAME: root
+      # Mitigate CVE-2026-114938 until the bundled JVM is patched.
+      JAVA_TOOL_OPTIONS: "-XX:+UnlockDiagnosticVMOptions -XX:-UseBASE64Intrinsics"
     user: root
     ports:
       - 8008:8008/tcp
